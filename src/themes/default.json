@@ -1,0 +1,113 @@
+{
+    "name": "Default",
+    "version": 1,
+    "description": "Clean sans/serif typography for everyday reading",
+
+    "paragraphStyles": {
+        "BodyText": {
+            "fontFamily": "Noto Serif",
+            "fontSize": 11.0,
+            "lineHeightPercent": 150,
+            "spaceAfter": 6.0,
+            "foreground": "#1a1a1a"
+        },
+        "Heading1": {
+            "fontFamily": "Noto Sans",
+            "fontSize": 28.0,
+            "fontWeight": "bold",
+            "spaceBefore": 24.0,
+            "spaceAfter": 12.0,
+            "foreground": "#1a1a2e"
+        },
+        "Heading2": {
+            "fontFamily": "Noto Sans",
+            "fontSize": 22.0,
+            "fontWeight": "bold",
+            "spaceBefore": 20.0,
+            "spaceAfter": 10.0,
+            "foreground": "#1a1a2e"
+        },
+        "Heading3": {
+            "fontFamily": "Noto Sans",
+            "fontSize": 18.0,
+            "fontWeight": "bold",
+            "spaceBefore": 16.0,
+            "spaceAfter": 8.0,
+            "foreground": "#1a1a2e"
+        },
+        "Heading4": {
+            "fontFamily": "Noto Sans",
+            "fontSize": 15.0,
+            "fontWeight": "bold",
+            "spaceBefore": 12.0,
+            "spaceAfter": 6.0,
+            "foreground": "#1a1a2e"
+        },
+        "Heading5": {
+            "fontFamily": "Noto Sans",
+            "fontSize": 13.0,
+            "fontWeight": "bold",
+            "spaceBefore": 10.0,
+            "spaceAfter": 4.0,
+            "foreground": "#1a1a2e"
+        },
+        "Heading6": {
+            "fontFamily": "Noto Sans",
+            "fontSize": 11.0,
+            "fontWeight": "bold",
+            "fontItalic": true,
+            "spaceBefore": 8.0,
+            "spaceAfter": 4.0,
+            "foreground": "#1a1a2e"
+        },
+        "BlockQuote": {
+            "fontItalic": true,
+            "foreground": "#555555",
+            "spaceAfter": 6.0
+        },
+        "CodeBlock": {
+            "fontFamily": "JetBrains Mono",
+            "fontSize": 10.0,
+            "background": "#f6f8fa",
+            "lineHeightPercent": 140
+        },
+        "TableHeader": {
+            "fontWeight": "bold",
+            "background": "#f0f0f0",
+            "alignment": "center"
+        },
+        "TableBody": {
+        }
+    },
+
+    "characterStyles": {
+        "DefaultText": {
+            "fontFamily": "Noto Serif",
+            "fontSize": 11.0,
+            "foreground": "#1a1a1a"
+        },
+        "Emphasis": {
+            "fontItalic": true
+        },
+        "Strong": {
+            "fontWeight": "bold"
+        },
+        "StrongEmphasis": {
+            "fontWeight": "bold",
+            "fontItalic": true
+        },
+        "InlineCode": {
+            "fontFamily": "JetBrains Mono",
+            "fontSize": 10.0,
+            "foreground": "#c7254e",
+            "background": "#f0f0f0"
+        },
+        "Link": {
+            "foreground": "#0366d6",
+            "underline": true
+        },
+        "Strikethrough": {
+            "strikeOut": true
+        }
+    }
+}

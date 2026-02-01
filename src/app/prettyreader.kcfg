@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name="prettyreaderrc"/>
+
+  <group name="General">
+    <entry name="DefaultTheme" type="String">
+      <label>Default display theme for new documents.</label>
+      <default>default</default>
+    </entry>
+    <entry name="RememberPerFileSettings" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="MetaInfoExpiryDays" type="Int">
+      <default>90</default>
+      <min>0</min>
+      <max>3650</max>
+    </entry>
+    <entry name="AutoReloadOnChange" type="Bool">
+      <default>true</default>
+    </entry>
+  </group>
+
+  <group name="Display">
+    <entry name="DefaultPageSizeName" type="String">
+      <label>Default page size (e.g. A4, Letter).</label>
+      <default>A4</default>
+    </entry>
+    <entry name="DefaultZoom" type="Double">
+      <default>1.0</default>
+      <min>0.25</min>
+      <max>4.0</max>
+    </entry>
+    <entry name="ViewMode" type="Enum">
+      <choices>
+        <choice name="Continuous"/>
+        <choice name="SinglePage"/>
+      </choices>
+      <default>Continuous</default>
+    </entry>
+  </group>
+
+  <group name="Rendering">
+    <entry name="SyntaxHighlightingEnabled" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CodeHighlightTheme" type="String">
+      <label>KSyntaxHighlighting theme name for code blocks.</label>
+      <default></default>
+    </entry>
+    <entry name="RenderImages" type="Bool">
+      <default>true</default>
+    </entry>
+  </group>
+</kcfg>

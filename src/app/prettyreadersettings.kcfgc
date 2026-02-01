@@ -1,0 +1,7 @@
+File=prettyreader.kcfg
+ClassName=PrettyReaderSettings
+Mutators=true
+Singleton=true
+GlobalEnums=true
+GenerateProperties=true
+ParentInConstructor=true

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE gui SYSTEM "kpartgui.dtd">
+<gui name="prettyreader" version="3">
+
+  <MenuBar>
+    <Menu name="file">
+      <text>&amp;File</text>
+      <Action name="file_open"/>
+      <Action name="file_open_recent"/>
+      <Separator/>
+      <Action name="file_export_pdf"/>
+      <Action name="file_print"/>
+      <Separator/>
+      <Action name="file_close"/>
+      <Separator/>
+      <Action name="file_quit"/>
+    </Menu>
+
+    <Menu name="view">
+      <text>&amp;View</text>
+      <Action name="view_zoom_in"/>
+      <Action name="view_zoom_out"/>
+      <Action name="view_zoom_fit_width"/>
+      <Action name="view_zoom_fit_page"/>
+      <Separator/>
+      <Action name="view_continuous"/>
+      <Action name="view_single_page"/>
+      <Separator/>
+      <Action name="view_source_mode"/>
+      <Separator/>
+      <Action name="view_toggle_files"/>
+      <Action name="view_toggle_toc"/>
+      <Action name="view_toggle_style"/>
+    </Menu>
+
+    <Menu name="go">
+      <text>&amp;Go</text>
+      <Action name="go_previous_page"/>
+      <Action name="go_next_page"/>
+    </Menu>
+
+    <Menu name="settings">
+      <text>&amp;Settings</text>
+      <Merge name="StandardToolBarMenuHandler"/>
+      <Separator/>
+      <Action name="options_configure_toolbars"/>
+      <Action name="options_configure_shortcuts"/>
+      <Separator/>
+      <Action name="options_configure"/>
+    </Menu>
+
+    <Menu name="help">
+      <text>&amp;Help</text>
+    </Menu>
+  </MenuBar>
+
+  <ToolBar name="mainToolBar">
+    <text>Main Toolbar</text>
+    <Action name="file_open"/>
+    <Separator/>
+    <Action name="view_zoom_out"/>
+    <Action name="view_zoom_in"/>
+    <Action name="view_zoom_fit_width"/>
+    <Separator/>
+    <Action name="go_previous_page"/>
+    <Action name="go_next_page"/>
+    <Separator/>
+    <Action name="file_export_pdf"/>
+    <Action name="file_print"/>
+  </ToolBar>
+
+</gui>

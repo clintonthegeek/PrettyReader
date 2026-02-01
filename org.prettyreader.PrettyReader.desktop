@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PrettyReader
+GenericName=Markdown Reader
+Comment=A beautiful paginated markdown reader
+Exec=PrettyReader %U
+Icon=document-viewer
+Terminal=false
+Categories=Qt;KDE;Office;Viewer;
+MimeType=text/markdown;text/x-markdown;text/plain;
