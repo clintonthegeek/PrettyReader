@@ -1,5 +1,7 @@
 # PrettyReader
 
+![PrettyReader screenshot](docs/Screenshot.jpg)
+
 A markdown viewer for KDE.
 
 It shows your markdown files with nice formatting, pagination, and page margins. You can scroll through the pages or view them one at a time.
