@@ -6,7 +6,9 @@
 #include "pdfpageitem.h"
 #include "rendercache.h"
 
+#include <QApplication>
 #include <QPainter>
+#include <QPalette>
 #include <QStyleOptionGraphicsItem>
 
 PdfPageItem::PdfPageItem(int pageNumber, QSizeF pageSize, RenderCache *cache,
@@ -64,6 +66,16 @@ void PdfPageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
         painter->drawText(pageRect, Qt::AlignCenter,
                           QStringLiteral("Loading page %1...").arg(m_pageNumber + 1));
     }
+
+    // B2: Draw selection highlights
+    if (!m_selectionRects.isEmpty()) {
+        painter->setPen(Qt::NoPen);
+        QColor selColor = QApplication::palette().color(QPalette::Highlight);
+        selColor.setAlpha(80);
+        painter->setBrush(selColor);
+        for (const QRectF &r : m_selectionRects)
+            painter->drawRect(r);
+    }
 }
 
 void PdfPageItem::invalidateCache()
@@ -82,4 +94,18 @@ void PdfPageItem::setZoomFactor(qreal zoom)
 {
     m_zoom = zoom;
     update();
+}
+
+void PdfPageItem::setSelectionRects(const QList<QRectF> &rects)
+{
+    m_selectionRects = rects;
+    update();
+}
+
+void PdfPageItem::clearSelection()
+{
+    if (!m_selectionRects.isEmpty()) {
+        m_selectionRects.clear();
+        update();
+    }
 }

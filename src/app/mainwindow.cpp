@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 
 #include <KActionCollection>
+#include <KActionMenu>
 #include <KLocalizedString>
 #include <KRecentFilesAction>
 #include <KStandardAction>
@@ -45,6 +46,7 @@
 #include <QLabel>
 #include <QMenuBar>
 #include <QAbstractTextDocumentLayout>
+#include <QSlider>
 #include <QSplitter>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -70,9 +72,29 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_tabWidget, &QTabWidget::currentChanged,
             this, [this]() {
         auto *view = currentDocumentView();
-        if (view && m_zoomSpinBox) {
-            const QSignalBlocker blocker(m_zoomSpinBox);
-            m_zoomSpinBox->setValue(view->zoomPercent());
+        if (view) {
+            int zoom = view->zoomPercent();
+            if (m_zoomSpinBox) {
+                const QSignalBlocker blocker(m_zoomSpinBox);
+                m_zoomSpinBox->setValue(zoom);
+            }
+            if (m_zoomSlider) {
+                const QSignalBlocker blocker(m_zoomSlider);
+                m_zoomSlider->setValue(zoom);
+            }
+        }
+
+        // A2: Update file browser to show current file's directory
+        // A6: Update status bar file path
+        auto *tab = currentDocumentTab();
+        if (tab && !tab->filePath().isEmpty()) {
+            QFileInfo fi(tab->filePath());
+            m_fileBrowserWidget->setRootPath(fi.absolutePath());
+            if (m_filePathLabel)
+                m_filePathLabel->setText(tab->filePath());
+        } else {
+            if (m_filePathLabel)
+                m_filePathLabel->clear();
         }
     });
 
@@ -122,7 +144,19 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupActions();
 
-    // Status bar with zoom indicator
+    // A6: File path label (left-justified, auto-hides for temporary messages)
+    m_filePathLabel = new QLabel;
+    m_filePathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    statusBar()->addWidget(m_filePathLabel, 1);
+
+    // A5: Zoom slider + spinbox on status bar (permanent, right side)
+    m_zoomSlider = new QSlider(Qt::Horizontal);
+    m_zoomSlider->setRange(25, 400);
+    m_zoomSlider->setValue(100);
+    m_zoomSlider->setFixedWidth(120);
+    m_zoomSlider->setToolTip(i18n("Zoom level"));
+    statusBar()->addPermanentWidget(m_zoomSlider);
+
     m_zoomSpinBox = new QSpinBox;
     m_zoomSpinBox->setRange(25, 400);
     m_zoomSpinBox->setSuffix(QStringLiteral("%"));
@@ -130,12 +164,21 @@ MainWindow::MainWindow(QWidget *parent)
     m_zoomSpinBox->setFixedWidth(80);
     m_zoomSpinBox->setToolTip(i18n("Zoom level"));
     statusBar()->addPermanentWidget(m_zoomSpinBox);
-    connect(m_zoomSpinBox, qOverload<int>(&QSpinBox::valueChanged),
-            this, [this](int value) {
+
+    // Bidirectional sync between slider and spinbox (with signal blockers)
+    connect(m_zoomSlider, &QSlider::valueChanged, this, [this](int value) {
+        const QSignalBlocker b(m_zoomSpinBox);
+        m_zoomSpinBox->setValue(value);
         auto *view = currentDocumentView();
-        if (view)
-            view->setZoomPercent(value);
+        if (view) view->setZoomPercent(value);
     });
+    connect(m_zoomSpinBox, qOverload<int>(&QSpinBox::valueChanged), this, [this](int value) {
+        const QSignalBlocker b(m_zoomSlider);
+        m_zoomSlider->setValue(value);
+        auto *view = currentDocumentView();
+        if (view) view->setZoomPercent(value);
+    });
+
     statusBar()->showMessage(i18n("Ready"));
 
     setMinimumSize(800, 600);
@@ -148,6 +191,11 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     restoreSession();
+
+    // A1: Fresh launch = TOC open by default (saved session state takes priority)
+    if (m_leftSidebar->isCollapsed()) {
+        m_leftSidebar->showPanel(m_tocTabId);
+    }
 }
 
 MainWindow::~MainWindow()
@@ -348,6 +396,18 @@ void MainWindow::setupActions()
             view->setViewMode(DocumentView::ContinuousFacingFirstAlone);
     });
 
+    // A4: Page Arrangement submenu (collects the 6 view mode actions)
+    auto *arrangementMenu = new KActionMenu(
+        QIcon::fromTheme(QStringLiteral("view-list-details")),
+        i18n("Page &Arrangement"), this);
+    ac->addAction(QStringLiteral("view_page_arrangement"), arrangementMenu);
+    arrangementMenu->addAction(continuous);
+    arrangementMenu->addAction(singlePage);
+    arrangementMenu->addAction(facingPages);
+    arrangementMenu->addAction(facingFirstAlone);
+    arrangementMenu->addAction(continuousFacing);
+    arrangementMenu->addAction(continuousFacingFirstAlone);
+
     // Go > Navigation
     auto *prevPage = ac->addAction(QStringLiteral("go_previous_page"));
     prevPage->setText(i18n("&Previous Page"));
@@ -426,6 +486,40 @@ void MainWindow::setupActions()
         if (tabId == m_styleTabId)
             toggleStyle->setChecked(visible);
     });
+
+    // B1: Cursor mode toggle actions
+    auto *handTool = ac->addAction(QStringLiteral("tool_hand"));
+    handTool->setText(i18n("&Hand Tool"));
+    handTool->setIcon(QIcon::fromTheme(QStringLiteral("transform-browse")));
+    handTool->setCheckable(true);
+    handTool->setChecked(true);
+    ac->setDefaultShortcut(handTool, QKeySequence(Qt::CTRL | Qt::Key_1));
+
+    auto *selectTool = ac->addAction(QStringLiteral("tool_selection"));
+    selectTool->setText(i18n("&Text Selection"));
+    selectTool->setIcon(QIcon::fromTheme(QStringLiteral("edit-select-text")));
+    selectTool->setCheckable(true);
+    ac->setDefaultShortcut(selectTool, QKeySequence(Qt::CTRL | Qt::Key_2));
+
+    auto *toolGroup = new QActionGroup(this);
+    toolGroup->setExclusive(true);
+    toolGroup->addAction(handTool);
+    toolGroup->addAction(selectTool);
+
+    connect(handTool, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view) view->setCursorMode(DocumentView::HandTool);
+    });
+    connect(selectTool, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view) view->setCursorMode(DocumentView::SelectionTool);
+    });
+
+    // B2: Copy action (Ctrl+C)
+    KStandardAction::copy(this, [this]() {
+        auto *view = currentDocumentView();
+        if (view) view->copySelection();
+    }, ac);
 
     setupGUI(Default, QStringLiteral("prettyreaderui.rc"));
 }
@@ -720,16 +814,8 @@ void MainWindow::saveSession()
 {
     KConfigGroup group(KSharedConfig::openConfig(),
                        QStringLiteral("Session"));
-    QStringList files;
-    for (int i = 0; i < m_tabWidget->count(); ++i) {
-        QString path = m_tabWidget->tabToolTip(i);
-        if (!path.isEmpty())
-            files.append(path);
-    }
-    group.writeEntry("OpenFiles", files);
-    group.writeEntry("ActiveTab", m_tabWidget->currentIndex());
 
-    // Save sidebar state
+    // Save sidebar state (A3: no longer saving open files or active tab)
     group.writeEntry("LeftSidebarCollapsed", m_leftSidebar->isCollapsed());
     group.writeEntry("RightSidebarCollapsed", m_rightSidebar->isCollapsed());
     if (m_splitter)
@@ -741,16 +827,8 @@ void MainWindow::restoreSession()
 {
     KConfigGroup group(KSharedConfig::openConfig(),
                        QStringLiteral("Session"));
-    QStringList files = group.readEntry("OpenFiles", QStringList());
-    int activeTab = group.readEntry("ActiveTab", 0);
 
-    for (const QString &path : files) {
-        if (QFile::exists(path))
-            openFile(QUrl::fromLocalFile(path));
-    }
-
-    if (activeTab >= 0 && activeTab < m_tabWidget->count())
-        m_tabWidget->setCurrentIndex(activeTab);
+    // A3: No longer restoring open files or active tab
 
     // Restore sidebar state
     bool leftCollapsed = group.readEntry("LeftSidebarCollapsed", true);
@@ -985,14 +1063,28 @@ void MainWindow::openFile(const QUrl &url)
     }
     tab->documentView()->setViewMode(dvMode);
 
-    // Connect zoom signal to status bar spinbox
+    // Connect zoom signal to status bar controls
     connect(tab->documentView(), &DocumentView::zoomChanged,
             this, [this](int percent) {
         if (m_zoomSpinBox) {
             const QSignalBlocker blocker(m_zoomSpinBox);
             m_zoomSpinBox->setValue(percent);
         }
+        if (m_zoomSlider) {
+            const QSignalBlocker blocker(m_zoomSlider);
+            m_zoomSlider->setValue(percent);
+        }
     });
+
+    // A7: Connect hover hint signal to status bar
+    connect(tab->documentView(), &DocumentView::statusHintChanged,
+            this, [this](const QString &hint) {
+        if (hint.isEmpty())
+            statusBar()->clearMessage();
+        else
+            statusBar()->showMessage(hint);
+    });
+
     int index = m_tabWidget->addTab(tab, fi.fileName());
     m_tabWidget->setTabToolTip(index, filePath);
     m_tabWidget->setCurrentIndex(index);
@@ -1013,6 +1105,10 @@ void MainWindow::openFile(const QUrl &url)
         delete tocBuilder;
         delete tocDoc;
     }
+
+    // A6: Update file path label in status bar
+    if (m_filePathLabel)
+        m_filePathLabel->setText(filePath);
 
     statusBar()->showMessage(i18n("Opened %1", fi.fileName()), 3000);
 }

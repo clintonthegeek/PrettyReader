@@ -4,6 +4,8 @@
 #include <KXmlGuiWindow>
 
 class QCloseEvent;
+class QLabel;
+class QSlider;
 class QSplitter;
 class QSpinBox;
 class QTabWidget;
@@ -82,7 +84,9 @@ private:
     MetadataStore *m_metadataStore = nullptr;
     Hyphenator *m_hyphenator = nullptr;
     ShortWords *m_shortWords = nullptr;
+    QSlider *m_zoomSlider = nullptr;
     QSpinBox *m_zoomSpinBox = nullptr;
+    QLabel *m_filePathLabel = nullptr;
 
     // PDF rendering pipeline (Phase 4)
     FontManager *m_fontManager = nullptr;

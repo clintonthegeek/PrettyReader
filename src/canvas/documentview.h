@@ -2,7 +2,9 @@
 #define PRETTYREADER_DOCUMENTVIEW_H
 
 #include <QGraphicsView>
+#include <QHash>
 #include <QMarginsF>
+#include <QSet>
 #include <QString>
 #include <QTextDocument>
 
@@ -13,6 +15,12 @@ class PdfPageItem;
 class RenderCache;
 
 namespace Poppler { class Document; }
+
+// A7: Cached link data per page
+struct PageLinkInfo {
+    QRectF rect;      // in page-local points
+    QString url;
+};
 
 struct ViewState
 {
@@ -60,6 +68,17 @@ public:
     int currentPage() const { return m_currentPage; }
     int pageCount() const { return m_pageCount; }
 
+    // B1: Cursor mode
+    enum CursorMode { HandTool, SelectionTool };
+    Q_ENUM(CursorMode)
+
+    void setCursorMode(CursorMode mode);
+    CursorMode cursorMode() const { return m_cursorMode; }
+
+    // B2: Selection
+    void copySelection();
+    void clearSelection();
+
     // View modes (Okular pattern)
     enum ViewMode { Continuous, SinglePage, FacingPages, FacingPagesFirstAlone, ContinuousFacing, ContinuousFacingFirstAlone };
     Q_ENUM(ViewMode)
@@ -78,6 +97,7 @@ Q_SIGNALS:
     void zoomChanged(int percent);
     void currentPageChanged(int page);
     void viewModeChanged(ViewMode mode);
+    void statusHintChanged(const QString &hint);  // A7: hover hints
 
 protected:
     void wheelEvent(QWheelEvent *event) override;
@@ -86,6 +106,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
 
 private Q_SLOTS:
     void onPixmapReady(int pageNumber);
@@ -100,6 +121,13 @@ private:
     void layoutPagesContinuousFacingFirstAlone();
     void updateCurrentPage();
     void clearPdfPages();
+
+    // B2: Text selection helpers
+    void updateTextSelection();
+    QString extractSelectedText() const;
+    // A7: Link hover helpers
+    void checkLinkHover(const QPointF &scenePos);
+    void ensureLinkCacheForPage(int pageNum);
 
     QGraphicsScene *m_scene = nullptr;
     QTextDocument *m_document = nullptr;
@@ -127,6 +155,20 @@ private:
     QPoint m_middleZoomOrigin;
     QPointF m_middleZoomSceneAnchor;
     int m_middleZoomStartPercent = 100;
+
+    // B1: Cursor mode
+    CursorMode m_cursorMode = HandTool;
+
+    // B2: Text selection state (Okular-informed)
+    bool m_textSelecting = false;
+    QPointF m_selectPressPos;        // scene coords
+    QPointF m_selectCurrentPos;      // scene coords
+    QSet<int> m_pagesWithSelection;
+    static constexpr int kSelectionThreshold = 5;  // 5px before selecting
+
+    // A7: Link hover cache
+    QHash<int, QList<PageLinkInfo>> m_linkCache;
+    QString m_currentHoverLink;
 
     static constexpr qreal kPageGap = 12.0;
     static constexpr qreal kSceneMargin = 40.0;

@@ -30,11 +30,16 @@ public:
 
     void setZoomFactor(qreal zoom);
 
+    // B2: Selection highlight
+    void setSelectionRects(const QList<QRectF> &rects);
+    void clearSelection();
+
 private:
     int m_pageNumber;
     QSizeF m_pageSize; // in points
     RenderCache *m_cache;
     qreal m_zoom = 1.0;
+    QList<QRectF> m_selectionRects;  // page-local coords
 };
 
 #endif // PRETTYREADER_PDFPAGEITEM_H

@@ -4,7 +4,10 @@
 #include "rendercache.h"
 #include "pagelayout.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QGraphicsScene>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QTimer>
@@ -92,6 +95,7 @@ void DocumentView::setPdfData(const QByteArray &pdf)
 
     m_pdfData = pdf;
     m_pdfMode = true;
+    m_linkCache.clear();  // A7: invalidate link cache for new document
 
     // Load via Poppler
     delete m_popplerDoc;
@@ -678,6 +682,12 @@ void DocumentView::mousePressEvent(QMouseEvent *event)
         m_middleZoomStartPercent = m_currentZoom;
         setCursor(Qt::SizeVerCursor);
         event->accept();
+    } else if (event->button() == Qt::LeftButton && m_cursorMode == SelectionTool) {
+        // B2: Start selection (don't select yet — wait for threshold)
+        m_selectPressPos = mapToScene(event->pos());
+        m_selectCurrentPos = m_selectPressPos;
+        clearSelection();
+        event->accept();
     } else {
         QGraphicsView::mousePressEvent(event);
     }
@@ -694,9 +704,6 @@ void DocumentView::mouseMoveEvent(QMouseEvent *event)
         int newZoom = qBound(25, qRound(m_middleZoomStartPercent * factor), 400);
 
         if (newZoom != m_currentZoom) {
-            // Only scale the view transform — bitmap stretch, no Poppler re-render.
-            // PdfPageItems keep their old zoom factor and cached pixmaps.
-            // Crisp re-render happens on mouse release.
             qreal scaleFactor = newZoom / 100.0;
             resetTransform();
             scale(scaleFactor, scaleFactor);
@@ -706,8 +713,28 @@ void DocumentView::mouseMoveEvent(QMouseEvent *event)
             Q_EMIT zoomChanged(m_currentZoom);
         }
         event->accept();
+    } else if (m_cursorMode == SelectionTool && (event->buttons() & Qt::LeftButton)) {
+        // B2: Selection drag
+        QPointF scenePos = mapToScene(event->pos());
+        if (!m_textSelecting) {
+            // Check 5px threshold before starting selection
+            QPointF delta = scenePos - m_selectPressPos;
+            if (QPointF::dotProduct(delta, delta) > kSelectionThreshold * kSelectionThreshold) {
+                m_textSelecting = true;
+            }
+        }
+        if (m_textSelecting) {
+            m_selectCurrentPos = scenePos;
+            updateTextSelection();
+        }
+        event->accept();
     } else {
         QGraphicsView::mouseMoveEvent(event);
+
+        // A7: Check for link hover (only when not dragging)
+        if (m_cursorMode != SelectionTool || !(event->buttons() & Qt::LeftButton)) {
+            checkLinkHover(mapToScene(event->pos()));
+        }
     }
 }
 
@@ -723,8 +750,344 @@ void DocumentView::mouseReleaseEvent(QMouseEvent *event)
             item->setZoomFactor(scaleFactor);
 
         event->accept();
+    } else if (event->button() == Qt::LeftButton && m_cursorMode == SelectionTool) {
+        // B2: Finish selection — highlights stay until cleared by next press or mode switch
+        m_textSelecting = false;
+        event->accept();
     } else {
         QGraphicsView::mouseReleaseEvent(event);
+    }
+}
+
+void DocumentView::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton && m_cursorMode == SelectionTool
+        && m_pdfMode && m_popplerDoc) {
+        // B2: Double-click to select a word
+        QPointF scenePos = mapToScene(event->pos());
+
+        for (auto *pageItem : m_pdfPageItems) {
+            QRectF itemRect = QRectF(0, 0, pageItem->pageSize().width(),
+                                      pageItem->pageSize().height())
+                                  .translated(pageItem->pos());
+            if (!itemRect.contains(scenePos))
+                continue;
+
+            int pageNum = pageItem->pageNumber();
+            QSizeF pageSz = pageItem->pageSize();
+            QPointF localPos = scenePos - pageItem->pos();
+
+            std::unique_ptr<Poppler::Page> pp(m_popplerDoc->page(pageNum));
+            if (!pp)
+                break;
+
+            auto textBoxes = pp->textList();
+
+            for (const auto &tb : textBoxes) {
+                QRectF tbRect = tb->boundingBox();
+                if (tbRect.contains(localPos)) {
+                    // Select this word
+                    clearSelection();
+                    pageItem->setSelectionRects({tbRect});
+                    m_pagesWithSelection.insert(pageNum);
+                    // Store selection extents for extractSelectedText
+                    m_selectPressPos = QPointF(tbRect.topLeft()) + pageItem->pos();
+                    m_selectCurrentPos = QPointF(tbRect.bottomRight()) + pageItem->pos();
+                    // Auto-copy word (Okular pattern)
+                    auto *mimeData = new QMimeData;
+                    mimeData->setText(tb->text());
+                    QApplication::clipboard()->setMimeData(mimeData);
+                    break;
+                }
+            }
+            break;
+        }
+        event->accept();
+    } else {
+        QGraphicsView::mouseDoubleClickEvent(event);
+    }
+}
+
+// --- B1: Cursor mode ---
+
+void DocumentView::setCursorMode(CursorMode mode)
+{
+    m_cursorMode = mode;
+    clearSelection();
+    if (mode == HandTool) {
+        setDragMode(QGraphicsView::ScrollHandDrag);
+        viewport()->setCursor(Qt::OpenHandCursor);
+    } else {
+        setDragMode(QGraphicsView::NoDrag);
+        viewport()->setCursor(Qt::IBeamCursor);
+    }
+}
+
+// --- B2: Text selection ---
+
+void DocumentView::clearSelection()
+{
+    for (int pageNum : m_pagesWithSelection) {
+        for (auto *item : m_pdfPageItems) {
+            if (item->pageNumber() == pageNum)
+                item->clearSelection();
+        }
+    }
+    m_pagesWithSelection.clear();
+    m_textSelecting = false;
+}
+
+void DocumentView::updateTextSelection()
+{
+    if (!m_pdfMode || !m_popplerDoc)
+        return;
+
+    // Build selection rect from press to current pos (scene coords)
+    QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
+
+    // Clear previous highlights
+    for (int pageNum : m_pagesWithSelection) {
+        for (auto *item : m_pdfPageItems) {
+            if (item->pageNumber() == pageNum)
+                item->clearSelection();
+        }
+    }
+    m_pagesWithSelection.clear();
+
+    // Check each page item for intersection
+    for (auto *pageItem : m_pdfPageItems) {
+        QRectF itemRect = pageItem->boundingRect().translated(pageItem->pos());
+        if (!selRect.intersects(itemRect))
+            continue;
+
+        int pageNum = pageItem->pageNumber();
+        QSizeF pageSz = pageItem->pageSize();
+
+        // Map selection rect to page-local coords
+        QRectF localSel = selRect.translated(-pageItem->pos());
+        localSel = localSel.intersected(QRectF(0, 0, pageSz.width(), pageSz.height()));
+        if (localSel.isEmpty())
+            continue;
+
+        // Normalize to 0-1 range for Poppler comparison
+        QRectF normSel(localSel.x() / pageSz.width(),
+                       localSel.y() / pageSz.height(),
+                       localSel.width() / pageSz.width(),
+                       localSel.height() / pageSz.height());
+
+        // Get text boxes from Poppler
+        std::unique_ptr<Poppler::Page> pp(m_popplerDoc->page(pageNum));
+        if (!pp)
+            continue;
+
+        auto textBoxes = pp->textList();
+        QList<QRectF> selRects;
+
+        for (const auto &tb : textBoxes) {
+            QRectF tbRect = tb->boundingBox();
+            // Poppler textList returns rects in page points — normalize
+            QRectF normTb(tbRect.x() / pageSz.width(),
+                          tbRect.y() / pageSz.height(),
+                          tbRect.width() / pageSz.width(),
+                          tbRect.height() / pageSz.height());
+
+            if (normSel.intersects(normTb)) {
+                // Store in page-local point coords for painting
+                selRects.append(tbRect);
+            }
+        }
+
+        if (!selRects.isEmpty()) {
+            pageItem->setSelectionRects(selRects);
+            m_pagesWithSelection.insert(pageNum);
+        }
+    }
+}
+
+QString DocumentView::extractSelectedText() const
+{
+    if (!m_pdfMode || !m_popplerDoc || m_pagesWithSelection.isEmpty())
+        return {};
+
+    QList<int> pages(m_pagesWithSelection.begin(), m_pagesWithSelection.end());
+    std::sort(pages.begin(), pages.end());
+
+    // Build selection rect in scene coords
+    QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
+
+    QString result;
+    for (int pageNum : pages) {
+        // Find the page item
+        PdfPageItem *pageItem = nullptr;
+        for (auto *item : m_pdfPageItems) {
+            if (item->pageNumber() == pageNum) {
+                pageItem = item;
+                break;
+            }
+        }
+        if (!pageItem)
+            continue;
+
+        QSizeF pageSz = pageItem->pageSize();
+        QRectF localSel = selRect.translated(-pageItem->pos());
+        localSel = localSel.intersected(QRectF(0, 0, pageSz.width(), pageSz.height()));
+
+        QRectF normSel(localSel.x() / pageSz.width(),
+                       localSel.y() / pageSz.height(),
+                       localSel.width() / pageSz.width(),
+                       localSel.height() / pageSz.height());
+
+        std::unique_ptr<Poppler::Page> pp(m_popplerDoc->page(pageNum));
+        if (!pp)
+            continue;
+
+        auto textBoxes = pp->textList();
+
+        // Collect matching boxes with position info
+        struct BoxInfo {
+            QRectF rect;
+            QString text;
+            bool hasSpaceAfter;
+        };
+        QList<BoxInfo> matches;
+
+        for (const auto &tb : textBoxes) {
+            QRectF tbRect = tb->boundingBox();
+            QRectF normTb(tbRect.x() / pageSz.width(),
+                          tbRect.y() / pageSz.height(),
+                          tbRect.width() / pageSz.width(),
+                          tbRect.height() / pageSz.height());
+
+            if (normSel.intersects(normTb)) {
+                matches.append({tbRect, tb->text(), tb->hasSpaceAfter()});
+            }
+        }
+
+        // Sort by Y (top to bottom), then X (left to right)
+        std::sort(matches.begin(), matches.end(),
+                  [](const BoxInfo &a, const BoxInfo &b) {
+            // Group by line: if Y difference > half of average height, different line
+            qreal avgH = (a.rect.height() + b.rect.height()) / 2.0;
+            if (qAbs(a.rect.y() - b.rect.y()) > avgH * 0.5)
+                return a.rect.y() < b.rect.y();
+            return a.rect.x() < b.rect.x();
+        });
+
+        // Build text with line breaks
+        qreal prevY = -1;
+        for (const auto &box : matches) {
+            if (prevY >= 0) {
+                qreal dy = qAbs(box.rect.y() - prevY);
+                if (dy > box.rect.height() * 0.5)
+                    result += QLatin1Char('\n');
+                else if (box.hasSpaceAfter || !result.isEmpty())
+                    result += QLatin1Char(' ');
+            }
+            result += box.text;
+            prevY = box.rect.y();
+        }
+
+        if (!result.isEmpty() && pageNum != pages.last())
+            result += QLatin1Char('\n');
+    }
+
+    return result;
+}
+
+void DocumentView::copySelection()
+{
+    QString text = extractSelectedText();
+    if (text.isEmpty())
+        return;
+
+    auto *mimeData = new QMimeData;
+    mimeData->setText(text);
+    QApplication::clipboard()->setMimeData(mimeData);
+}
+
+// --- A7: Link hover ---
+
+void DocumentView::ensureLinkCacheForPage(int pageNum)
+{
+    if (m_linkCache.contains(pageNum))
+        return;
+    if (!m_popplerDoc)
+        return;
+
+    std::unique_ptr<Poppler::Page> pp(m_popplerDoc->page(pageNum));
+    if (!pp)
+        return;
+
+    QList<PageLinkInfo> links;
+    auto popplerLinks = pp->links();  // std::vector<std::unique_ptr<Poppler::Link>>
+    for (const auto &link : popplerLinks) {
+        if (link->linkType() == Poppler::Link::Browse) {
+            auto *browseLink = static_cast<const Poppler::LinkBrowse *>(link.get());
+            PageLinkInfo info;
+            // Poppler::Link::linkArea() returns a normalized QRectF (0-1)
+            QRectF normArea = link->linkArea();
+            QSizeF pageSz = pp->pageSizeF();
+            info.rect = QRectF(normArea.x() * pageSz.width(),
+                               normArea.y() * pageSz.height(),
+                               normArea.width() * pageSz.width(),
+                               normArea.height() * pageSz.height());
+            info.url = browseLink->url();
+            links.append(info);
+        } else if (link->linkType() == Poppler::Link::Goto) {
+            auto *gotoLink = static_cast<const Poppler::LinkGoto *>(link.get());
+            PageLinkInfo info;
+            QRectF normArea = link->linkArea();
+            QSizeF pageSz = pp->pageSizeF();
+            info.rect = QRectF(normArea.x() * pageSz.width(),
+                               normArea.y() * pageSz.height(),
+                               normArea.width() * pageSz.width(),
+                               normArea.height() * pageSz.height());
+            if (gotoLink->isExternal()) {
+                info.url = gotoLink->fileName();
+            } else {
+                int destPage = gotoLink->destination().pageNumber();
+                info.url = QStringLiteral("Page %1").arg(destPage);
+            }
+            links.append(info);
+        }
+    }
+    m_linkCache.insert(pageNum, links);
+}
+
+void DocumentView::checkLinkHover(const QPointF &scenePos)
+{
+    if (!m_pdfMode || !m_popplerDoc)
+        return;
+
+    // Find page item under cursor
+    for (auto *pageItem : m_pdfPageItems) {
+        QRectF itemRect = QRectF(0, 0, pageItem->pageSize().width(),
+                                  pageItem->pageSize().height())
+                              .translated(pageItem->pos());
+        if (!itemRect.contains(scenePos))
+            continue;
+
+        int pageNum = pageItem->pageNumber();
+        ensureLinkCacheForPage(pageNum);
+
+        QPointF localPos = scenePos - pageItem->pos();
+        const auto &links = m_linkCache[pageNum];
+        for (const auto &linkInfo : links) {
+            if (linkInfo.rect.contains(localPos)) {
+                if (m_currentHoverLink != linkInfo.url) {
+                    m_currentHoverLink = linkInfo.url;
+                    Q_EMIT statusHintChanged(linkInfo.url);
+                }
+                return;
+            }
+        }
+        break; // cursor is on a page but not on a link
+    }
+
+    // Not hovering over any link
+    if (!m_currentHoverLink.isEmpty()) {
+        m_currentHoverLink.clear();
+        Q_EMIT statusHintChanged(QString());
     }
 }
 
