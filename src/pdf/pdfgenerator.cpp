@@ -304,34 +304,54 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     qreal x;
     qreal baselineY = originY - line.baseline;
 
-    // Full justification: distribute extra space between real word gaps
-    // (skip sub-word boundaries from soft-hyphen splits)
+    // Full justification: distribute extra space between real word gaps.
+    // Skip sub-word boundaries (soft-hyphen splits) and intra-inline-code
+    // gaps (adjacent glyph boxes with the same background color).
+    // Cap maximum gap expansion to avoid rivers of whitespace.
+    static constexpr qreal kMaxJustifyGap = 6.0; // points
+
+    bool doJustify = false;
+    qreal extraPerGap = 0;
+
     if (line.alignment == Qt::AlignJustify && !line.isLastLine
         && line.glyphs.size() > 1 && line.width < availWidth) {
         int gapCount = 0;
         for (int i = 1; i < line.glyphs.size(); ++i) {
-            if (!line.glyphs[i].startsAfterSoftHyphen)
-                gapCount++;
+            if (line.glyphs[i].startsAfterSoftHyphen)
+                continue;
+            // Don't justify between adjacent inline-code boxes (same background)
+            if (line.glyphs[i].style.background.isValid()
+                && line.glyphs[i - 1].style.background.isValid()
+                && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
+                continue;
+            gapCount++;
         }
-        qreal extraSpace = availWidth - line.width;
-        x = originX;
         if (gapCount > 0) {
-            qreal extraPerGap = extraSpace / gapCount;
-            for (int i = 0; i < line.glyphs.size(); ++i) {
-                renderGlyphBox(line.glyphs[i], stream, x, baselineY);
-                x += line.glyphs[i].width;
-                if (i < line.glyphs.size() - 1
-                    && !line.glyphs[i + 1].startsAfterSoftHyphen)
+            qreal extraSpace = availWidth - line.width;
+            extraPerGap = extraSpace / gapCount;
+            if (extraPerGap <= kMaxJustifyGap)
+                doJustify = true;
+        }
+    }
+
+    if (doJustify) {
+        x = originX;
+        for (int i = 0; i < line.glyphs.size(); ++i) {
+            renderGlyphBox(line.glyphs[i], stream, x, baselineY);
+            x += line.glyphs[i].width;
+            if (i < line.glyphs.size() - 1) {
+                bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
+                // Don't add justification space inside inline code spans
+                if (line.glyphs[i + 1].style.background.isValid()
+                    && line.glyphs[i].style.background.isValid()
+                    && line.glyphs[i + 1].style.background == line.glyphs[i].style.background)
+                    skipGap = true;
+                if (!skipGap)
                     x += extraPerGap;
-            }
-        } else {
-            for (const auto &gbox : line.glyphs) {
-                renderGlyphBox(gbox, stream, x, baselineY);
-                x += gbox.width;
             }
         }
     } else {
-        // Calculate alignment offset for other modes
+        // Left/center/right alignment (or justify that exceeded gap cap)
         qreal xOffset = 0;
         if (line.alignment == Qt::AlignCenter)
             xOffset = (availWidth - line.width) / 2;

@@ -14,6 +14,7 @@
 #include <QColor>
 #include <QImage>
 #include <QList>
+#include <QRectF>
 #include <QSizeF>
 #include <QString>
 
@@ -101,6 +102,9 @@ struct BlockBox {
 
     // Heading level (0 = not heading)
     int headingLevel = 0;
+
+    // Source breadcrumb
+    Content::SourceRange source;
 };
 
 struct TableCellBox {
@@ -139,6 +143,9 @@ struct TableBox {
     qreal cellPadding = 4.0;
     // Column positions (x offsets) for grid drawing
     QList<qreal> columnPositions;
+
+    // Source breadcrumb
+    Content::SourceRange source;
 };
 
 struct FootnoteBox {
@@ -162,6 +169,22 @@ struct FootnoteSectionBox {
 // A page element can be any of the above
 using PageElement = std::variant<BlockBox, TableBox, FootnoteSectionBox>;
 
+// Source map: maps page-local rects to markdown source line ranges
+struct SourceMapEntry {
+    int pageNumber = -1;
+    QRectF rect;        // page-local coordinates (points)
+    int startLine = -1; // 1-based line in processed markdown
+    int endLine = -1;   // 1-based line in processed markdown
+};
+
+// Code block hit region: maps page-local rect to content doc source lines
+struct CodeBlockRegion {
+    int pageNumber = -1;
+    QRectF rect;        // page-local coordinates (points), includes padding
+    int startLine = -1; // 1-based, matches Content::CodeBlock::source
+    int endLine = -1;
+};
+
 struct Page {
     int pageNumber = 0;
     QList<PageElement> elements;
@@ -171,6 +194,8 @@ struct Page {
 struct LayoutResult {
     QList<Page> pages;
     QSizeF pageSize; // in points
+    QList<SourceMapEntry> sourceMap;
+    QList<CodeBlockRegion> codeBlockRegions;
 };
 
 // --- Layout Engine ---

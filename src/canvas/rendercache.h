@@ -48,7 +48,7 @@ Q_SIGNALS:
     void pixmapReady(int pageNumber);
 
 private Q_SLOTS:
-    void onRenderFinished(int pageNumber, QImage image, int width, int height);
+    void onRenderFinished(int pageNumber, QImage image, int width, int height, int generation);
 
 private:
     struct CacheEntry {
@@ -79,6 +79,7 @@ private:
     qint64 m_currentMemory = 0;
     mutable qint64 m_accessCounter = 0;
     mutable QMutex m_mutex;
+    int m_generation = 0;
 
     // Render thread
     class RenderWorker;

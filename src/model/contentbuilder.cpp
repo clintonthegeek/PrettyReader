@@ -13,6 +13,8 @@
 #include "shortwords.h"
 #include "footnoteparser.h"
 
+#include <algorithm>
+
 #include <QBuffer>
 #include <QDir>
 #include <QFileInfo>
@@ -158,6 +160,20 @@ Content::Document ContentBuilder::build(const QString &markdownText)
         m_footnotes.append({fn.label, fn.content});
     }
 
+    // Store processed text for source line extraction
+    m_processedMarkdown = processed;
+
+    // Build line offset table for source tracking
+    const QByteArray utf8 = processed.toUtf8();
+    m_lineStartOffsets.clear();
+    m_lineStartOffsets.append(0); // line 1 starts at byte 0
+    for (int i = 0; i < utf8.size(); ++i) {
+        if (utf8[i] == '\n')
+            m_lineStartOffsets.append(i + 1);
+    }
+    m_bufferStart = utf8.constData();
+    m_blockTrackers.clear();
+
     // Parse
     MD_PARSER parser = {};
     parser.abi_version = 0;
@@ -169,7 +185,6 @@ Content::Document ContentBuilder::build(const QString &markdownText)
     parser.leave_span = &ContentBuilder::sLeaveSpan;
     parser.text = &ContentBuilder::sText;
 
-    const QByteArray utf8 = processed.toUtf8();
     md_parse(utf8.constData(), static_cast<MD_SIZE>(utf8.size()), &parser, this);
 
     // Append footnote section
@@ -230,6 +245,13 @@ int ContentBuilder::sText(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, v
 
 int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
 {
+    // Push source tracker for block types that produce content blocks
+    if (type == MD_BLOCK_P || type == MD_BLOCK_H || type == MD_BLOCK_CODE
+        || type == MD_BLOCK_TABLE || type == MD_BLOCK_UL || type == MD_BLOCK_OL
+        || type == MD_BLOCK_HR) {
+        m_blockTrackers.push(BlockTracker{});
+    }
+
     switch (type) {
     case MD_BLOCK_DOC:
         break;
@@ -448,15 +470,47 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
 int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
 {
     switch (type) {
-    case MD_BLOCK_P:
+    case MD_BLOCK_P: {
         if (!m_inlineStack.isEmpty())
             m_inlineStack.pop();
+        if (!m_blockTrackers.isEmpty()) {
+            auto tracker = m_blockTrackers.pop();
+            Content::SourceRange range;
+            if (tracker.firstByteOffset >= 0) {
+                range.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+            }
+            if (m_inListItem && !m_listStack.isEmpty()) {
+                auto &items = m_listStack.top().items;
+                if (!items.isEmpty() && !items.last().children.isEmpty()) {
+                    auto *p = std::get_if<Content::Paragraph>(&items.last().children.last());
+                    if (p) p->source = range;
+                }
+            } else if (!m_doc.blocks.isEmpty()) {
+                auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
+                if (p) p->source = range;
+            }
+        }
         break;
+    }
 
-    case MD_BLOCK_H:
+    case MD_BLOCK_H: {
         if (!m_inlineStack.isEmpty())
             m_inlineStack.pop();
+        if (!m_blockTrackers.isEmpty()) {
+            auto tracker = m_blockTrackers.pop();
+            Content::SourceRange range;
+            if (tracker.firstByteOffset >= 0) {
+                range.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+            }
+            if (!m_doc.blocks.isEmpty()) {
+                auto *h = std::get_if<Content::Heading>(&m_doc.blocks.last());
+                if (h) h->source = range;
+            }
+        }
         break;
+    }
 
     case MD_BLOCK_QUOTE:
         m_blockQuoteLevel--;
@@ -468,6 +522,14 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
 
     case MD_BLOCK_UL:
     case MD_BLOCK_OL: {
+        Content::SourceRange range;
+        if (!m_blockTrackers.isEmpty()) {
+            auto tracker = m_blockTrackers.pop();
+            if (tracker.firstByteOffset >= 0) {
+                range.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+            }
+        }
         if (!m_listStack.isEmpty()) {
             ListInfo info = m_listStack.pop();
             Content::List list;
@@ -475,6 +537,7 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
             list.startNumber = info.startNumber;
             list.depth = info.depth;
             list.items = info.items;
+            list.source = range;
 
             if (!m_listStack.isEmpty() && m_inListItem) {
                 // Nested list: add to parent list's current item
@@ -503,6 +566,13 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
         } else {
             cb.style.fontFamily = QStringLiteral("JetBrains Mono");
             cb.style.fontSize = 10.0;
+        }
+        if (!m_blockTrackers.isEmpty()) {
+            auto tracker = m_blockTrackers.pop();
+            if (tracker.firstByteOffset >= 0) {
+                cb.source.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                cb.source.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+            }
         }
         m_doc.blocks.append(std::move(cb));
         m_codeLanguage.clear();
@@ -544,6 +614,13 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
                 }
             }
         }
+        if (!m_blockTrackers.isEmpty()) {
+            auto tracker = m_blockTrackers.pop();
+            if (tracker.firstByteOffset >= 0) {
+                table.source.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                table.source.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+            }
+        }
         m_doc.blocks.append(std::move(table));
         m_tableRows.clear();
         break;
@@ -562,6 +639,19 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
         if (!m_inlineStack.isEmpty())
             m_inlineStack.pop();
         m_tableCol++;
+        break;
+
+    case MD_BLOCK_HR:
+        if (!m_blockTrackers.isEmpty()) {
+            auto tracker = m_blockTrackers.pop();
+            if (tracker.firstByteOffset >= 0 && !m_doc.blocks.isEmpty()) {
+                auto *hr = std::get_if<Content::HorizontalRule>(&m_doc.blocks.last());
+                if (hr) {
+                    hr->source.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                    hr->source.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+                }
+            }
+        }
         break;
 
     default:
@@ -683,6 +773,17 @@ int ContentBuilder::leaveSpan(MD_SPANTYPE type, void * /*detail*/)
 
 int ContentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size)
 {
+    // Update all active block trackers with source position
+    if (m_bufferStart) {
+        int offset = static_cast<int>(text - m_bufferStart);
+        int end = offset + static_cast<int>(size);
+        for (auto &tracker : m_blockTrackers) {
+            if (tracker.firstByteOffset < 0)
+                tracker.firstByteOffset = offset;
+            tracker.lastByteEnd = end;
+        }
+    }
+
     QString str = QString::fromUtf8(text, static_cast<int>(size));
 
     if (m_collectingAltText) {
@@ -784,6 +885,15 @@ int ContentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size)
         break;
     }
     return 0;
+}
+
+// --- Source tracking ---
+
+int ContentBuilder::byteOffsetToLine(int offset) const
+{
+    // Binary search: find 1-based line number containing this byte offset
+    auto it = std::upper_bound(m_lineStartOffsets.begin(), m_lineStartOffsets.end(), offset);
+    return static_cast<int>(it - m_lineStartOffsets.begin()); // 1-based
 }
 
 // --- Helpers ---

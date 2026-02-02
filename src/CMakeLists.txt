@@ -50,6 +50,9 @@ add_library(PrettyReaderCore STATIC
     typography/shortwords.h
     export/rtfexporter.cpp
     export/rtfexporter.h
+    export/contentrtfexporter.cpp
+    export/contentrtfexporter.h
+    export/rtffilteroptions.h
     # PDF rendering pipeline (Phase 4)
     model/contentbuilder.cpp
     model/contentbuilder.h
@@ -81,6 +84,10 @@ add_library(PrettyReaderCore STATIC
     widgets/footnoteconfigwidget.h
     widgets/preferencesdialog.cpp
     widgets/preferencesdialog.h
+    widgets/rtfcopyoptionsdialog.cpp
+    widgets/rtfcopyoptionsdialog.h
+    widgets/languagepickerdialog.cpp
+    widgets/languagepickerdialog.h
     widgets/toolview.cpp
     widgets/toolview.h
     widgets/filebrowserdock.cpp

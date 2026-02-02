@@ -3,10 +3,18 @@
 #include "pdfpageitem.h"
 #include "rendercache.h"
 #include "pagelayout.h"
+#include "contentrtfexporter.h"
+#include "languagepickerdialog.h"
+#include "rtfcopyoptionsdialog.h"
 
+#include <climits>
+
+#include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QContextMenuEvent>
 #include <QGraphicsScene>
+#include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QScrollBar>
@@ -40,6 +48,9 @@ DocumentView::DocumentView(QWidget *parent)
 DocumentView::~DocumentView()
 {
     clearPdfPages();
+    // Detach render cache before freeing the Poppler document —
+    // blocks until any in-progress render finishes, preventing use-after-free.
+    m_renderCache->setDocument(nullptr);
     delete m_popplerDoc;
 }
 
@@ -96,8 +107,14 @@ void DocumentView::setPdfData(const QByteArray &pdf)
     m_pdfData = pdf;
     m_pdfMode = true;
     m_linkCache.clear();  // A7: invalidate link cache for new document
+    m_sourceMap.clear();
+    m_processedMarkdown.clear();
+    m_contentDoc.blocks.clear();
+    m_codeBlockRegions.clear();
 
-    // Load via Poppler
+    // Detach render cache before freeing the old Poppler document —
+    // blocks until any in-progress render finishes, preventing use-after-free.
+    m_renderCache->setDocument(nullptr);
     delete m_popplerDoc;
     m_popplerDoc = Poppler::Document::loadFromData(pdf).release();
     if (!m_popplerDoc) {
@@ -686,6 +703,7 @@ void DocumentView::mousePressEvent(QMouseEvent *event)
         // B2: Start selection (don't select yet — wait for threshold)
         m_selectPressPos = mapToScene(event->pos());
         m_selectCurrentPos = m_selectPressPos;
+        m_wordSelection = false;
         clearSelection();
         event->accept();
     } else {
@@ -788,6 +806,7 @@ void DocumentView::mouseDoubleClickEvent(QMouseEvent *event)
                 if (tbRect.contains(localPos)) {
                     // Select this word
                     clearSelection();
+                    m_wordSelection = true;
                     pageItem->setSelectionRects({tbRect});
                     m_pagesWithSelection.insert(pageNum);
                     // Store selection extents for extractSelectedText
@@ -806,6 +825,84 @@ void DocumentView::mouseDoubleClickEvent(QMouseEvent *event)
     } else {
         QGraphicsView::mouseDoubleClickEvent(event);
     }
+}
+
+// --- Source breadcrumbs ---
+
+void DocumentView::setSourceData(const QString &processedMarkdown,
+                                  const QList<Layout::SourceMapEntry> &sourceMap,
+                                  const Content::Document &contentDoc,
+                                  const QList<Layout::CodeBlockRegion> &codeBlockRegions)
+{
+    m_processedMarkdown = processedMarkdown;
+    m_sourceMap = sourceMap;
+    m_contentDoc = contentDoc;
+    m_codeBlockRegions = codeBlockRegions;
+}
+
+// --- Code block language overrides ---
+
+void DocumentView::setCodeBlockLanguageOverrides(const QHash<QString, QString> &overrides)
+{
+    m_codeBlockLanguageOverrides = overrides;
+}
+
+QHash<QString, QString> DocumentView::codeBlockLanguageOverrides() const
+{
+    return m_codeBlockLanguageOverrides;
+}
+
+void DocumentView::applyLanguageOverrides(Content::Document &doc) const
+{
+    if (m_codeBlockLanguageOverrides.isEmpty())
+        return;
+
+    for (auto &block : doc.blocks) {
+        if (auto *cb = std::get_if<Content::CodeBlock>(&block)) {
+            QString key = cb->code.trimmed();
+            auto it = m_codeBlockLanguageOverrides.find(key);
+            if (it != m_codeBlockLanguageOverrides.end())
+                cb->language = it.value();
+        }
+    }
+}
+
+int DocumentView::codeBlockIndexAtScenePos(const QPointF &scenePos) const
+{
+    if (!m_pdfMode || m_codeBlockRegions.isEmpty() || m_contentDoc.blocks.isEmpty())
+        return -1;
+
+    // Find which page/local-coords the click is on
+    for (auto *pageItem : m_pdfPageItems) {
+        QRectF itemRect = QRectF(0, 0, pageItem->pageSize().width(),
+                                  pageItem->pageSize().height())
+                              .translated(pageItem->pos());
+        if (!itemRect.contains(scenePos))
+            continue;
+
+        int pageNum = pageItem->pageNumber();
+        QPointF localPos = scenePos - pageItem->pos();
+
+        // Check code block hit regions (provided by layout engine)
+        for (const auto &region : m_codeBlockRegions) {
+            if (region.pageNumber != pageNum)
+                continue;
+            if (!region.rect.contains(localPos))
+                continue;
+
+            // Find matching CodeBlock in content doc by source line range
+            for (int i = 0; i < m_contentDoc.blocks.size(); ++i) {
+                if (auto *cb = std::get_if<Content::CodeBlock>(&m_contentDoc.blocks[i])) {
+                    if (cb->source.startLine == region.startLine
+                        && cb->source.endLine == region.endLine) {
+                        return i;
+                    }
+                }
+            }
+        }
+        break;
+    }
+    return -1;
 }
 
 // --- B1: Cursor mode ---
@@ -854,7 +951,11 @@ void DocumentView::updateTextSelection()
     }
     m_pagesWithSelection.clear();
 
-    // Check each page item for intersection
+    // Prefer source map rects for continuous, clean band-style highlighting
+    // (since we generated the PDF ourselves and know the exact layout).
+    // Fall back to Poppler text boxes only when source map is unavailable.
+    bool useSourceMap = !m_sourceMap.isEmpty();
+
     for (auto *pageItem : m_pdfPageItems) {
         QRectF itemRect = pageItem->boundingRect().translated(pageItem->pos());
         if (!selRect.intersects(itemRect))
@@ -869,31 +970,41 @@ void DocumentView::updateTextSelection()
         if (localSel.isEmpty())
             continue;
 
-        // Normalize to 0-1 range for Poppler comparison
-        QRectF normSel(localSel.x() / pageSz.width(),
-                       localSel.y() / pageSz.height(),
-                       localSel.width() / pageSz.width(),
-                       localSel.height() / pageSz.height());
-
-        // Get text boxes from Poppler
-        std::unique_ptr<Poppler::Page> pp(m_popplerDoc->page(pageNum));
-        if (!pp)
-            continue;
-
-        auto textBoxes = pp->textList();
         QList<QRectF> selRects;
 
-        for (const auto &tb : textBoxes) {
-            QRectF tbRect = tb->boundingBox();
-            // Poppler textList returns rects in page points — normalize
-            QRectF normTb(tbRect.x() / pageSz.width(),
-                          tbRect.y() / pageSz.height(),
-                          tbRect.width() / pageSz.width(),
-                          tbRect.height() / pageSz.height());
+        if (useSourceMap) {
+            // Source map approach: use full block rects for continuous highlighting.
+            // Once the drag rect touches a block, highlight the entire block —
+            // no vertical clipping to the cursor position.
+            for (const auto &entry : m_sourceMap) {
+                if (entry.pageNumber != pageNum)
+                    continue;
+                if (!entry.rect.intersects(localSel))
+                    continue;
 
-            if (normSel.intersects(normTb)) {
-                // Store in page-local point coords for painting
-                selRects.append(tbRect);
+                selRects.append(entry.rect);
+            }
+        } else {
+            // Poppler text box fallback
+            QRectF normSel(localSel.x() / pageSz.width(),
+                           localSel.y() / pageSz.height(),
+                           localSel.width() / pageSz.width(),
+                           localSel.height() / pageSz.height());
+
+            std::unique_ptr<Poppler::Page> pp(m_popplerDoc->page(pageNum));
+            if (!pp)
+                continue;
+
+            auto textBoxes = pp->textList();
+            for (const auto &tb : textBoxes) {
+                QRectF tbRect = tb->boundingBox();
+                QRectF normTb(tbRect.x() / pageSz.width(),
+                              tbRect.y() / pageSz.height(),
+                              tbRect.width() / pageSz.width(),
+                              tbRect.height() / pageSz.height());
+
+                if (normSel.intersects(normTb))
+                    selRects.append(tbRect);
             }
         }
 
@@ -906,18 +1017,64 @@ void DocumentView::updateTextSelection()
 
 QString DocumentView::extractSelectedText() const
 {
+    if (m_pagesWithSelection.isEmpty())
+        return {};
+
+    // For word selection (double-click) or missing source data, use Poppler fallback
+    if (m_wordSelection || m_sourceMap.isEmpty() || m_processedMarkdown.isEmpty())
+        return extractSelectedTextFromPdf();
+
+    // Source map approach: map selection rect to markdown source lines
+    QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
+    int minLine = INT_MAX;
+    int maxLine = -1;
+
+    for (auto *pageItem : m_pdfPageItems) {
+        QRectF itemRect = pageItem->boundingRect().translated(pageItem->pos());
+        if (!selRect.intersects(itemRect))
+            continue;
+
+        int pageNum = pageItem->pageNumber();
+        QRectF localSel = selRect.translated(-pageItem->pos());
+        localSel = localSel.intersected(
+            QRectF(0, 0, pageItem->pageSize().width(), pageItem->pageSize().height()));
+        if (localSel.isEmpty())
+            continue;
+
+        for (const auto &entry : m_sourceMap) {
+            if (entry.pageNumber == pageNum && entry.rect.intersects(localSel)) {
+                if (entry.startLine > 0) {
+                    minLine = qMin(minLine, entry.startLine);
+                    maxLine = qMax(maxLine, entry.endLine);
+                }
+            }
+        }
+    }
+
+    if (minLine > maxLine)
+        return {};
+
+    // Extract lines from processed markdown
+    const QStringList lines = m_processedMarkdown.split(QLatin1Char('\n'));
+    QStringList selected;
+    for (int i = minLine - 1; i < maxLine && i < lines.size(); ++i) {
+        selected.append(lines[i]);
+    }
+    return selected.join(QLatin1Char('\n'));
+}
+
+QString DocumentView::extractSelectedTextFromPdf() const
+{
     if (!m_pdfMode || !m_popplerDoc || m_pagesWithSelection.isEmpty())
         return {};
 
     QList<int> pages(m_pagesWithSelection.begin(), m_pagesWithSelection.end());
     std::sort(pages.begin(), pages.end());
 
-    // Build selection rect in scene coords
     QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
 
     QString result;
     for (int pageNum : pages) {
-        // Find the page item
         PdfPageItem *pageItem = nullptr;
         for (auto *item : m_pdfPageItems) {
             if (item->pageNumber() == pageNum) {
@@ -943,7 +1100,6 @@ QString DocumentView::extractSelectedText() const
 
         auto textBoxes = pp->textList();
 
-        // Collect matching boxes with position info
         struct BoxInfo {
             QRectF rect;
             QString text;
@@ -963,17 +1119,14 @@ QString DocumentView::extractSelectedText() const
             }
         }
 
-        // Sort by Y (top to bottom), then X (left to right)
         std::sort(matches.begin(), matches.end(),
                   [](const BoxInfo &a, const BoxInfo &b) {
-            // Group by line: if Y difference > half of average height, different line
             qreal avgH = (a.rect.height() + b.rect.height()) / 2.0;
             if (qAbs(a.rect.y() - b.rect.y()) > avgH * 0.5)
                 return a.rect.y() < b.rect.y();
             return a.rect.x() < b.rect.x();
         });
 
-        // Build text with line breaks
         qreal prevY = -1;
         for (const auto &box : matches) {
             if (prevY >= 0) {
@@ -994,6 +1147,39 @@ QString DocumentView::extractSelectedText() const
     return result;
 }
 
+QList<Content::BlockNode> DocumentView::extractSelectedBlocks(int minLine, int maxLine) const
+{
+    QList<Content::BlockNode> result;
+    for (const auto &block : m_contentDoc.blocks) {
+        Content::SourceRange sr;
+        std::visit([&sr](const auto &b) {
+            using T = std::decay_t<decltype(b)>;
+            if constexpr (std::is_same_v<T, Content::Paragraph>) {
+                sr = b.source;
+            } else if constexpr (std::is_same_v<T, Content::Heading>) {
+                sr = b.source;
+            } else if constexpr (std::is_same_v<T, Content::CodeBlock>) {
+                sr = b.source;
+            } else if constexpr (std::is_same_v<T, Content::List>) {
+                sr = b.source;
+            } else if constexpr (std::is_same_v<T, Content::Table>) {
+                sr = b.source;
+            } else if constexpr (std::is_same_v<T, Content::HorizontalRule>) {
+                sr = b.source;
+            }
+            // BlockQuote, FootnoteSection: no top-level source range — skip
+        }, block);
+
+        if (sr.startLine < 0 || sr.endLine < 0)
+            continue;
+
+        // Check overlap: block range [sr.startLine, sr.endLine] vs [minLine, maxLine]
+        if (sr.startLine <= maxLine && sr.endLine >= minLine)
+            result.append(block);
+    }
+    return result;
+}
+
 void DocumentView::copySelection()
 {
     QString text = extractSelectedText();
@@ -1002,7 +1188,263 @@ void DocumentView::copySelection()
 
     auto *mimeData = new QMimeData;
     mimeData->setText(text);
+
+    bool hasSourceData = !m_wordSelection && !m_sourceMap.isEmpty()
+                         && !m_processedMarkdown.isEmpty();
+
+    // If we extracted markdown source, also provide it as text/markdown
+    if (hasSourceData)
+        mimeData->setData(QStringLiteral("text/markdown"), text.toUtf8());
+
+    // Generate styled RTF from content model blocks
+    if (hasSourceData && !m_contentDoc.blocks.isEmpty()) {
+        // Compute line range from source map (same logic as extractSelectedText)
+        QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
+        int minLine = INT_MAX;
+        int maxLine = -1;
+
+        for (auto *pageItem : m_pdfPageItems) {
+            QRectF itemRect = pageItem->boundingRect().translated(pageItem->pos());
+            if (!selRect.intersects(itemRect))
+                continue;
+
+            int pageNum = pageItem->pageNumber();
+            QRectF localSel = selRect.translated(-pageItem->pos());
+            localSel = localSel.intersected(
+                QRectF(0, 0, pageItem->pageSize().width(), pageItem->pageSize().height()));
+            if (localSel.isEmpty())
+                continue;
+
+            for (const auto &entry : m_sourceMap) {
+                if (entry.pageNumber == pageNum && entry.rect.intersects(localSel)) {
+                    if (entry.startLine > 0) {
+                        minLine = qMin(minLine, entry.startLine);
+                        maxLine = qMax(maxLine, entry.endLine);
+                    }
+                }
+            }
+        }
+
+        if (minLine <= maxLine) {
+            QList<Content::BlockNode> filteredBlocks = extractSelectedBlocks(minLine, maxLine);
+            if (!filteredBlocks.isEmpty()) {
+                ContentRtfExporter rtfExporter;
+                QByteArray rtf = rtfExporter.exportBlocks(filteredBlocks);
+                mimeData->setData(QStringLiteral("text/rtf"), rtf);
+                mimeData->setData(QStringLiteral("application/rtf"), rtf);
+            }
+        }
+    }
+
     QApplication::clipboard()->setMimeData(mimeData);
+}
+
+void DocumentView::copySelectionAsRtf()
+{
+    bool hasSourceData = !m_wordSelection && !m_sourceMap.isEmpty()
+                         && !m_processedMarkdown.isEmpty()
+                         && !m_contentDoc.blocks.isEmpty();
+    if (!hasSourceData || m_pagesWithSelection.isEmpty())
+        return;
+
+    QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
+    int minLine = INT_MAX;
+    int maxLine = -1;
+
+    for (auto *pageItem : m_pdfPageItems) {
+        QRectF itemRect = pageItem->boundingRect().translated(pageItem->pos());
+        if (!selRect.intersects(itemRect))
+            continue;
+        int pageNum = pageItem->pageNumber();
+        QRectF localSel = selRect.translated(-pageItem->pos());
+        localSel = localSel.intersected(
+            QRectF(0, 0, pageItem->pageSize().width(), pageItem->pageSize().height()));
+        if (localSel.isEmpty())
+            continue;
+        for (const auto &entry : m_sourceMap) {
+            if (entry.pageNumber == pageNum && entry.rect.intersects(localSel)) {
+                if (entry.startLine > 0) {
+                    minLine = qMin(minLine, entry.startLine);
+                    maxLine = qMax(maxLine, entry.endLine);
+                }
+            }
+        }
+    }
+
+    if (minLine > maxLine)
+        return;
+
+    QList<Content::BlockNode> filteredBlocks = extractSelectedBlocks(minLine, maxLine);
+    if (filteredBlocks.isEmpty())
+        return;
+
+    ContentRtfExporter rtfExporter;
+    QByteArray rtf = rtfExporter.exportBlocks(filteredBlocks);
+
+    auto *mimeData = new QMimeData;
+    mimeData->setData(QStringLiteral("text/rtf"), rtf);
+    mimeData->setData(QStringLiteral("application/rtf"), rtf);
+    // Plain text fallback: use Poppler-extracted text (no markdown syntax)
+    // so paste targets that prefer text/plain get clean rendered text.
+    QString plainText = extractSelectedTextFromPdf();
+    if (!plainText.isEmpty())
+        mimeData->setText(plainText);
+    QApplication::clipboard()->setMimeData(mimeData);
+}
+
+void DocumentView::copySelectionAsMarkdown()
+{
+    if (m_pagesWithSelection.isEmpty())
+        return;
+
+    QString text = extractSelectedText();
+    if (text.isEmpty())
+        return;
+
+    auto *mimeData = new QMimeData;
+    mimeData->setText(text);
+    mimeData->setData(QStringLiteral("text/markdown"), text.toUtf8());
+    QApplication::clipboard()->setMimeData(mimeData);
+}
+
+void DocumentView::copySelectionAsComplexRtf()
+{
+    bool hasSourceData = !m_wordSelection && !m_sourceMap.isEmpty()
+                         && !m_processedMarkdown.isEmpty()
+                         && !m_contentDoc.blocks.isEmpty();
+    if (!hasSourceData || m_pagesWithSelection.isEmpty())
+        return;
+
+    auto *dialog = new RtfCopyOptionsDialog(this);
+    if (dialog->exec() != QDialog::Accepted) {
+        delete dialog;
+        return;
+    }
+
+    RtfFilterOptions filter = dialog->filterOptions();
+    delete dialog;
+
+    QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
+    int minLine = INT_MAX;
+    int maxLine = -1;
+
+    for (auto *pageItem : m_pdfPageItems) {
+        QRectF itemRect = pageItem->boundingRect().translated(pageItem->pos());
+        if (!selRect.intersects(itemRect))
+            continue;
+        int pageNum = pageItem->pageNumber();
+        QRectF localSel = selRect.translated(-pageItem->pos());
+        localSel = localSel.intersected(
+            QRectF(0, 0, pageItem->pageSize().width(), pageItem->pageSize().height()));
+        if (localSel.isEmpty())
+            continue;
+        for (const auto &entry : m_sourceMap) {
+            if (entry.pageNumber == pageNum && entry.rect.intersects(localSel)) {
+                if (entry.startLine > 0) {
+                    minLine = qMin(minLine, entry.startLine);
+                    maxLine = qMax(maxLine, entry.endLine);
+                }
+            }
+        }
+    }
+
+    if (minLine > maxLine)
+        return;
+
+    QList<Content::BlockNode> filteredBlocks = extractSelectedBlocks(minLine, maxLine);
+    if (filteredBlocks.isEmpty())
+        return;
+
+    ContentRtfExporter rtfExporter;
+    QByteArray rtf = rtfExporter.exportBlocks(filteredBlocks, filter);
+
+    auto *mimeData = new QMimeData;
+    mimeData->setData(QStringLiteral("text/rtf"), rtf);
+    mimeData->setData(QStringLiteral("application/rtf"), rtf);
+    // Plain text fallback via Poppler
+    QString plainText = extractSelectedTextFromPdf();
+    if (!plainText.isEmpty())
+        mimeData->setText(plainText);
+    QApplication::clipboard()->setMimeData(mimeData);
+}
+
+// --- Context menu ---
+
+void DocumentView::contextMenuEvent(QContextMenuEvent *event)
+{
+    // Code block language override: works in any cursor mode
+    QPointF scenePos = mapToScene(event->pos());
+    int codeBlockIdx = codeBlockIndexAtScenePos(scenePos);
+
+    // Selection copy actions require SelectionTool mode
+    bool hasSelection = (m_cursorMode == SelectionTool && !m_pagesWithSelection.isEmpty());
+
+    if (!hasSelection && codeBlockIdx < 0) {
+        QGraphicsView::contextMenuEvent(event);
+        return;
+    }
+
+    bool hasSourceData = !m_wordSelection && !m_sourceMap.isEmpty()
+                         && !m_processedMarkdown.isEmpty();
+
+    QMenu menu(this);
+
+    // Selection-based copy actions
+    if (hasSelection) {
+        if (hasSourceData && !m_contentDoc.blocks.isEmpty()) {
+            auto *copyRtf = menu.addAction(tr("Copy as Styled Text"));
+            connect(copyRtf, &QAction::triggered, this, &DocumentView::copySelectionAsRtf);
+
+            auto *copyComplex = menu.addAction(tr("Copy with Style Options..."));
+            connect(copyComplex, &QAction::triggered, this, &DocumentView::copySelectionAsComplexRtf);
+        }
+
+        if (hasSourceData) {
+            auto *copyMd = menu.addAction(tr("Copy as Markdown"));
+            connect(copyMd, &QAction::triggered, this, &DocumentView::copySelectionAsMarkdown);
+        }
+
+        // Fallback for word selection or missing source data: plain copy
+        if (!hasSourceData || m_contentDoc.blocks.isEmpty()) {
+            auto *copyPlain = menu.addAction(tr("Copy"));
+            connect(copyPlain, &QAction::triggered, this, &DocumentView::copySelection);
+        }
+    }
+
+    // Code block language override action
+    if (codeBlockIdx >= 0) {
+        if (!menu.isEmpty())
+            menu.addSeparator();
+
+        auto *cb = std::get_if<Content::CodeBlock>(&m_contentDoc.blocks[codeBlockIdx]);
+        if (cb) {
+            QString label;
+            if (cb->language.isEmpty())
+                label = tr("Set Syntax Language...");
+            else
+                label = tr("Syntax: %1...").arg(cb->language);
+
+            auto *langAction = menu.addAction(label);
+            QString codeKey = cb->code.trimmed();
+            QString currentLang = cb->language;
+
+            connect(langAction, &QAction::triggered, this, [this, codeKey, currentLang]() {
+                auto *dialog = new LanguagePickerDialog(currentLang, this);
+                if (dialog->exec() == QDialog::Accepted) {
+                    QString lang = dialog->selectedLanguage();
+                    if (lang.isEmpty())
+                        m_codeBlockLanguageOverrides.remove(codeKey);
+                    else
+                        m_codeBlockLanguageOverrides.insert(codeKey, lang);
+                    Q_EMIT codeBlockLanguageChanged();
+                }
+                delete dialog;
+            });
+        }
+    }
+
+    menu.exec(event->globalPos());
+    event->accept();
 }
 
 // --- A7: Link hover ---

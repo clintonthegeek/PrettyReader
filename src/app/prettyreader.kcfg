@@ -83,4 +83,38 @@
       <default>true</default>
     </entry>
   </group>
+
+  <group name="CopyOptions">
+    <entry name="CopyPreset" type="String">
+      <label>Last-used copy style preset name.</label>
+      <default>Full Style</default>
+    </entry>
+    <entry name="CopyIncludeFonts" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeEmphasis" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeScripts" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeTextColor" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeHighlights" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeAlignment" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeSpacing" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeMargins" type="Bool">
+      <default>true</default>
+    </entry>
+    <entry name="CopyIncludeSourceFormatting" type="Bool">
+      <default>true</default>
+    </entry>
+  </group>
 </kcfg>

@@ -5,6 +5,7 @@
 #include <KDirSortFilterProxyModel>
 #include <KFileItem>
 
+#include <QAbstractItemView>
 #include <QDir>
 #include <QLineEdit>
 #include <QTreeView>
@@ -38,9 +39,10 @@ FileBrowserDock::FileBrowserDock(QWidget *parent)
     for (int i = 1; i < m_dirModel->columnCount(); ++i)
         m_treeView->setColumnHidden(i, true);
     m_treeView->setRootIsDecorated(true);
+    m_treeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     layout->addWidget(m_treeView);
 
-    connect(m_treeView, &QTreeView::activated,
+    connect(m_treeView, &QTreeView::doubleClicked,
             this, &FileBrowserDock::onItemActivated);
     connect(m_pathEdit, &QLineEdit::returnPressed,
             this, &FileBrowserDock::onPathEdited);

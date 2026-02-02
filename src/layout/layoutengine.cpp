@@ -8,6 +8,7 @@
 #include "textshaper.h"
 
 #include <QDebug>
+#include <QMarginsF>
 #include <QtMath>
 
 #include <KSyntaxHighlighting/AbstractHighlighter>
@@ -83,6 +84,54 @@ LayoutResult Engine::layout(const Content::Document &doc, const PageLayout &page
 
     // Assign elements to pages
     assignToPages(elements, pageLayout, result);
+
+    // Build source map from placed elements (maps page rects to markdown source lines)
+    QMarginsF margins = pageLayout.marginsPoints();
+    qreal headerOffset = pageLayout.headerTotalHeight();
+    for (const auto &page : result.pages) {
+        for (const auto &element : page.elements) {
+            std::visit([&](const auto &e) {
+                using T = std::decay_t<decltype(e)>;
+                if constexpr (std::is_same_v<T, BlockBox>) {
+                    if (e.source.startLine > 0) {
+                        SourceMapEntry entry;
+                        entry.pageNumber = page.pageNumber;
+                        entry.rect = QRectF(margins.left() + e.x,
+                                            margins.top() + headerOffset + e.y,
+                                            e.width, e.height);
+                        entry.startLine = e.source.startLine;
+                        entry.endLine = e.source.endLine;
+                        result.sourceMap.append(entry);
+
+                        // Code block hit regions (includes padding for generous hit area)
+                        if (e.type == BlockBox::CodeBlockType) {
+                            CodeBlockRegion region;
+                            region.pageNumber = page.pageNumber;
+                            region.rect = QRectF(
+                                margins.left() + e.x - e.padding,
+                                margins.top() + headerOffset + e.y - e.padding,
+                                e.width + e.padding * 2,
+                                e.height + e.padding * 2);
+                            region.startLine = e.source.startLine;
+                            region.endLine = e.source.endLine;
+                            result.codeBlockRegions.append(region);
+                        }
+                    }
+                } else if constexpr (std::is_same_v<T, TableBox>) {
+                    if (e.source.startLine > 0) {
+                        SourceMapEntry entry;
+                        entry.pageNumber = page.pageNumber;
+                        entry.rect = QRectF(margins.left() + e.x,
+                                            margins.top() + headerOffset + e.y,
+                                            e.width, e.height);
+                        entry.startLine = e.source.startLine;
+                        entry.endLine = e.source.endLine;
+                        result.sourceMap.append(entry);
+                    }
+                }
+            }, element);
+        }
+    }
 
     return result;
 }
@@ -376,6 +425,34 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             }
         }
 
+        // Force character-level breaks for words wider than line width
+        // (e.g. long identifiers in table cells with no break opportunities)
+        if (word.gbox.width > lineWidth && currentLine.glyphs.isEmpty()) {
+            GlyphBox part = word.gbox;
+            part.glyphs.clear();
+            part.width = 0;
+            part.textLength = 0;
+            for (const auto &glyph : word.gbox.glyphs) {
+                if (part.width + glyph.xAdvance > lineWidth && !part.glyphs.isEmpty()) {
+                    currentLine.glyphs.append(part);
+                    lines.append(currentLine);
+                    currentLine = LineBox{};
+                    currentLine.alignment = format.alignment;
+                    part.glyphs.clear();
+                    part.width = 0;
+                    part.textLength = 0;
+                }
+                part.glyphs.append(glyph);
+                part.width += glyph.xAdvance;
+                part.textLength++;
+            }
+            if (!part.glyphs.isEmpty()) {
+                currentLine.glyphs.append(part);
+                currentX = part.width;
+            }
+            continue;
+        }
+
         currentLine.glyphs.append(word.gbox);
         currentX += word.gbox.width;
     }
@@ -450,6 +527,7 @@ BlockBox Engine::layoutParagraph(const Content::Paragraph &para, qreal availWidt
         h += line.height;
     box.height = h;
     box.x = para.format.leftMargin;
+    box.source = para.source;
 
     return box;
 }
@@ -479,6 +557,7 @@ BlockBox Engine::layoutHeading(const Content::Heading &heading, qreal availWidth
     for (const auto &line : box.lines)
         h += line.height;
     box.height = h;
+    box.source = heading.source;
 
     return box;
 }
@@ -635,6 +714,7 @@ BlockBox Engine::layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth)
         h += line.height;
     box.height = h;
     box.x = 12.0; // match DocumentBuilder margins
+    box.source = cb.source;
 
     return box;
 }
@@ -647,6 +727,7 @@ BlockBox Engine::layoutHorizontalRule(const Content::HorizontalRule &hr, qreal a
     box.height = 1.0;
     box.spaceBefore = hr.topMargin;
     box.spaceAfter = hr.bottomMargin;
+    box.source = hr.source;
     return box;
 }
 
@@ -740,6 +821,7 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
     }
 
     tbox.height = y;
+    tbox.source = table.source;
     return tbox;
 }
 
@@ -863,6 +945,7 @@ QList<TableBox> Engine::splitTable(const TableBox &table, qreal availHeight, qre
         slice.cellPadding = table.cellPadding;
         slice.columnPositions = table.columnPositions;
         slice.headerRowCount = effectiveHeaderCount;
+        slice.source = table.source;
 
         // Copy header rows with re-based y positions
         qreal hy = 0;

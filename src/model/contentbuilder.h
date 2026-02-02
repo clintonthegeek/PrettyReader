@@ -30,6 +30,10 @@ public:
 
     Content::Document build(const QString &markdownText);
 
+    // The processed markdown text (after footnote extraction) used for parsing.
+    // Source line ranges in blocks refer to this text.
+    QString processedMarkdown() const { return m_processedMarkdown; }
+
     void setBasePath(const QString &basePath);
     void setStyleManager(StyleManager *sm);
     void setHyphenator(Hyphenator *hyph);
@@ -66,6 +70,16 @@ private:
     // Inline node management
     void appendInlineNode(Content::InlineNode node);
     QList<Content::InlineNode> *currentInlines();
+
+    // Source position tracking
+    int byteOffsetToLine(int offset) const;
+    struct BlockTracker {
+        int firstByteOffset = -1;
+        int lastByteEnd = -1;  // exclusive: offset + size
+    };
+    QStack<BlockTracker> m_blockTrackers;
+    QList<int> m_lineStartOffsets; // byte offset where each line starts
+    const char *m_bufferStart = nullptr;
 
     // State
     Content::Document m_doc;
@@ -118,6 +132,8 @@ private:
     };
     QList<ParsedFootnote> m_footnotes;
     FootnoteStyle m_footnoteStyle;
+
+    QString m_processedMarkdown;
 };
 
 #endif // PRETTYREADER_CONTENTBUILDER_H

@@ -43,6 +43,7 @@
 #include <QCloseEvent>
 #include <QFile>
 #include <QFileDialog>
+#include <QJsonObject>
 #include <QLabel>
 #include <QMenuBar>
 #include <QAbstractTextDocumentLayout>
@@ -193,9 +194,8 @@ MainWindow::MainWindow(QWidget *parent)
     restoreSession();
 
     // A1: Fresh launch = TOC open by default (saved session state takes priority)
-    if (m_leftSidebar->isCollapsed()) {
+    if (m_leftSidebar->isCollapsed())
         m_leftSidebar->showPanel(m_tocTabId);
-    }
 }
 
 MainWindow::~MainWindow()
@@ -521,6 +521,35 @@ void MainWindow::setupActions()
         if (view) view->copySelection();
     }, ac);
 
+    // Copy as Styled Text (RTF)
+    auto *copyRtf = ac->addAction(QStringLiteral("edit_copy_rtf"));
+    copyRtf->setText(i18n("Copy as &Styled Text"));
+    copyRtf->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
+    ac->setDefaultShortcut(copyRtf, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C));
+    connect(copyRtf, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view) view->copySelectionAsRtf();
+    });
+
+    // Copy with Style Options (filtered RTF)
+    auto *copyComplex = ac->addAction(QStringLiteral("edit_copy_complex"));
+    copyComplex->setText(i18n("Copy with Style &Options..."));
+    copyComplex->setIcon(QIcon::fromTheme(QStringLiteral("edit-copy")));
+    ac->setDefaultShortcut(copyComplex, QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C));
+    connect(copyComplex, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view) view->copySelectionAsComplexRtf();
+    });
+
+    // Copy as Markdown
+    auto *copyMd = ac->addAction(QStringLiteral("edit_copy_markdown"));
+    copyMd->setText(i18n("Copy as &Markdown"));
+    copyMd->setIcon(QIcon::fromTheme(QStringLiteral("text-x-script")));
+    connect(copyMd, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view) view->copySelectionAsMarkdown();
+    });
+
     setupGUI(Default, QStringLiteral("prettyreaderui.rc"));
 }
 
@@ -598,6 +627,8 @@ void MainWindow::onFileExportPdf()
             contentBuilder.setShortWords(m_shortWords);
         contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
         Content::Document contentDoc = contentBuilder.build(markdown);
+
+        view->applyLanguageOverrides(contentDoc);
 
         m_fontManager->resetUsage();
 
@@ -818,6 +849,13 @@ void MainWindow::saveSession()
     // Save sidebar state (A3: no longer saving open files or active tab)
     group.writeEntry("LeftSidebarCollapsed", m_leftSidebar->isCollapsed());
     group.writeEntry("RightSidebarCollapsed", m_rightSidebar->isCollapsed());
+    // Save which left panel was active (Files=0, TOC=1) so we restore the right one
+    if (!m_leftSidebar->isCollapsed()) {
+        if (m_leftSidebar->isPanelVisible(m_tocTabId))
+            group.writeEntry("LeftActivePanel", QStringLiteral("toc"));
+        else
+            group.writeEntry("LeftActivePanel", QStringLiteral("files"));
+    }
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
     group.sync();
@@ -835,8 +873,13 @@ void MainWindow::restoreSession()
     bool rightCollapsed = group.readEntry("RightSidebarCollapsed", true);
 
     // Expand sidebars that were open last session (unlocks width constraints)
-    if (!leftCollapsed)
-        m_leftSidebar->showPanel(m_filesBrowserTabId);
+    if (!leftCollapsed) {
+        QString leftPanel = group.readEntry("LeftActivePanel", QStringLiteral("toc"));
+        if (leftPanel == QLatin1String("files"))
+            m_leftSidebar->showPanel(m_filesBrowserTabId);
+        else
+            m_leftSidebar->showPanel(m_tocTabId);
+    }
     if (!rightCollapsed)
         m_rightSidebar->showPanel(m_styleTabId);
 
@@ -906,6 +949,8 @@ void MainWindow::rebuildCurrentDocument()
         contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
         Content::Document contentDoc = contentBuilder.build(markdown);
 
+        view->applyLanguageOverrides(contentDoc);
+
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
@@ -922,6 +967,8 @@ void MainWindow::rebuildCurrentDocument()
         }
 
         view->setPdfData(pdf);
+        view->setSourceData(contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
+                            layoutResult.codeBlockRegions);
         view->restoreViewState(state);
         view->setDocumentInfo(fi.fileName(), fi.baseName());
 
@@ -1008,6 +1055,16 @@ void MainWindow::openFile(const QUrl &url)
 
     QFileInfo fi(filePath);
 
+    // Load persisted code block language overrides from MetadataStore
+    QJsonValue langVal = m_metadataStore->value(filePath, QStringLiteral("codeBlockLanguages"));
+    if (langVal.isObject()) {
+        QJsonObject langObj = langVal.toObject();
+        QHash<QString, QString> overrides;
+        for (auto it = langObj.begin(); it != langObj.end(); ++it)
+            overrides.insert(it.key(), it.value().toString());
+        tab->documentView()->setCodeBlockLanguageOverrides(overrides);
+    }
+
     if (PrettyReaderSettings::self()->usePdfRenderer()) {
         // --- New PDF rendering pipeline ---
         ContentBuilder contentBuilder;
@@ -1020,6 +1077,8 @@ void MainWindow::openFile(const QUrl &url)
         contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
         Content::Document contentDoc = contentBuilder.build(markdown);
 
+        tab->documentView()->applyLanguageOverrides(contentDoc);
+
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
@@ -1029,6 +1088,9 @@ void MainWindow::openFile(const QUrl &url)
         QByteArray pdf = pdfGen.generate(layoutResult, openPl, fi.baseName());
 
         tab->documentView()->setPdfData(pdf);
+        tab->documentView()->setSourceData(
+            contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
+            layoutResult.codeBlockRegions);
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
@@ -1083,6 +1145,21 @@ void MainWindow::openFile(const QUrl &url)
             statusBar()->clearMessage();
         else
             statusBar()->showMessage(hint);
+    });
+
+    // Code block language override: persist + rebuild
+    connect(tab->documentView(), &DocumentView::codeBlockLanguageChanged,
+            this, [this, filePath]() {
+        auto *view = currentDocumentView();
+        if (!view)
+            return;
+        // Persist overrides to MetadataStore as JSON
+        QHash<QString, QString> overrides = view->codeBlockLanguageOverrides();
+        QJsonObject langObj;
+        for (auto it = overrides.cbegin(); it != overrides.cend(); ++it)
+            langObj.insert(it.key(), it.value());
+        m_metadataStore->setValue(filePath, QStringLiteral("codeBlockLanguages"), langObj);
+        rebuildCurrentDocument();
     });
 
     int index = m_tabWidget->addTab(tab, fi.fileName());

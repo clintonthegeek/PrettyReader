@@ -17,9 +17,10 @@ class RenderCache::RenderWorker : public QObject {
 public:
     RenderWorker() = default;
 
-    void setDocument(Poppler::Document *doc) {
+    void setDocument(Poppler::Document *doc, int generation) {
         QMutexLocker lock(&m_docMutex);
         m_doc = doc;
+        m_generation = generation;
         clearQueue();
     }
 
@@ -67,8 +68,9 @@ public Q_SLOTS:
                                                    req.width * req.dpr, req.height * req.dpr);
                 image.setDevicePixelRatio(req.dpr);
 
+                int gen = m_generation;
                 lock.unlock();
-                Q_EMIT finished(req.pageNumber, image, req.width, req.height);
+                Q_EMIT finished(req.pageNumber, image, req.width, req.height, gen);
             }
         }
 
@@ -81,7 +83,7 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
-    void finished(int pageNumber, QImage image, int width, int height);
+    void finished(int pageNumber, QImage image, int width, int height, int generation);
 
 private:
     struct PendingRequest {
@@ -92,6 +94,7 @@ private:
     };
 
     Poppler::Document *m_doc = nullptr;
+    int m_generation = 0;
     QMutex m_docMutex;
     QHash<int, PendingRequest> m_queue; // pageNumber -> latest request
     QMutex m_queueMutex;
@@ -123,7 +126,8 @@ void RenderCache::setDocument(Poppler::Document *doc)
 {
     invalidateAll();
     m_doc = doc;
-    m_worker->setDocument(doc);
+    ++m_generation;
+    m_worker->setDocument(doc, m_generation);
 }
 
 void RenderCache::requestPixmap(const Request &req)
@@ -202,9 +206,13 @@ void RenderCache::preloadAround(int currentPage, int radius)
     }
 }
 
-void RenderCache::onRenderFinished(int pageNumber, QImage image, int width, int height)
+void RenderCache::onRenderFinished(int pageNumber, QImage image, int width, int height, int generation)
 {
     if (image.isNull())
+        return;
+
+    // Discard stale results from a previous document generation
+    if (generation != m_generation)
         return;
 
     CacheKey key{pageNumber, width, height};

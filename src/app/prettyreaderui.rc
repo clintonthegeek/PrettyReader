@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="prettyreader" version="6">
+<gui name="prettyreader" version="8">
 
   <MenuBar>
     <Menu name="file">
@@ -9,11 +9,20 @@
       <Action name="file_open_recent"/>
       <Separator/>
       <Action name="file_export_pdf"/>
+      <Action name="file_export_rtf"/>
       <Action name="file_print"/>
       <Separator/>
       <Action name="file_close"/>
       <Separator/>
       <Action name="file_quit"/>
+    </Menu>
+
+    <Menu name="edit">
+      <text>&amp;Edit</text>
+      <Action name="edit_copy"/>
+      <Action name="edit_copy_rtf"/>
+      <Action name="edit_copy_complex"/>
+      <Action name="edit_copy_markdown"/>
     </Menu>
 
     <Menu name="view">

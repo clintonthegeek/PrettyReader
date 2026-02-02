@@ -24,6 +24,13 @@
 
 namespace Content {
 
+// --- Source position tracking ---
+
+struct SourceRange {
+    int startLine = -1;  // 1-based line in markdown source
+    int endLine = -1;    // 1-based line in markdown source
+};
+
 // --- Style structs ---
 
 struct TextStyle {
@@ -105,12 +112,14 @@ using InlineNode = std::variant<
 struct Paragraph {
     ParagraphFormat format;
     QList<InlineNode> inlines;
+    SourceRange source;
 };
 
 struct Heading {
     int level = 1;
     ParagraphFormat format;
     QList<InlineNode> inlines;
+    SourceRange source;
 };
 
 struct CodeBlock {
@@ -119,6 +128,7 @@ struct CodeBlock {
     TextStyle style;
     QColor background = QColor(0xf6, 0xf8, 0xfa);
     qreal padding = 8.0;
+    SourceRange source;
 };
 
 // Forward-declare BlockNode for recursive types
@@ -154,6 +164,7 @@ struct List {
     int startNumber = 1;
     int depth = 0;
     QList<ListItem> items;
+    SourceRange source;
 };
 
 struct TableCell {
@@ -171,6 +182,7 @@ struct TableRow {
 struct Table {
     QList<TableRow> rows;
     int headerRowCount = 0;
+    SourceRange source;
     // Table styling
     QColor headerBackground;
     QColor headerForeground;
@@ -191,6 +203,7 @@ struct Table {
 struct HorizontalRule {
     qreal topMargin = 12.0;
     qreal bottomMargin = 12.0;
+    SourceRange source;
 };
 
 struct Footnote {

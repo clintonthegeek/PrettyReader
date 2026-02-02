@@ -8,6 +8,7 @@
 #include <QString>
 #include <QTextDocument>
 
+#include "layoutengine.h"
 #include "pagelayout.h"
 
 class PageItem;
@@ -77,7 +78,22 @@ public:
 
     // B2: Selection
     void copySelection();
+    void copySelectionAsRtf();
+    void copySelectionAsMarkdown();
+    void copySelectionAsComplexRtf();
     void clearSelection();
+    bool hasSelection() const { return !m_pagesWithSelection.isEmpty(); }
+
+    // Source breadcrumbs for markdown-faithful copy + styled RTF export
+    void setSourceData(const QString &processedMarkdown,
+                       const QList<Layout::SourceMapEntry> &sourceMap,
+                       const Content::Document &contentDoc,
+                       const QList<Layout::CodeBlockRegion> &codeBlockRegions = {});
+
+    // Code block language overrides (per-session, persisted via MetadataStore)
+    void setCodeBlockLanguageOverrides(const QHash<QString, QString> &overrides);
+    QHash<QString, QString> codeBlockLanguageOverrides() const;
+    void applyLanguageOverrides(Content::Document &doc) const;
 
     // View modes (Okular pattern)
     enum ViewMode { Continuous, SinglePage, FacingPages, FacingPagesFirstAlone, ContinuousFacing, ContinuousFacingFirstAlone };
@@ -98,6 +114,7 @@ Q_SIGNALS:
     void currentPageChanged(int page);
     void viewModeChanged(ViewMode mode);
     void statusHintChanged(const QString &hint);  // A7: hover hints
+    void codeBlockLanguageChanged();
 
 protected:
     void wheelEvent(QWheelEvent *event) override;
@@ -107,6 +124,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private Q_SLOTS:
     void onPixmapReady(int pageNumber);
@@ -125,6 +143,11 @@ private:
     // B2: Text selection helpers
     void updateTextSelection();
     QString extractSelectedText() const;
+    QString extractSelectedTextFromPdf() const; // Poppler fallback
+    QList<Content::BlockNode> extractSelectedBlocks(int minLine, int maxLine) const;
+    // Code block hit-test
+    int codeBlockIndexAtScenePos(const QPointF &scenePos) const;
+
     // A7: Link hover helpers
     void checkLinkHover(const QPointF &scenePos);
     void ensureLinkCacheForPage(int pageNum);
@@ -169,6 +192,14 @@ private:
     // A7: Link hover cache
     QHash<int, QList<PageLinkInfo>> m_linkCache;
     QString m_currentHoverLink;
+
+    // Source breadcrumbs
+    QString m_processedMarkdown;
+    QList<Layout::SourceMapEntry> m_sourceMap;
+    Content::Document m_contentDoc;
+    QList<Layout::CodeBlockRegion> m_codeBlockRegions;
+    QHash<QString, QString> m_codeBlockLanguageOverrides; // trimmed code -> language
+    bool m_wordSelection = false; // set by double-click, cleared by mouse press
 
     static constexpr qreal kPageGap = 12.0;
     static constexpr qreal kSceneMargin = 40.0;
