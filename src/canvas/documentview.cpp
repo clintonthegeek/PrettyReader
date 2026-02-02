@@ -36,11 +36,16 @@ void DocumentView::setDocument(QTextDocument *doc)
         return;
     }
 
-    // Use content size (minus margins and header/footer) for document pagination
-    QSizeF docPageSize = m_marginsPoints.isNull()
+    // Scale page size from 72-dpi points to screen-dpi pixels so that
+    // QTextDocument's font-metric calculations (which use screen DPI)
+    // produce correct proportions relative to the page dimensions.
+    qreal dpi = logicalDpiX();
+    qreal s = (dpi > 0) ? dpi / 72.0 : 1.0;
+    QSizeF contentPts = m_marginsPoints.isNull()
         ? m_pageSize
         : m_pageLayout.contentSizePoints();
-    m_document->setPageSize(docPageSize);
+    m_document->setPageSize(QSizeF(contentPts.width() * s,
+                                   contentPts.height() * s));
     m_pageCount = m_document->pageCount();
 
     layoutPages();
@@ -144,7 +149,10 @@ void DocumentView::setPageSize(const QSizeF &size)
     m_pageSize = size;
     m_marginsPoints = QMarginsF();
     if (m_document) {
-        m_document->setPageSize(m_pageSize);
+        qreal dpi = logicalDpiX();
+        qreal s = (dpi > 0) ? dpi / 72.0 : 1.0;
+        m_document->setPageSize(QSizeF(m_pageSize.width() * s,
+                                       m_pageSize.height() * s));
         m_pageCount = m_document->pageCount();
         layoutPages();
     }
@@ -157,7 +165,11 @@ void DocumentView::setPageLayout(const PageLayout &layout)
     m_marginsPoints = layout.marginsPoints();
 
     if (m_document) {
-        m_document->setPageSize(layout.contentSizePoints());
+        qreal dpi = logicalDpiX();
+        qreal s = (dpi > 0) ? dpi / 72.0 : 1.0;
+        QSizeF contentPts = layout.contentSizePoints();
+        m_document->setPageSize(QSizeF(contentPts.width() * s,
+                                       contentPts.height() * s));
         m_pageCount = m_document->pageCount();
         layoutPages();
     }

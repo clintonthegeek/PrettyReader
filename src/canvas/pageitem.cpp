@@ -89,15 +89,27 @@ void PageItem::paint(QPainter *painter,
     // Draw header
     HeaderFooterRenderer::drawHeader(painter, headerRect, m_pageLayout, meta, 0.5);
 
+    // The document was laid out in screen-DPI pixels (see DocumentView)
+    // but the scene uses 72-dpi points.  Scale down by 72/screenDPI so
+    // the larger document fits into the point-sized body rect.
+    QPaintDevice *dev = painter->device();
+    qreal dpi = dev ? dev->logicalDpiX() : 72.0;
+    qreal dpiScale = (dpi > 0) ? dpi / 72.0 : 1.0;
+
+    // Document-space body dimensions (screen-DPI pixels)
+    qreal docBodyW = contentW * dpiScale;
+    qreal docBodyH = bodyH * dpiScale;
+
     // Render the document content for this page, clipped to body area
     painter->save();
     painter->setClipRect(bodyRect);
     painter->translate(bodyRect.topLeft());
-    painter->translate(0, -m_pageNumber * bodyH);
+    painter->scale(1.0 / dpiScale, 1.0 / dpiScale);
+    painter->translate(0, -m_pageNumber * docBodyH);
 
     QAbstractTextDocumentLayout::PaintContext ctx;
-    ctx.clip = QRectF(0, m_pageNumber * bodyH,
-                      contentW, bodyH);
+    ctx.clip = QRectF(0, m_pageNumber * docBodyH,
+                      docBodyW, docBodyH);
     QPalette pal;
     pal.setColor(QPalette::Text, QColor(0x1a, 0x1a, 0x1a));
     pal.setColor(QPalette::Base, Qt::white);
