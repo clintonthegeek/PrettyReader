@@ -54,4 +54,25 @@
       <default>true</default>
     </entry>
   </group>
+
+  <group name="Typography">
+    <entry name="HyphenationEnabled" type="Bool">
+      <label>Enable automatic hyphenation of body text.</label>
+      <default>true</default>
+    </entry>
+    <entry name="HyphenationLanguage" type="String">
+      <label>Language code for hyphenation dictionary (e.g. en_US, de, fr).</label>
+      <default>en_US</default>
+    </entry>
+    <entry name="HyphenationMinWordLength" type="Int">
+      <label>Minimum word length to attempt hyphenation.</label>
+      <default>5</default>
+      <min>3</min>
+      <max>20</max>
+    </entry>
+    <entry name="ShortWordsEnabled" type="Bool">
+      <label>Insert non-breaking spaces after short prepositions and articles.</label>
+      <default>true</default>
+    </entry>
+  </group>
 </kcfg>

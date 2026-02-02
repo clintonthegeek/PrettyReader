@@ -1,4 +1,5 @@
 #include "paragraphstyle.h"
+#include "fontfeatures.h"
 
 #include <QFontDatabase>
 
@@ -75,6 +76,8 @@ void ParagraphStyle::applyCharFormat(QTextCharFormat &cf) const
         f.setWordSpacing(m_wordSpacing);
         cf.setFont(f);
     }
+    if (m_hasFontFeatures)
+        FontFeatures::applyToCharFormat(cf, m_fontFeatures);
 }
 
 void ParagraphStyle::inheritFrom(const ParagraphStyle &parent)
@@ -93,4 +96,5 @@ void ParagraphStyle::inheritFrom(const ParagraphStyle &parent)
     if (!m_hasForeground)   { m_foreground = parent.m_foreground; m_hasForeground = parent.m_hasForeground; }
     if (!m_hasFirstLineIndent) { m_firstLineIndent = parent.m_firstLineIndent; m_hasFirstLineIndent = parent.m_hasFirstLineIndent; }
     if (!m_hasWordSpacing)  { m_wordSpacing = parent.m_wordSpacing; m_hasWordSpacing = parent.m_hasWordSpacing; }
+    if (!m_hasFontFeatures) { m_fontFeatures = parent.m_fontFeatures; m_hasFontFeatures = parent.m_hasFontFeatures; }
 }

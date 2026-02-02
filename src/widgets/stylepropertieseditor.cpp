@@ -2,6 +2,7 @@
 
 #include <KColorButton>
 #include <QAbstractItemView>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFontComboBox>
@@ -306,6 +307,56 @@ void StylePropertiesEditor::buildUI()
     });
 
     layout->addWidget(charGroup);
+
+    // --- Font features section ---
+    m_fontFeaturesGroup = new QGroupBox(tr("OpenType Features"));
+    auto *ffLayout = new QVBoxLayout(m_fontFeaturesGroup);
+    ffLayout->setContentsMargins(6, 6, 6, 6);
+    ffLayout->setSpacing(2);
+
+    auto *ffRow1 = new QHBoxLayout;
+    m_ligaturesCheck = new QCheckBox(tr("Ligatures"));
+    m_ligaturesCheck->setToolTip(tr("Standard ligatures (fi, fl, ff)"));
+    m_smallCapsCheck = new QCheckBox(tr("Small Caps"));
+    m_smallCapsCheck->setToolTip(tr("Display lowercase as small capitals"));
+    ffRow1->addWidget(m_ligaturesCheck);
+    ffRow1->addWidget(m_smallCapsCheck);
+    ffRow1->addStretch();
+    ffLayout->addLayout(ffRow1);
+
+    auto *ffRow2 = new QHBoxLayout;
+    m_oldStyleNumsCheck = new QCheckBox(tr("Old-Style Nums"));
+    m_oldStyleNumsCheck->setToolTip(tr("Old-style (text) numerals"));
+    m_liningNumsCheck = new QCheckBox(tr("Lining Nums"));
+    m_liningNumsCheck->setToolTip(tr("Lining (tabular) numerals"));
+    ffRow2->addWidget(m_oldStyleNumsCheck);
+    ffRow2->addWidget(m_liningNumsCheck);
+    ffRow2->addStretch();
+    ffLayout->addLayout(ffRow2);
+
+    auto *ffRow3 = new QHBoxLayout;
+    m_kerningCheck = new QCheckBox(tr("Kerning"));
+    m_kerningCheck->setToolTip(tr("Pairwise kerning adjustments"));
+    m_contextAltsCheck = new QCheckBox(tr("Contextual Alts"));
+    m_contextAltsCheck->setToolTip(tr("Contextual alternates"));
+    ffRow3->addWidget(m_kerningCheck);
+    ffRow3->addWidget(m_contextAltsCheck);
+    ffRow3->addStretch();
+    ffLayout->addLayout(ffRow3);
+
+    // Connect font feature change signals
+    auto onFfChanged = [this]() {
+        m_explicit.fontFeatures = true;
+        Q_EMIT propertyChanged();
+    };
+    connect(m_ligaturesCheck, &QCheckBox::toggled, this, onFfChanged);
+    connect(m_smallCapsCheck, &QCheckBox::toggled, this, onFfChanged);
+    connect(m_oldStyleNumsCheck, &QCheckBox::toggled, this, onFfChanged);
+    connect(m_liningNumsCheck, &QCheckBox::toggled, this, onFfChanged);
+    connect(m_kerningCheck, &QCheckBox::toggled, this, onFfChanged);
+    connect(m_contextAltsCheck, &QCheckBox::toggled, this, onFfChanged);
+
+    layout->addWidget(m_fontFeaturesGroup);
 
     // --- Paragraph section ---
     m_paragraphSection = new QGroupBox(tr("Paragraph"));
@@ -630,6 +681,12 @@ void StylePropertiesEditor::blockAllSignals(bool block)
     m_rightMarginSpin->blockSignals(block);
     m_wordSpacingSpin->blockSignals(block);
     m_letterSpacingSpin->blockSignals(block);
+    m_ligaturesCheck->blockSignals(block);
+    m_smallCapsCheck->blockSignals(block);
+    m_oldStyleNumsCheck->blockSignals(block);
+    m_liningNumsCheck->blockSignals(block);
+    m_kerningCheck->blockSignals(block);
+    m_contextAltsCheck->blockSignals(block);
 }
 
 void StylePropertiesEditor::updatePropertyIndicators()
@@ -702,6 +759,7 @@ void StylePropertiesEditor::loadParagraphStyle(const ParagraphStyle &style,
     m_explicit.leftMargin = style.hasLeftMargin();
     m_explicit.rightMargin = style.hasRightMargin();
     m_explicit.wordSpacing = style.hasWordSpacing();
+    m_explicit.fontFeatures = style.hasFontFeatures();
 
     // Parent combo
     m_parentCombo->clear();
@@ -745,6 +803,17 @@ void StylePropertiesEditor::loadParagraphStyle(const ParagraphStyle &style,
     m_wordSpacingSpin->setValue(resolved.wordSpacing());
     m_letterSpacingSpin->setValue(0);
 
+    // Font features
+    FontFeatures::Features ff = resolved.hasFontFeatures()
+        ? resolved.fontFeatures() : FontFeatures::defaultFeatures();
+    m_ligaturesCheck->setChecked(ff & FontFeatures::Ligatures);
+    m_smallCapsCheck->setChecked(ff & FontFeatures::SmallCaps);
+    m_oldStyleNumsCheck->setChecked(ff & FontFeatures::OldStyleNums);
+    m_liningNumsCheck->setChecked(ff & FontFeatures::LiningNums);
+    m_kerningCheck->setChecked(ff & FontFeatures::Kerning);
+    m_contextAltsCheck->setChecked(ff & FontFeatures::ContextAlts);
+    m_fontFeaturesGroup->setVisible(true);
+
     blockAllSignals(false);
     updatePropertyIndicators();
 }
@@ -771,6 +840,7 @@ void StylePropertiesEditor::loadCharacterStyle(const CharacterStyle &style,
     m_explicit.foreground = style.hasForeground();
     m_explicit.background = style.hasBackground();
     m_explicit.letterSpacing = style.hasLetterSpacing();
+    m_explicit.fontFeatures = style.hasFontFeatures();
 
     // Parent combo
     m_parentCombo->clear();
@@ -795,6 +865,17 @@ void StylePropertiesEditor::loadCharacterStyle(const CharacterStyle &style,
     m_strikeBtn->setChecked(resolved.fontStrikeOut());
     m_fgColorBtn->setColor(resolved.hasForeground() ? resolved.foreground() : QColor(0x1a, 0x1a, 0x1a));
     m_bgColorBtn->setColor(resolved.hasBackground() ? resolved.background() : Qt::white);
+
+    // Font features
+    FontFeatures::Features ff = resolved.hasFontFeatures()
+        ? resolved.fontFeatures() : FontFeatures::defaultFeatures();
+    m_ligaturesCheck->setChecked(ff & FontFeatures::Ligatures);
+    m_smallCapsCheck->setChecked(ff & FontFeatures::SmallCaps);
+    m_oldStyleNumsCheck->setChecked(ff & FontFeatures::OldStyleNums);
+    m_liningNumsCheck->setChecked(ff & FontFeatures::LiningNums);
+    m_kerningCheck->setChecked(ff & FontFeatures::Kerning);
+    m_contextAltsCheck->setChecked(ff & FontFeatures::ContextAlts);
+    m_fontFeaturesGroup->setVisible(true);
 
     blockAllSignals(false);
     updatePropertyIndicators();
@@ -853,6 +934,16 @@ void StylePropertiesEditor::applyToParagraphStyle(ParagraphStyle &style) const
         style.setRightMargin(m_rightMarginSpin->value());
     if (m_explicit.wordSpacing)
         style.setWordSpacing(m_wordSpacingSpin->value());
+    if (m_explicit.fontFeatures) {
+        FontFeatures::Features ff;
+        if (m_ligaturesCheck->isChecked())  ff |= FontFeatures::Ligatures;
+        if (m_smallCapsCheck->isChecked())   ff |= FontFeatures::SmallCaps;
+        if (m_oldStyleNumsCheck->isChecked())ff |= FontFeatures::OldStyleNums;
+        if (m_liningNumsCheck->isChecked())  ff |= FontFeatures::LiningNums;
+        if (m_kerningCheck->isChecked())     ff |= FontFeatures::Kerning;
+        if (m_contextAltsCheck->isChecked()) ff |= FontFeatures::ContextAlts;
+        style.setFontFeatures(ff);
+    }
 }
 
 void StylePropertiesEditor::applyToCharacterStyle(CharacterStyle &style) const
@@ -887,6 +978,16 @@ void StylePropertiesEditor::applyToCharacterStyle(CharacterStyle &style) const
         style.setBackground(m_bgColorBtn->color());
     if (m_explicit.letterSpacing)
         style.setLetterSpacing(m_letterSpacingSpin->value());
+    if (m_explicit.fontFeatures) {
+        FontFeatures::Features ff;
+        if (m_ligaturesCheck->isChecked())  ff |= FontFeatures::Ligatures;
+        if (m_smallCapsCheck->isChecked())   ff |= FontFeatures::SmallCaps;
+        if (m_oldStyleNumsCheck->isChecked())ff |= FontFeatures::OldStyleNums;
+        if (m_liningNumsCheck->isChecked())  ff |= FontFeatures::LiningNums;
+        if (m_kerningCheck->isChecked())     ff |= FontFeatures::Kerning;
+        if (m_contextAltsCheck->isChecked()) ff |= FontFeatures::ContextAlts;
+        style.setFontFeatures(ff);
+    }
 }
 
 void StylePropertiesEditor::clear()

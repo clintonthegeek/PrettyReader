@@ -86,8 +86,11 @@ void PageItem::paint(QPainter *painter,
     meta.fileName = m_fileName;
     meta.title = m_title;
 
+    // Resolve master page for this page number
+    PageLayout resolvedLayout = m_pageLayout.resolvedForPage(m_pageNumber);
+
     // Draw header
-    HeaderFooterRenderer::drawHeader(painter, headerRect, m_pageLayout, meta, 0.5);
+    HeaderFooterRenderer::drawHeader(painter, headerRect, resolvedLayout, meta, 0.5);
 
     // The document was laid out in screen-DPI pixels (see DocumentView)
     // but the scene uses 72-dpi points.  Scale down by 72/screenDPI so
@@ -118,5 +121,5 @@ void PageItem::paint(QPainter *painter,
     painter->restore();
 
     // Draw footer
-    HeaderFooterRenderer::drawFooter(painter, footerRect, m_pageLayout, meta, 0.5);
+    HeaderFooterRenderer::drawFooter(painter, footerRect, resolvedLayout, meta, 0.5);
 }

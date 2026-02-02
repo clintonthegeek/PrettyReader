@@ -16,12 +16,18 @@
 #include "documenttab.h"
 #include "documentview.h"
 #include "filebrowserdock.h"
+#include "hyphenator.h"
 #include "metadatastore.h"
+#include "rtfexporter.h"
+#include "shortwords.h"
 #include "tocwidget.h"
 #include "printcontroller.h"
 #include "stylemanager.h"
 #include "styledockwidget.h"
 #include "thememanager.h"
+#include "footnotestyle.h"
+#include "preferencesdialog.h"
+#include "prettyreadersettings.h"
 
 #include <QAction>
 #include <QApplication>
@@ -64,6 +70,20 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_themeManager = new ThemeManager(this);
     m_metadataStore = new MetadataStore(this);
+
+    // Typography engines
+    m_hyphenator = new Hyphenator();
+    m_shortWords = new ShortWords();
+
+    // Apply settings
+    auto *settings = PrettyReaderSettings::self();
+    if (settings->hyphenationEnabled()) {
+        m_hyphenator->loadDictionary(settings->hyphenationLanguage());
+        m_hyphenator->setMinWordLength(settings->hyphenationMinWordLength());
+    }
+    if (settings->shortWordsEnabled()) {
+        m_shortWords->setLanguage(settings->hyphenationLanguage());
+    }
 
     setupSidebars();
 
@@ -118,7 +138,11 @@ MainWindow::MainWindow(QWidget *parent)
     restoreSession();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    delete m_hyphenator;
+    delete m_shortWords;
+}
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
@@ -198,7 +222,7 @@ void MainWindow::setupActions()
 
     // Standard actions
     KStandardAction::quit(qApp, &QApplication::quit, ac);
-    KStandardAction::preferences(this, []() {}, ac); // placeholder
+    KStandardAction::preferences(this, &MainWindow::showPreferences, ac);
 
     // File > Open
     auto *openAction = KStandardAction::open(this, &MainWindow::onFileOpen, ac);
@@ -216,6 +240,12 @@ void MainWindow::setupActions()
     exportPdf->setText(i18n("Export as &PDF..."));
     exportPdf->setIcon(QIcon::fromTheme(QStringLiteral("document-export")));
     connect(exportPdf, &QAction::triggered, this, &MainWindow::onFileExportPdf);
+
+    // File > Export RTF
+    auto *exportRtf = ac->addAction(QStringLiteral("file_export_rtf"));
+    exportRtf->setText(i18n("Export as &RTF..."));
+    exportRtf->setIcon(QIcon::fromTheme(QStringLiteral("document-export")));
+    connect(exportRtf, &QAction::triggered, this, &MainWindow::onFileExportRtf);
 
     // File > Print
     auto *printAction = KStandardAction::print(this, &MainWindow::onFilePrint, ac);
@@ -376,6 +406,28 @@ void MainWindow::onFileExportPdf()
     delete controller;
 }
 
+void MainWindow::onFileExportRtf()
+{
+    auto *view = currentDocumentView();
+    if (!view || !view->document()) {
+        statusBar()->showMessage(i18n("No document to export."), 3000);
+        return;
+    }
+
+    QString path = QFileDialog::getSaveFileName(
+        this, i18n("Export as RTF"),
+        QString(), i18n("RTF Files (*.rtf)"));
+    if (path.isEmpty())
+        return;
+
+    RtfExporter exporter;
+    if (exporter.exportToFile(view->document(), path)) {
+        statusBar()->showMessage(i18n("Exported to %1", path), 3000);
+    } else {
+        statusBar()->showMessage(i18n("Failed to export RTF."), 3000);
+    }
+}
+
 void MainWindow::onFilePrint()
 {
     auto *view = currentDocumentView();
@@ -493,6 +545,34 @@ DocumentTab *MainWindow::currentDocumentTab() const
     return qobject_cast<DocumentTab *>(m_tabWidget->widget(index));
 }
 
+void MainWindow::showPreferences()
+{
+    if (KConfigDialog::showDialog(QStringLiteral("settings")))
+        return;
+
+    auto *dialog = new PrettyReaderConfigDialog(this, m_themeManager);
+    connect(dialog, &KConfigDialog::settingsChanged,
+            this, &MainWindow::onSettingsChanged);
+    dialog->show();
+}
+
+void MainWindow::onSettingsChanged()
+{
+    auto *settings = PrettyReaderSettings::self();
+
+    // Reconfigure hyphenator
+    if (settings->hyphenationEnabled()) {
+        m_hyphenator->loadDictionary(settings->hyphenationLanguage());
+        m_hyphenator->setMinWordLength(settings->hyphenationMinWordLength());
+    }
+
+    // Reconfigure short words
+    if (settings->shortWordsEnabled())
+        m_shortWords->setLanguage(settings->hyphenationLanguage());
+
+    rebuildCurrentDocument();
+}
+
 void MainWindow::saveSession()
 {
     KConfigGroup group(KSharedConfig::openConfig(),
@@ -589,6 +669,11 @@ void MainWindow::rebuildCurrentDocument()
     auto *builder = new DocumentBuilder(doc, this);
     builder->setBasePath(QFileInfo(filePath).absolutePath());
     builder->setStyleManager(styleManager);
+    if (PrettyReaderSettings::self()->hyphenationEnabled())
+        builder->setHyphenator(m_hyphenator);
+    if (PrettyReaderSettings::self()->shortWordsEnabled())
+        builder->setShortWords(m_shortWords);
+    builder->setFootnoteStyle(styleManager->footnoteStyle());
     builder->build(markdown);
 
     CodeBlockHighlighter rebuildHighlighter;
@@ -654,6 +739,11 @@ void MainWindow::openFile(const QUrl &url)
     auto *builder = new DocumentBuilder(doc, this);
     builder->setBasePath(QFileInfo(filePath).absolutePath());
     builder->setStyleManager(styleManager);
+    if (PrettyReaderSettings::self()->hyphenationEnabled())
+        builder->setHyphenator(m_hyphenator);
+    if (PrettyReaderSettings::self()->shortWordsEnabled())
+        builder->setShortWords(m_shortWords);
+    builder->setFootnoteStyle(styleManager->footnoteStyle());
     builder->build(markdown);
 
     CodeBlockHighlighter highlighter;

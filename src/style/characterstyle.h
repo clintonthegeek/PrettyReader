@@ -6,6 +6,8 @@
 #include <QString>
 #include <QTextCharFormat>
 
+#include "fontfeatures.h"
+
 class CharacterStyle
 {
 public:
@@ -29,6 +31,7 @@ public:
     void setForeground(const QColor &c) { m_foreground = c; m_hasForeground = true; }
     void setBackground(const QColor &c) { m_background = c; m_hasBackground = true; }
     void setLetterSpacing(qreal pts) { m_letterSpacing = pts; m_hasLetterSpacing = true; }
+    void setFontFeatures(FontFeatures::Features f) { m_fontFeatures = f; m_hasFontFeatures = true; }
 
     // Getters
     QString fontFamily() const { return m_fontFamily; }
@@ -40,6 +43,7 @@ public:
     QColor foreground() const { return m_foreground; }
     QColor background() const { return m_background; }
     qreal letterSpacing() const { return m_letterSpacing; }
+    FontFeatures::Features fontFeatures() const { return m_fontFeatures; }
 
     // Has* flags
     bool hasFontFamily() const { return m_hasFontFamily; }
@@ -51,6 +55,7 @@ public:
     bool hasForeground() const { return m_hasForeground; }
     bool hasBackground() const { return m_hasBackground; }
     bool hasLetterSpacing() const { return m_hasLetterSpacing; }
+    bool hasFontFeatures() const { return m_hasFontFeatures; }
 
     // Apply to QTextCharFormat (merge -- does not reset existing properties)
     void applyFormat(QTextCharFormat &cf) const;
@@ -80,6 +85,8 @@ private:
     bool m_hasBackground = false;
     qreal m_letterSpacing = 0;
     bool m_hasLetterSpacing = false;
+    FontFeatures::Features m_fontFeatures = FontFeatures::defaultFeatures();
+    bool m_hasFontFeatures = false;
 };
 
 #endif // PRETTYREADER_CHARACTERSTYLE_H

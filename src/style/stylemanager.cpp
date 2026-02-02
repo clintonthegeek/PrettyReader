@@ -131,10 +131,28 @@ QStringList StyleManager::characterStyleAncestors(const QString &name)
     return ancestors;
 }
 
+void StyleManager::addTableStyle(const TableStyle &style)
+{
+    m_tableStyles.insert(style.name(), style);
+}
+
+TableStyle *StyleManager::tableStyle(const QString &name)
+{
+    auto it = m_tableStyles.find(name);
+    return it != m_tableStyles.end() ? &it.value() : nullptr;
+}
+
+QStringList StyleManager::tableStyleNames() const
+{
+    return m_tableStyles.keys();
+}
+
 StyleManager *StyleManager::clone(QObject *parent) const
 {
     auto *copy = new StyleManager(parent);
     copy->m_paraStyles = m_paraStyles;
     copy->m_charStyles = m_charStyles;
+    copy->m_tableStyles = m_tableStyles;
+    copy->m_footnoteStyle = m_footnoteStyle;
     return copy;
 }

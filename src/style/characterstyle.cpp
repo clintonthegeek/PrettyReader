@@ -55,6 +55,8 @@ void CharacterStyle::applyFormat(QTextCharFormat &cf) const
         cf.setBackground(m_background);
     if (m_hasLetterSpacing)
         cf.setFontLetterSpacing(m_letterSpacing);
+    if (m_hasFontFeatures)
+        FontFeatures::applyToCharFormat(cf, m_fontFeatures);
 }
 
 void CharacterStyle::inheritFrom(const CharacterStyle &parent)
@@ -68,4 +70,5 @@ void CharacterStyle::inheritFrom(const CharacterStyle &parent)
     if (!m_hasForeground)    { m_foreground = parent.m_foreground; m_hasForeground = parent.m_hasForeground; }
     if (!m_hasBackground)    { m_background = parent.m_background; m_hasBackground = parent.m_hasBackground; }
     if (!m_hasLetterSpacing) { m_letterSpacing = parent.m_letterSpacing; m_hasLetterSpacing = parent.m_hasLetterSpacing; }
+    if (!m_hasFontFeatures)  { m_fontFeatures = parent.m_fontFeatures; m_hasFontFeatures = parent.m_hasFontFeatures; }
 }

@@ -2,6 +2,10 @@
 #include "stylemanager.h"
 #include "paragraphstyle.h"
 #include "characterstyle.h"
+#include "tablestyle.h"
+#include "footnotestyle.h"
+#include "fontfeatures.h"
+#include "masterpage.h"
 
 #include <QColor>
 #include <QDir>
@@ -172,6 +176,13 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
             style.setLeftMargin(props.value(QLatin1String("leftMargin")).toDouble());
         if (props.contains(QLatin1String("rightMargin")))
             style.setRightMargin(props.value(QLatin1String("rightMargin")).toDouble());
+        if (props.contains(QLatin1String("fontFeatures"))) {
+            QJsonArray features = props.value(QLatin1String("fontFeatures")).toArray();
+            QStringList featureList;
+            for (const auto &f : features)
+                featureList.append(f.toString());
+            style.setFontFeatures(FontFeatures::fromStringList(featureList));
+        }
 
         sm->addParagraphStyle(style);
     }
@@ -202,8 +213,64 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
             style.setBackground(QColor(props.value(QLatin1String("background")).toString()));
         if (props.contains(QLatin1String("letterSpacing")))
             style.setLetterSpacing(props.value(QLatin1String("letterSpacing")).toDouble());
+        if (props.contains(QLatin1String("fontFeatures"))) {
+            QJsonArray features = props.value(QLatin1String("fontFeatures")).toArray();
+            QStringList featureList;
+            for (const auto &f : features)
+                featureList.append(f.toString());
+            style.setFontFeatures(FontFeatures::fromStringList(featureList));
+        }
 
         sm->addCharacterStyle(style);
+    }
+
+    // Table styles
+    if (root.contains(QLatin1String("tableStyles"))) {
+        QJsonObject tableStyles = root.value(QLatin1String("tableStyles")).toObject();
+        for (auto it = tableStyles.begin(); it != tableStyles.end(); ++it) {
+            QJsonObject props = it.value().toObject();
+            TableStyle ts(it.key());
+
+            if (props.contains(QLatin1String("borderCollapse")))
+                ts.setBorderCollapse(props.value(QLatin1String("borderCollapse")).toBool());
+            if (props.contains(QLatin1String("cellPadding"))) {
+                QJsonObject p = props.value(QLatin1String("cellPadding")).toObject();
+                ts.setCellPadding(QMarginsF(
+                    p.value(QLatin1String("left")).toDouble(4),
+                    p.value(QLatin1String("top")).toDouble(3),
+                    p.value(QLatin1String("right")).toDouble(4),
+                    p.value(QLatin1String("bottom")).toDouble(3)));
+            }
+            if (props.contains(QLatin1String("headerBackground")))
+                ts.setHeaderBackground(QColor(props.value(QLatin1String("headerBackground")).toString()));
+            if (props.contains(QLatin1String("headerForeground")))
+                ts.setHeaderForeground(QColor(props.value(QLatin1String("headerForeground")).toString()));
+            if (props.contains(QLatin1String("bodyBackground")))
+                ts.setBodyBackground(QColor(props.value(QLatin1String("bodyBackground")).toString()));
+            if (props.contains(QLatin1String("alternateRowColor")))
+                ts.setAlternateRowColor(QColor(props.value(QLatin1String("alternateRowColor")).toString()));
+            if (props.contains(QLatin1String("alternateFrequency")))
+                ts.setAlternateFrequency(props.value(QLatin1String("alternateFrequency")).toInt(1));
+
+            auto parseBorder = [](const QJsonObject &obj) {
+                TableStyle::Border b;
+                b.width = obj.value(QLatin1String("width")).toDouble(0.5);
+                b.color = QColor(obj.value(QLatin1String("color")).toString(QStringLiteral("#333333")));
+                return b;
+            };
+            if (props.contains(QLatin1String("outerBorder")))
+                ts.setOuterBorder(parseBorder(props.value(QLatin1String("outerBorder")).toObject()));
+            if (props.contains(QLatin1String("innerBorder")))
+                ts.setInnerBorder(parseBorder(props.value(QLatin1String("innerBorder")).toObject()));
+            if (props.contains(QLatin1String("headerBottomBorder")))
+                ts.setHeaderBottomBorder(parseBorder(props.value(QLatin1String("headerBottomBorder")).toObject()));
+            if (props.contains(QLatin1String("headerParagraphStyle")))
+                ts.setHeaderParagraphStyle(props.value(QLatin1String("headerParagraphStyle")).toString());
+            if (props.contains(QLatin1String("bodyParagraphStyle")))
+                ts.setBodyParagraphStyle(props.value(QLatin1String("bodyParagraphStyle")).toString());
+
+            sm->addTableStyle(ts);
+        }
     }
 
     // Assign default parents to styles that don't have one
@@ -249,6 +316,97 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
             m_themePageLayout.footerRight   = f.value(QLatin1String("right")).toString(
                 QStringLiteral("{page} / {pages}"));
         }
+    }
+
+    // Master pages
+    if (root.contains(QLatin1String("masterPages"))) {
+        QJsonObject mpObj = root.value(QLatin1String("masterPages")).toObject();
+        for (auto it = mpObj.begin(); it != mpObj.end(); ++it) {
+            QJsonObject props = it.value().toObject();
+            MasterPage mp;
+            mp.name = it.key();
+
+            if (props.contains(QLatin1String("headerEnabled")))
+                mp.headerEnabled = props.value(QLatin1String("headerEnabled")).toBool() ? 1 : 0;
+            if (props.contains(QLatin1String("footerEnabled")))
+                mp.footerEnabled = props.value(QLatin1String("footerEnabled")).toBool() ? 1 : 0;
+
+            if (props.contains(QLatin1String("headerLeft"))) {
+                mp.headerLeft = props.value(QLatin1String("headerLeft")).toString();
+                mp.hasHeaderLeft = true;
+            }
+            if (props.contains(QLatin1String("headerCenter"))) {
+                mp.headerCenter = props.value(QLatin1String("headerCenter")).toString();
+                mp.hasHeaderCenter = true;
+            }
+            if (props.contains(QLatin1String("headerRight"))) {
+                mp.headerRight = props.value(QLatin1String("headerRight")).toString();
+                mp.hasHeaderRight = true;
+            }
+            if (props.contains(QLatin1String("footerLeft"))) {
+                mp.footerLeft = props.value(QLatin1String("footerLeft")).toString();
+                mp.hasFooterLeft = true;
+            }
+            if (props.contains(QLatin1String("footerCenter"))) {
+                mp.footerCenter = props.value(QLatin1String("footerCenter")).toString();
+                mp.hasFooterCenter = true;
+            }
+            if (props.contains(QLatin1String("footerRight"))) {
+                mp.footerRight = props.value(QLatin1String("footerRight")).toString();
+                mp.hasFooterRight = true;
+            }
+
+            if (props.contains(QLatin1String("margins"))) {
+                QJsonObject m = props.value(QLatin1String("margins")).toObject();
+                if (m.contains(QLatin1String("top")))    mp.marginTop    = m.value(QLatin1String("top")).toDouble();
+                if (m.contains(QLatin1String("bottom"))) mp.marginBottom = m.value(QLatin1String("bottom")).toDouble();
+                if (m.contains(QLatin1String("left")))   mp.marginLeft   = m.value(QLatin1String("left")).toDouble();
+                if (m.contains(QLatin1String("right")))  mp.marginRight  = m.value(QLatin1String("right")).toDouble();
+            }
+
+            m_themePageLayout.masterPages.insert(mp.name, mp);
+        }
+    }
+
+    // Footnote style
+    if (root.contains(QLatin1String("footnoteStyle"))) {
+        QJsonObject fnObj = root.value(QLatin1String("footnoteStyle")).toObject();
+        FootnoteStyle fs;
+
+        if (fnObj.contains(QLatin1String("format"))) {
+            QString fmt = fnObj.value(QLatin1String("format")).toString();
+            if (fmt == QLatin1String("roman_lower"))       fs.format = FootnoteStyle::RomanLower;
+            else if (fmt == QLatin1String("roman_upper"))  fs.format = FootnoteStyle::RomanUpper;
+            else if (fmt == QLatin1String("alpha_lower"))  fs.format = FootnoteStyle::AlphaLower;
+            else if (fmt == QLatin1String("alpha_upper"))  fs.format = FootnoteStyle::AlphaUpper;
+            else if (fmt == QLatin1String("asterisk"))     fs.format = FootnoteStyle::Asterisk;
+            else                                            fs.format = FootnoteStyle::Arabic;
+        }
+        if (fnObj.contains(QLatin1String("startNumber")))
+            fs.startNumber = fnObj.value(QLatin1String("startNumber")).toInt(1);
+        if (fnObj.contains(QLatin1String("restart"))) {
+            QString r = fnObj.value(QLatin1String("restart")).toString();
+            fs.restart = (r == QLatin1String("per_page"))
+                ? FootnoteStyle::PerPage : FootnoteStyle::PerDocument;
+        }
+        if (fnObj.contains(QLatin1String("prefix")))
+            fs.prefix = fnObj.value(QLatin1String("prefix")).toString();
+        if (fnObj.contains(QLatin1String("suffix")))
+            fs.suffix = fnObj.value(QLatin1String("suffix")).toString();
+        if (fnObj.contains(QLatin1String("superscriptRef")))
+            fs.superscriptRef = fnObj.value(QLatin1String("superscriptRef")).toBool(true);
+        if (fnObj.contains(QLatin1String("superscriptNote")))
+            fs.superscriptNote = fnObj.value(QLatin1String("superscriptNote")).toBool(false);
+        if (fnObj.contains(QLatin1String("asEndnotes")))
+            fs.asEndnotes = fnObj.value(QLatin1String("asEndnotes")).toBool(true);
+        if (fnObj.contains(QLatin1String("showSeparator")))
+            fs.showSeparator = fnObj.value(QLatin1String("showSeparator")).toBool(true);
+        if (fnObj.contains(QLatin1String("separatorWidth")))
+            fs.separatorWidth = fnObj.value(QLatin1String("separatorWidth")).toDouble(0.5);
+        if (fnObj.contains(QLatin1String("separatorLength")))
+            fs.separatorLength = fnObj.value(QLatin1String("separatorLength")).toDouble(72.0);
+
+        sm->setFootnoteStyle(fs);
     }
 
     return true;
@@ -635,6 +793,13 @@ QJsonObject ThemeManager::serializeParagraphStyle(const ParagraphStyle &style)
         obj[QLatin1String("leftMargin")] = style.leftMargin();
     if (style.hasRightMargin())
         obj[QLatin1String("rightMargin")] = style.rightMargin();
+    if (style.hasFontFeatures()) {
+        QStringList features = FontFeatures::toStringList(style.fontFeatures());
+        QJsonArray arr;
+        for (const QString &f : features)
+            arr.append(f);
+        obj[QLatin1String("fontFeatures")] = arr;
+    }
     return obj;
 }
 
@@ -664,6 +829,89 @@ QJsonObject ThemeManager::serializeCharacterStyle(const CharacterStyle &style)
         obj[QLatin1String("background")] = style.background().name();
     if (style.hasLetterSpacing())
         obj[QLatin1String("letterSpacing")] = style.letterSpacing();
+    if (style.hasFontFeatures()) {
+        QStringList features = FontFeatures::toStringList(style.fontFeatures());
+        QJsonArray arr;
+        for (const QString &f : features)
+            arr.append(f);
+        obj[QLatin1String("fontFeatures")] = arr;
+    }
+    return obj;
+}
+
+QJsonObject ThemeManager::serializeTableStyle(const TableStyle &style)
+{
+    QJsonObject obj;
+    obj[QLatin1String("borderCollapse")] = style.borderCollapse();
+
+    QJsonObject padding;
+    padding[QLatin1String("top")]    = style.cellPadding().top();
+    padding[QLatin1String("bottom")] = style.cellPadding().bottom();
+    padding[QLatin1String("left")]   = style.cellPadding().left();
+    padding[QLatin1String("right")]  = style.cellPadding().right();
+    obj[QLatin1String("cellPadding")] = padding;
+
+    if (style.hasHeaderBackground())
+        obj[QLatin1String("headerBackground")] = style.headerBackground().name();
+    if (style.hasHeaderForeground())
+        obj[QLatin1String("headerForeground")] = style.headerForeground().name();
+    if (style.hasBodyBackground())
+        obj[QLatin1String("bodyBackground")] = style.bodyBackground().name();
+    if (style.hasAlternateRowColor())
+        obj[QLatin1String("alternateRowColor")] = style.alternateRowColor().name();
+    if (style.alternateFrequency() != 1)
+        obj[QLatin1String("alternateFrequency")] = style.alternateFrequency();
+
+    auto serializeBorder = [](const TableStyle::Border &b) {
+        QJsonObject bObj;
+        bObj[QLatin1String("width")] = b.width;
+        bObj[QLatin1String("color")] = b.color.name();
+        return bObj;
+    };
+
+    obj[QLatin1String("outerBorder")] = serializeBorder(style.outerBorder());
+    obj[QLatin1String("innerBorder")] = serializeBorder(style.innerBorder());
+    obj[QLatin1String("headerBottomBorder")] = serializeBorder(style.headerBottomBorder());
+
+    if (!style.headerParagraphStyle().isEmpty())
+        obj[QLatin1String("headerParagraphStyle")] = style.headerParagraphStyle();
+    if (!style.bodyParagraphStyle().isEmpty())
+        obj[QLatin1String("bodyParagraphStyle")] = style.bodyParagraphStyle();
+
+    return obj;
+}
+
+QJsonObject ThemeManager::serializeMasterPage(const MasterPage &mp)
+{
+    QJsonObject obj;
+
+    if (mp.headerEnabled >= 0)
+        obj[QLatin1String("headerEnabled")] = (mp.headerEnabled != 0);
+    if (mp.footerEnabled >= 0)
+        obj[QLatin1String("footerEnabled")] = (mp.footerEnabled != 0);
+    if (mp.hasHeaderLeft)
+        obj[QLatin1String("headerLeft")] = mp.headerLeft;
+    if (mp.hasHeaderCenter)
+        obj[QLatin1String("headerCenter")] = mp.headerCenter;
+    if (mp.hasHeaderRight)
+        obj[QLatin1String("headerRight")] = mp.headerRight;
+    if (mp.hasFooterLeft)
+        obj[QLatin1String("footerLeft")] = mp.footerLeft;
+    if (mp.hasFooterCenter)
+        obj[QLatin1String("footerCenter")] = mp.footerCenter;
+    if (mp.hasFooterRight)
+        obj[QLatin1String("footerRight")] = mp.footerRight;
+
+    if (mp.marginTop >= 0 || mp.marginBottom >= 0
+        || mp.marginLeft >= 0 || mp.marginRight >= 0) {
+        QJsonObject m;
+        if (mp.marginTop >= 0)    m[QLatin1String("top")]    = mp.marginTop;
+        if (mp.marginBottom >= 0) m[QLatin1String("bottom")] = mp.marginBottom;
+        if (mp.marginLeft >= 0)   m[QLatin1String("left")]   = mp.marginLeft;
+        if (mp.marginRight >= 0)  m[QLatin1String("right")]  = mp.marginRight;
+        obj[QLatin1String("margins")] = m;
+    }
+
     return obj;
 }
 
@@ -709,6 +957,39 @@ QJsonObject ThemeManager::serializePageLayout(const PageLayout &layout)
     return obj;
 }
 
+QJsonObject ThemeManager::serializeFootnoteStyle(const FootnoteStyle &style)
+{
+    QJsonObject obj;
+
+    auto formatStr = [](FootnoteStyle::NumberFormat f) -> QString {
+        switch (f) {
+        case FootnoteStyle::RomanLower: return QStringLiteral("roman_lower");
+        case FootnoteStyle::RomanUpper: return QStringLiteral("roman_upper");
+        case FootnoteStyle::AlphaLower: return QStringLiteral("alpha_lower");
+        case FootnoteStyle::AlphaUpper: return QStringLiteral("alpha_upper");
+        case FootnoteStyle::Asterisk:   return QStringLiteral("asterisk");
+        default:                         return QStringLiteral("arabic");
+        }
+    };
+
+    obj[QLatin1String("format")] = formatStr(style.format);
+    obj[QLatin1String("startNumber")] = style.startNumber;
+    obj[QLatin1String("restart")] = (style.restart == FootnoteStyle::PerPage)
+        ? QStringLiteral("per_page") : QStringLiteral("per_document");
+    if (!style.prefix.isEmpty())
+        obj[QLatin1String("prefix")] = style.prefix;
+    if (!style.suffix.isEmpty())
+        obj[QLatin1String("suffix")] = style.suffix;
+    obj[QLatin1String("superscriptRef")] = style.superscriptRef;
+    obj[QLatin1String("superscriptNote")] = style.superscriptNote;
+    obj[QLatin1String("asEndnotes")] = style.asEndnotes;
+    obj[QLatin1String("showSeparator")] = style.showSeparator;
+    obj[QLatin1String("separatorWidth")] = style.separatorWidth;
+    obj[QLatin1String("separatorLength")] = style.separatorLength;
+
+    return obj;
+}
+
 QJsonDocument ThemeManager::serializeTheme(const QString &name, StyleManager *sm,
                                             const PageLayout &layout)
 {
@@ -732,8 +1013,34 @@ QJsonDocument ThemeManager::serializeTheme(const QString &name, StyleManager *sm
     }
     root[QLatin1String("characterStyles")] = charObj;
 
+    // Table styles
+    QStringList tsNames = sm->tableStyleNames();
+    if (!tsNames.isEmpty()) {
+        QJsonObject tsObj;
+        for (const QString &name : tsNames) {
+            const TableStyle *ts = sm->tableStyle(name);
+            if (ts)
+                tsObj[name] = serializeTableStyle(*ts);
+        }
+        root[QLatin1String("tableStyles")] = tsObj;
+    }
+
     // Page layout
     root[QLatin1String("pageLayout")] = serializePageLayout(layout);
+
+    // Master pages
+    if (!layout.masterPages.isEmpty()) {
+        QJsonObject mpObj;
+        for (auto it = layout.masterPages.begin(); it != layout.masterPages.end(); ++it) {
+            if (!it.value().isDefault())
+                mpObj[it.key()] = serializeMasterPage(it.value());
+        }
+        if (!mpObj.isEmpty())
+            root[QLatin1String("masterPages")] = mpObj;
+    }
+
+    // Footnote style
+    root[QLatin1String("footnoteStyle")] = serializeFootnoteStyle(sm->footnoteStyle());
 
     return QJsonDocument(root);
 }

@@ -6,6 +6,8 @@
 #include <QTextBlockFormat>
 #include <QTextCharFormat>
 
+#include "fontfeatures.h"
+
 class ParagraphStyle
 {
 public:
@@ -30,6 +32,7 @@ public:
     void setHeadingLevel(int level) { m_headingLevel = level; }
     void setFirstLineIndent(qreal pts) { m_firstLineIndent = pts; m_hasFirstLineIndent = true; }
     void setWordSpacing(qreal pts) { m_wordSpacing = pts; m_hasWordSpacing = true; }
+    void setFontFeatures(FontFeatures::Features f) { m_fontFeatures = f; m_hasFontFeatures = true; }
 
     // Block formatting — getters
     Qt::Alignment alignment() const { return m_alignment; }
@@ -42,6 +45,7 @@ public:
     int headingLevel() const { return m_headingLevel; }
     qreal firstLineIndent() const { return m_firstLineIndent; }
     qreal wordSpacing() const { return m_wordSpacing; }
+    FontFeatures::Features fontFeatures() const { return m_fontFeatures; }
 
     // Block formatting — has* flags
     bool hasAlignment() const { return m_hasAlignment; }
@@ -53,6 +57,7 @@ public:
     bool hasBackground() const { return m_hasBackground; }
     bool hasFirstLineIndent() const { return m_hasFirstLineIndent; }
     bool hasWordSpacing() const { return m_hasWordSpacing; }
+    bool hasFontFeatures() const { return m_hasFontFeatures; }
 
     // Backward compat aliases
     bool hasExplicitAlignment() const { return m_hasAlignment; }
@@ -112,6 +117,8 @@ private:
     bool m_hasFirstLineIndent = false;
     qreal m_wordSpacing = 0;
     bool m_hasWordSpacing = false;
+    FontFeatures::Features m_fontFeatures = FontFeatures::defaultFeatures();
+    bool m_hasFontFeatures = false;
 
     // Char properties
     QString m_fontFamily;

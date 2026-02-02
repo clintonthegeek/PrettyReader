@@ -123,8 +123,11 @@ void PrintController::renderPage(QPainter *painter, int pageNumber,
     meta.fileName = m_fileName;
     meta.title = m_documentTitle;
 
+    // Resolve master page for this page number
+    PageLayout resolvedLayout = m_pageLayout.resolvedForPage(pageNumber);
+
     // Header
-    HeaderFooterRenderer::drawHeader(painter, headerRect, m_pageLayout, meta,
+    HeaderFooterRenderer::drawHeader(painter, headerRect, resolvedLayout, meta,
                                      1.0 * dpiScale);
 
     // Body content
@@ -143,6 +146,6 @@ void PrintController::renderPage(QPainter *painter, int pageNumber,
     painter->restore();
 
     // Footer
-    HeaderFooterRenderer::drawFooter(painter, footerRect, m_pageLayout, meta,
+    HeaderFooterRenderer::drawFooter(painter, footerRect, resolvedLayout, meta,
                                      1.0 * dpiScale);
 }

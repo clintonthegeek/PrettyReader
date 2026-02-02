@@ -1,10 +1,13 @@
 #include "styledockwidget.h"
+#include "footnoteconfigwidget.h"
 #include "stylepropertieseditor.h"
+#include "tablestylepropertieseditor.h"
 #include "styletreemodel.h"
 #include "characterstyle.h"
 #include "pagelayout.h"
 #include "paragraphstyle.h"
 #include "stylemanager.h"
+#include "tablestyle.h"
 #include "thememanager.h"
 
 #include <QCheckBox>
@@ -16,6 +19,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QTreeView>
 #include <QVBoxLayout>
@@ -32,12 +36,7 @@ StyleDockWidget::StyleDockWidget(ThemeManager *themeManager, QWidget *parent)
 
 void StyleDockWidget::buildUI()
 {
-    auto *scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-
-    auto *content = new QWidget;
-    auto *layout = new QVBoxLayout(content);
+    auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
@@ -46,7 +45,6 @@ void StyleDockWidget::buildUI()
     themeLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
     layout->addWidget(themeLabel);
 
-    // Theme combo + buttons
     auto *themeRow = new QHBoxLayout;
     m_themeCombo = new QComboBox;
     const QStringList themes = m_themeManager->availableThemes();
@@ -75,11 +73,7 @@ void StyleDockWidget::buildUI()
     connect(m_saveBtn, &QPushButton::clicked, this, &StyleDockWidget::onSaveTheme);
     connect(m_deleteBtn, &QPushButton::clicked, this, &StyleDockWidget::onDeleteTheme);
 
-    // --- Style Tree ---
-    auto *stylesLabel = new QLabel(tr("Styles"));
-    stylesLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
-    layout->addWidget(stylesLabel);
-
+    // --- Style Tree (stretches to fill available space) ---
     m_showPreviewsCheck = new QCheckBox(tr("Show previews"));
     layout->addWidget(m_showPreviewsCheck);
     connect(m_showPreviewsCheck, &QCheckBox::toggled, this, [this](bool checked) {
@@ -92,24 +86,39 @@ void StyleDockWidget::buildUI()
     m_styleTree->setHeaderHidden(true);
     m_styleTree->setRootIsDecorated(true);
     m_styleTree->setExpandsOnDoubleClick(true);
-    m_styleTree->setMaximumHeight(250);
-    layout->addWidget(m_styleTree);
+    m_styleTree->setMinimumHeight(120);
+    layout->addWidget(m_styleTree, 1);  // stretch factor 1
 
     connect(m_styleTree->selectionModel(), &QItemSelectionModel::currentChanged,
             this, [this]() { onTreeSelectionChanged(); });
 
-    // --- Properties Editor ---
+    // --- Properties Editor (stacked: paragraph/char, table, footnotes) ---
+    // Each page wrapped in a scroll area so tall editors scroll independently.
+    auto wrapInScroll = [](QWidget *w) -> QScrollArea * {
+        auto *sa = new QScrollArea;
+        sa->setWidgetResizable(true);
+        sa->setFrameShape(QFrame::NoFrame);
+        sa->setWidget(w);
+        return sa;
+    };
+
     m_propsEditor = new StylePropertiesEditor;
-    layout->addWidget(m_propsEditor);
+    m_tablePropsEditor = new TableStylePropertiesEditor;
+    m_footnoteConfig = new FootnoteConfigWidget;
+
+    m_editorStack = new QStackedWidget;
+    m_editorStack->addWidget(wrapInScroll(m_propsEditor));      // index 0
+    m_editorStack->addWidget(wrapInScroll(m_tablePropsEditor));  // index 1
+    m_editorStack->addWidget(wrapInScroll(m_footnoteConfig));    // index 2
+    m_editorStack->hide();
+    layout->addWidget(m_editorStack, 1);  // stretch factor 1
 
     connect(m_propsEditor, &StylePropertiesEditor::propertyChanged,
             this, &StyleDockWidget::onStylePropertyChanged);
-
-    scrollArea->setWidget(content);
-
-    auto *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->addWidget(scrollArea);
+    connect(m_tablePropsEditor, &TableStylePropertiesEditor::propertyChanged,
+            this, &StyleDockWidget::onTableStylePropertyChanged);
+    connect(m_footnoteConfig, &FootnoteConfigWidget::footnoteStyleChanged,
+            this, &StyleDockWidget::onFootnoteStyleChanged);
 }
 
 QString StyleDockWidget::currentThemeId() const
@@ -147,9 +156,16 @@ void StyleDockWidget::populateFromStyleManager(StyleManager *sm)
     m_treeModel->setStyleManager(m_editingStyles);
     m_styleTree->expandAll();
 
-    // Clear properties editor until a style is selected
+    // Clear and hide editor until a style is selected
     m_propsEditor->clear();
+    m_tablePropsEditor->clear();
     m_selectedStyleName.clear();
+    m_selectedIsTable = false;
+    m_selectedIsFootnote = false;
+    m_editorStack->hide();
+
+    // Pre-load footnote style so it's ready when selected
+    m_footnoteConfig->loadFootnoteStyle(m_editingStyles->footnoteStyle());
 
     // Update delete button state
     m_deleteBtn->setEnabled(!m_themeManager->isBuiltinTheme(currentThemeId()));
@@ -166,13 +182,35 @@ void StyleDockWidget::onTreeSelectionChanged()
     QModelIndex current = m_styleTree->currentIndex();
     if (!current.isValid() || m_treeModel->isCategoryNode(current)) {
         m_propsEditor->clear();
+        m_tablePropsEditor->clear();
         m_selectedStyleName.clear();
+        m_selectedIsTable = false;
+        m_selectedIsFootnote = false;
+        m_editorStack->hide();
+        return;
+    }
+
+    m_selectedIsFootnote = m_treeModel->isFootnoteNode(current);
+    if (m_selectedIsFootnote) {
+        m_selectedStyleName.clear();
+        m_selectedIsTable = false;
+        m_editorStack->setCurrentIndex(2);
+        m_editorStack->show();
         return;
     }
 
     m_selectedStyleName = m_treeModel->styleName(current);
     m_selectedIsParagraph = m_treeModel->isParagraphStyle(current);
-    loadSelectedStyle();
+    m_selectedIsTable = m_treeModel->isTableStyle(current);
+
+    if (m_selectedIsTable) {
+        m_editorStack->setCurrentIndex(1);
+        loadSelectedTableStyle();
+    } else {
+        m_editorStack->setCurrentIndex(0);
+        loadSelectedStyle();
+    }
+    m_editorStack->show();
 }
 
 void StyleDockWidget::loadSelectedStyle()
@@ -302,4 +340,38 @@ void StyleDockWidget::onThemesChanged()
         m_themeCombo->setCurrentIndex(0);
 
     m_deleteBtn->setEnabled(!m_themeManager->isBuiltinTheme(currentThemeId()));
+}
+
+void StyleDockWidget::loadSelectedTableStyle()
+{
+    if (m_selectedStyleName.isEmpty() || !m_editingStyles)
+        return;
+
+    TableStyle *ts = m_editingStyles->tableStyle(m_selectedStyleName);
+    if (!ts)
+        return;
+
+    QStringList paraNames = m_editingStyles->paragraphStyleNames();
+    m_tablePropsEditor->loadTableStyle(*ts, paraNames);
+}
+
+void StyleDockWidget::onTableStylePropertyChanged()
+{
+    if (m_selectedStyleName.isEmpty() || !m_editingStyles)
+        return;
+
+    TableStyle fresh(m_selectedStyleName);
+    m_tablePropsEditor->applyToTableStyle(fresh);
+    m_editingStyles->addTableStyle(fresh);
+
+    Q_EMIT styleOverrideChanged();
+}
+
+void StyleDockWidget::onFootnoteStyleChanged()
+{
+    if (!m_editingStyles)
+        return;
+
+    m_editingStyles->setFootnoteStyle(m_footnoteConfig->currentFootnoteStyle());
+    Q_EMIT styleOverrideChanged();
 }

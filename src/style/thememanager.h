@@ -6,8 +6,10 @@
 #include <QStringList>
 
 #include "characterstyle.h"
+#include "footnotestyle.h"
 #include "pagelayout.h"
 #include "paragraphstyle.h"
+#include "tablestyle.h"
 
 class StyleManager;
 
@@ -49,7 +51,10 @@ private:
     // Serialization helpers
     static QJsonObject serializeParagraphStyle(const ParagraphStyle &style);
     static QJsonObject serializeCharacterStyle(const CharacterStyle &style);
+    static QJsonObject serializeTableStyle(const TableStyle &style);
     static QJsonObject serializePageLayout(const PageLayout &layout);
+    static QJsonObject serializeMasterPage(const MasterPage &mp);
+    static QJsonObject serializeFootnoteStyle(const FootnoteStyle &style);
     QJsonDocument serializeTheme(const QString &name, StyleManager *sm, const PageLayout &layout);
 
     struct ThemeInfo {

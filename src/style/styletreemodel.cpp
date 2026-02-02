@@ -2,6 +2,7 @@
 #include "stylemanager.h"
 #include "paragraphstyle.h"
 #include "characterstyle.h"
+#include "tablestyle.h"
 
 #include <QFont>
 #include <QColor>
@@ -49,6 +50,8 @@ void StyleTreeModel::rebuildTree()
     if (m_styleManager) {
         addParagraphSubtree(m_rootNode);
         addCharacterSubtree(m_rootNode);
+        addTableSubtree(m_rootNode);
+        addDocumentSubtree(m_rootNode);
     }
 
     endResetModel();
@@ -130,6 +133,62 @@ void StyleTreeModel::addCharacterSubtree(TreeNode *root)
             cat->children.append(node);
         }
     }
+}
+
+void StyleTreeModel::addTableSubtree(TreeNode *root)
+{
+    QStringList names = m_styleManager->tableStyleNames();
+    if (names.isEmpty())
+        return;
+
+    auto *cat = new TreeNode;
+    cat->name = tr("Table Styles");
+    cat->isCategory = true;
+    cat->isTable = true;
+    cat->parent = root;
+    root->children.append(cat);
+
+    for (const QString &name : names) {
+        auto *node = new TreeNode;
+        node->name = name;
+        node->styleName = name;
+        node->isTable = true;
+        node->isParagraph = false;
+        node->parent = cat;
+        cat->children.append(node);
+    }
+}
+
+void StyleTreeModel::addDocumentSubtree(TreeNode *root)
+{
+    auto *cat = new TreeNode;
+    cat->name = tr("Document");
+    cat->isCategory = true;
+    cat->parent = root;
+    root->children.append(cat);
+
+    auto *fnNode = new TreeNode;
+    fnNode->name = tr("Footnotes");
+    fnNode->isFootnote = true;
+    fnNode->isParagraph = false;
+    fnNode->parent = cat;
+    cat->children.append(fnNode);
+}
+
+bool StyleTreeModel::isFootnoteNode(const QModelIndex &index) const
+{
+    if (!index.isValid())
+        return false;
+    auto *node = static_cast<TreeNode *>(index.internalPointer());
+    return node->isFootnote;
+}
+
+bool StyleTreeModel::isTableStyle(const QModelIndex &index) const
+{
+    if (!index.isValid())
+        return false;
+    auto *node = static_cast<TreeNode *>(index.internalPointer());
+    return node->isTable && !node->isCategory;
 }
 
 StyleTreeModel::TreeNode *StyleTreeModel::findChildByStyleName(

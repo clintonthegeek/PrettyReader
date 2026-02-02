@@ -17,6 +17,8 @@ class ThemeManager;
 class StyleDockWidget;
 class DocumentTab;
 class DocumentView;
+class Hyphenator;
+class ShortWords;
 
 class MainWindow : public KXmlGuiWindow
 {
@@ -35,6 +37,7 @@ private slots:
     void onFileOpen();
     void onFileOpenRecent(const QUrl &url);
     void onFileExportPdf();
+    void onFileExportRtf();
     void onFilePrint();
     void onFileClose();
     void onThemeChanged(const QString &themeId);
@@ -45,6 +48,8 @@ private slots:
     void onFitWidth();
     void onFitPage();
     void onToggleSourceMode();
+    void showPreferences();
+    void onSettingsChanged();
 
 private:
     void setupActions();
@@ -73,6 +78,8 @@ private:
     KRecentFilesAction *m_recentFilesAction = nullptr;
     ThemeManager *m_themeManager = nullptr;
     MetadataStore *m_metadataStore = nullptr;
+    Hyphenator *m_hyphenator = nullptr;
+    ShortWords *m_shortWords = nullptr;
     QSpinBox *m_zoomSpinBox = nullptr;
 };
 

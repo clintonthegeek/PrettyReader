@@ -13,6 +13,8 @@ add_library(PrettyReaderCore STATIC
     markdown/codeblockhighlighter.h
     markdown/markdownhighlighter.cpp
     markdown/markdownhighlighter.h
+    markdown/footnoteparser.cpp
+    markdown/footnoteparser.h
     canvas/pageitem.cpp
     canvas/pageitem.h
     canvas/documentview.cpp
@@ -22,16 +24,28 @@ add_library(PrettyReaderCore STATIC
     print/printcontroller.cpp
     print/printcontroller.h
     style/pagelayout.h
+    style/masterpage.h
+    style/fontfeatures.h
     style/paragraphstyle.cpp
     style/paragraphstyle.h
     style/characterstyle.cpp
     style/characterstyle.h
+    style/tablestyle.cpp
+    style/tablestyle.h
+    style/footnotestyle.cpp
+    style/footnotestyle.h
     style/stylemanager.cpp
     style/stylemanager.h
     style/styletreemodel.cpp
     style/styletreemodel.h
     style/thememanager.cpp
     style/thememanager.h
+    typography/hyphenator.cpp
+    typography/hyphenator.h
+    typography/shortwords.cpp
+    typography/shortwords.h
+    export/rtfexporter.cpp
+    export/rtfexporter.h
     widgets/pagelayoutwidget.cpp
     widgets/pagelayoutwidget.h
     widgets/sidebar.cpp
@@ -40,6 +54,12 @@ add_library(PrettyReaderCore STATIC
     widgets/styledockwidget.h
     widgets/stylepropertieseditor.cpp
     widgets/stylepropertieseditor.h
+    widgets/tablestylepropertieseditor.cpp
+    widgets/tablestylepropertieseditor.h
+    widgets/footnoteconfigwidget.cpp
+    widgets/footnoteconfigwidget.h
+    widgets/preferencesdialog.cpp
+    widgets/preferencesdialog.h
     widgets/toolview.cpp
     widgets/toolview.h
     widgets/filebrowserdock.cpp
@@ -58,6 +78,8 @@ target_include_directories(PrettyReaderCore
         ${CMAKE_CURRENT_SOURCE_DIR}/canvas
         ${CMAKE_CURRENT_SOURCE_DIR}/print
         ${CMAKE_CURRENT_SOURCE_DIR}/style
+        ${CMAKE_CURRENT_SOURCE_DIR}/typography
+        ${CMAKE_CURRENT_SOURCE_DIR}/export
         ${CMAKE_CURRENT_SOURCE_DIR}/widgets
         ${CMAKE_CURRENT_BINARY_DIR}
 )
@@ -65,6 +87,10 @@ target_include_directories(PrettyReaderCore
 # MD4C system library
 find_library(MD4C_LIBRARY NAMES md4c REQUIRED)
 find_path(MD4C_INCLUDE_DIR NAMES md4c.h REQUIRED)
+
+# libhyphen for hyphenation
+find_library(HYPHEN_LIBRARY NAMES hyphen REQUIRED)
+find_path(HYPHEN_INCLUDE_DIR NAMES hyphen.h REQUIRED)
 
 # Bundle theme JSON files as Qt resources
 qt_add_resources(PrettyReaderCore "themes"
@@ -75,7 +101,16 @@ qt_add_resources(PrettyReaderCore "themes"
         themes/academic.json
 )
 
-target_include_directories(PrettyReaderCore PRIVATE ${MD4C_INCLUDE_DIR})
+# Bundle hyphenation dictionaries as Qt resources
+qt_add_resources(PrettyReaderCore "dicts"
+    PREFIX "/dicts"
+    BASE dicts
+    FILES
+        dicts/hyph_en_US.dic
+        dicts/hyph_en_GB.dic
+)
+
+target_include_directories(PrettyReaderCore PRIVATE ${MD4C_INCLUDE_DIR} ${HYPHEN_INCLUDE_DIR})
 
 target_link_libraries(PrettyReaderCore
     PUBLIC
@@ -94,6 +129,7 @@ target_link_libraries(PrettyReaderCore
         KF6::KIOFileWidgets
         KF6::SyntaxHighlighting
         ${MD4C_LIBRARY}
+        ${HYPHEN_LIBRARY}
 )
 
 qt_add_executable(PrettyReader

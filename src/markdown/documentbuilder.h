@@ -11,6 +11,10 @@
 
 #include <md4c.h>
 
+#include "footnotestyle.h"
+
+class Hyphenator;
+class ShortWords;
 class StyleManager;
 
 class DocumentBuilder : public QObject
@@ -24,6 +28,9 @@ public:
     bool build(const QString &markdownText);
     void setBasePath(const QString &basePath);
     void setStyleManager(StyleManager *sm);
+    void setHyphenator(Hyphenator *hyph);
+    void setShortWords(ShortWords *sw);
+    void setFootnoteStyle(const FootnoteStyle &style);
 
 private:
     // MD4C static callbacks
@@ -63,11 +70,16 @@ private:
     void extractFootnotes(const QString &markdownText);
     void appendFootnotes();
 
+    // Typography processing
+    QString processTypography(const QString &text) const;
+
     // State
     QTextDocument *m_document;
     QTextCursor m_cursor;
     QString m_basePath;
     StyleManager *m_styleManager = nullptr;
+    Hyphenator *m_hyphenator = nullptr;
+    ShortWords *m_shortWords = nullptr;
 
     // Tracking
     QStack<QTextCharFormat> m_charFormatStack;
@@ -104,6 +116,7 @@ private:
     };
     QList<Footnote> m_footnotes;
     int m_footnoteCounter = 0;
+    FootnoteStyle m_footnoteStyle;
 };
 
 #endif // PRETTYREADER_DOCUMENTBUILDER_H

@@ -1,6 +1,7 @@
 #ifndef PRETTYREADER_PAGELAYOUTWIDGET_H
 #define PRETTYREADER_PAGELAYOUTWIDGET_H
 
+#include <QHash>
 #include <QWidget>
 
 #include "pagelayout.h"
@@ -23,9 +24,19 @@ public:
 signals:
     void pageLayoutChanged();
 
+private slots:
+    void onPageTypeChanged(int index);
+
 private:
+    void saveCurrentPageTypeState();
+    void loadPageTypeState(const QString &type);
+    void blockAllSignals(bool block);
+
+    QComboBox *m_pageTypeCombo = nullptr;
     QComboBox *m_pageSizeCombo = nullptr;
     QComboBox *m_orientationCombo = nullptr;
+    QWidget *m_pageSizeRow = nullptr;
+    QWidget *m_orientationRow = nullptr;
     QDoubleSpinBox *m_marginTopSpin = nullptr;
     QDoubleSpinBox *m_marginBottomSpin = nullptr;
     QDoubleSpinBox *m_marginLeftSpin = nullptr;
@@ -40,6 +51,11 @@ private:
     QLineEdit *m_footerLeftEdit = nullptr;
     QLineEdit *m_footerCenterEdit = nullptr;
     QLineEdit *m_footerRightEdit = nullptr;
+
+    // Master page state
+    QHash<QString, MasterPage> m_masterPages;
+    QString m_currentPageType;  // empty = "All Pages"
+    PageLayout m_baseLayout;    // base layout for inherit reference
 };
 
 #endif // PRETTYREADER_PAGELAYOUTWIDGET_H

@@ -3,9 +3,11 @@
 
 #include "paragraphstyle.h"
 #include "characterstyle.h"
+#include "fontfeatures.h"
 
 #include <QWidget>
 
+class QCheckBox;
 class KColorButton;
 class QComboBox;
 class QDoubleSpinBox;
@@ -68,6 +70,15 @@ private:
     KColorButton *m_fgColorBtn = nullptr;
     KColorButton *m_bgColorBtn = nullptr;
 
+    // Font features section
+    QGroupBox *m_fontFeaturesGroup = nullptr;
+    QCheckBox *m_ligaturesCheck = nullptr;
+    QCheckBox *m_smallCapsCheck = nullptr;
+    QCheckBox *m_oldStyleNumsCheck = nullptr;
+    QCheckBox *m_liningNumsCheck = nullptr;
+    QCheckBox *m_kerningCheck = nullptr;
+    QCheckBox *m_contextAltsCheck = nullptr;
+
     // Paragraph section
     QGroupBox *m_paragraphSection = nullptr;
     QToolButton *m_alignLeftBtn = nullptr;
@@ -120,6 +131,7 @@ private:
         bool rightMargin = false;
         bool wordSpacing = false;
         bool letterSpacing = false;
+        bool fontFeatures = false;
     };
     ExplicitFlags m_explicit;
 

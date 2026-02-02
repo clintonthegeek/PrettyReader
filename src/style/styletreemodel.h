@@ -24,6 +24,8 @@ public:
     QString styleName(const QModelIndex &index) const;
     bool isParagraphStyle(const QModelIndex &index) const;
     bool isCharacterStyle(const QModelIndex &index) const;
+    bool isTableStyle(const QModelIndex &index) const;
+    bool isFootnoteNode(const QModelIndex &index) const;
     bool isCategoryNode(const QModelIndex &index) const;
 
     void refresh();
@@ -42,6 +44,8 @@ private:
         QString styleName;   // empty for category nodes
         bool isParagraph = true;
         bool isCategory = false;
+        bool isTable = false;
+        bool isFootnote = false;
         TreeNode *parent = nullptr;
         QList<TreeNode *> children;
         ~TreeNode() { qDeleteAll(children); }
@@ -50,6 +54,8 @@ private:
     void rebuildTree();
     void addParagraphSubtree(TreeNode *root);
     void addCharacterSubtree(TreeNode *root);
+    void addTableSubtree(TreeNode *root);
+    void addDocumentSubtree(TreeNode *root);
     TreeNode *findChildByStyleName(TreeNode *parent, const QString &name) const;
 
     StyleManager *m_styleManager = nullptr;

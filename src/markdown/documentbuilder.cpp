@@ -2,6 +2,10 @@
 #include "stylemanager.h"
 #include "paragraphstyle.h"
 #include "characterstyle.h"
+#include "tablestyle.h"
+#include "hyphenator.h"
+#include "shortwords.h"
+#include "footnoteparser.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -48,8 +52,16 @@ bool DocumentBuilder::build(const QString &markdownText)
     m_footnotes.clear();
     m_footnoteCounter = 0;
 
-    // Extract footnotes before parsing
-    extractFootnotes(markdownText);
+    // Extract footnotes before parsing using the full footnote parser
+    FootnoteParser fnParser;
+    QString processedMarkdown = fnParser.process(markdownText);
+    const auto &parsedFootnotes = fnParser.footnotes();
+    for (const auto &fn : parsedFootnotes) {
+        Footnote footnote;
+        footnote.label = fn.label;
+        footnote.text = fn.content;
+        m_footnotes.append(footnote);
+    }
 
     // Set the document default font from the resolved root paragraph style.
     // This ensures any text without explicit formatting matches the theme.
@@ -83,7 +95,7 @@ bool DocumentBuilder::build(const QString &markdownText)
     parser.leave_span  = &DocumentBuilder::sLeaveSpan;
     parser.text        = &DocumentBuilder::sText;
 
-    const QByteArray utf8 = markdownText.toUtf8();
+    const QByteArray utf8 = processedMarkdown.toUtf8();
     int result = md_parse(utf8.constData(), static_cast<MD_SIZE>(utf8.size()),
                           &parser, this);
 
@@ -102,6 +114,39 @@ void DocumentBuilder::setBasePath(const QString &basePath)
 void DocumentBuilder::setStyleManager(StyleManager *sm)
 {
     m_styleManager = sm;
+}
+
+void DocumentBuilder::setHyphenator(Hyphenator *hyph)
+{
+    m_hyphenator = hyph;
+}
+
+void DocumentBuilder::setShortWords(ShortWords *sw)
+{
+    m_shortWords = sw;
+}
+
+void DocumentBuilder::setFootnoteStyle(const FootnoteStyle &style)
+{
+    m_footnoteStyle = style;
+}
+
+QString DocumentBuilder::processTypography(const QString &text) const
+{
+    if (text.isEmpty())
+        return text;
+
+    QString result = text;
+
+    // Apply short-words (non-breaking spaces after short prepositions/articles)
+    if (m_shortWords)
+        result = m_shortWords->process(result);
+
+    // Apply hyphenation (insert soft hyphens at valid break points)
+    if (m_hyphenator && m_hyphenator->isLoaded())
+        result = m_hyphenator->hyphenateText(result);
+
+    return result;
 }
 
 void DocumentBuilder::applyParagraphStyle(const QString &styleName)
@@ -372,14 +417,30 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
     case MD_BLOCK_TABLE: {
         auto *d = static_cast<MD_BLOCK_TABLE_DETAIL *>(detail);
         ensureBlock();
+
+        // Apply table style from theme if available
+        TableStyle ts;
+        if (m_styleManager) {
+            TableStyle *themed = m_styleManager->tableStyle(QStringLiteral("Default"));
+            if (themed)
+                ts = *themed;
+        }
+
         QTextTableFormat tableFmt;
-        tableFmt.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
-        tableFmt.setBorder(0.5);
-        tableFmt.setBorderBrush(QColor(0xdd, 0xdd, 0xdd));
-        tableFmt.setCellPadding(6.0);
+        if (ts.hasOuterBorder()) {
+            tableFmt.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
+            tableFmt.setBorder(ts.outerBorder().width);
+            tableFmt.setBorderBrush(ts.outerBorder().color);
+        } else {
+            tableFmt.setBorderStyle(QTextFrameFormat::BorderStyle_Solid);
+            tableFmt.setBorder(0.5);
+            tableFmt.setBorderBrush(QColor(0xdd, 0xdd, 0xdd));
+        }
+        QMarginsF padding = ts.cellPadding();
+        tableFmt.setCellPadding(padding.top()); // Qt uses a single padding value
         tableFmt.setCellSpacing(0.0);
         tableFmt.setAlignment(Qt::AlignLeft);
-        // Create with 1 row initially; rows added on MD_BLOCK_TR
+
         m_currentTable = m_cursor.insertTable(1, static_cast<int>(d->col_count), tableFmt);
         m_tableRow = -1;
         m_tableCol = 0;
@@ -418,18 +479,43 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
             }
             m_cursor.setBlockFormat(bf);
 
+            // Resolve table style
+            TableStyle ts;
+            if (m_styleManager) {
+                TableStyle *themed = m_styleManager->tableStyle(QStringLiteral("Default"));
+                if (themed)
+                    ts = *themed;
+            }
+
             QTextCharFormat cf;
             if (type == MD_BLOCK_TH) {
                 cf.setFontWeight(QFont::Bold);
+                if (m_styleManager)
+                    applyParagraphStyle(ts.headerParagraphStyle());
+            } else {
+                if (m_styleManager)
+                    applyParagraphStyle(ts.bodyParagraphStyle());
             }
             m_cursor.setBlockCharFormat(cf);
             m_cursor.setCharFormat(cf);
 
+            QTextTableCellFormat cellFmt;
             if (m_inTableHeader) {
-                QTextTableCellFormat cellFmt;
-                cellFmt.setBackground(QColor(0xf0, 0xf0, 0xf0));
-                cell.setFormat(cellFmt);
+                if (ts.hasHeaderBackground())
+                    cellFmt.setBackground(ts.headerBackground());
+                else
+                    cellFmt.setBackground(QColor(0xf0, 0xf0, 0xf0));
+                if (ts.hasHeaderForeground())
+                    cellFmt.setForeground(ts.headerForeground());
+            } else {
+                // Alternating row colors
+                if (ts.hasAlternateRowColor() && (m_tableRow % (ts.alternateFrequency() * 2)) >= ts.alternateFrequency()) {
+                    cellFmt.setBackground(ts.alternateRowColor());
+                } else if (ts.hasBodyBackground()) {
+                    cellFmt.setBackground(ts.bodyBackground());
+                }
             }
+            cell.setFormat(cellFmt);
         }
         break;
     }
@@ -692,9 +778,13 @@ int DocumentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text,
             bool found = false;
             while (it.hasNext()) {
                 auto match = it.next();
-                // Insert text before the reference
-                if (match.capturedStart() > lastEnd)
-                    m_cursor.insertText(str.mid(lastEnd, match.capturedStart() - lastEnd));
+                // Insert text before the reference (with typography)
+                if (match.capturedStart() > lastEnd) {
+                    QString segment = str.mid(lastEnd, match.capturedStart() - lastEnd);
+                    if (!m_inCodeBlock)
+                        segment = processTypography(segment);
+                    m_cursor.insertText(segment);
+                }
 
                 // Find the footnote index
                 QString label = match.captured(1);
@@ -707,11 +797,17 @@ int DocumentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text,
                 }
 
                 if (fnIndex >= 0) {
+                    int number = m_footnoteStyle.startNumber + fnIndex;
+                    QString refLabel = m_footnoteStyle.formatNumber(number);
                     QTextCharFormat superFmt;
-                    superFmt.setVerticalAlignment(QTextCharFormat::AlignSuperScript);
-                    superFmt.setFontPointSize(8);
+                    if (m_footnoteStyle.superscriptRef) {
+                        superFmt.setVerticalAlignment(QTextCharFormat::AlignSuperScript);
+                        superFmt.setFontPointSize(8);
+                    } else {
+                        superFmt.setFontPointSize(m_cursor.charFormat().fontPointSize());
+                    }
                     superFmt.setForeground(QColor(0x03, 0x66, 0xd6));
-                    m_cursor.insertText(QString::number(fnIndex + 1), superFmt);
+                    m_cursor.insertText(refLabel, superFmt);
                     // Restore previous format
                     m_cursor.setCharFormat(m_charFormatStack.isEmpty()
                                            ? QTextCharFormat()
@@ -724,12 +820,22 @@ int DocumentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text,
                 found = true;
             }
             if (found) {
-                if (lastEnd < str.size())
-                    m_cursor.insertText(str.mid(lastEnd));
+                if (lastEnd < str.size()) {
+                    QString tail = str.mid(lastEnd);
+                    if (!m_inCodeBlock)
+                        tail = processTypography(tail);
+                    m_cursor.insertText(tail);
+                }
             } else {
+                // No footnote refs found -- apply typography to full text
+                if (!m_inCodeBlock)
+                    str = processTypography(str);
                 m_cursor.insertText(str);
             }
         } else {
+            // No footnotes -- apply typography directly
+            if (!m_inCodeBlock)
+                str = processTypography(str);
             m_cursor.insertText(str);
         }
         break;
@@ -862,37 +968,24 @@ QString DocumentBuilder::resolveEntity(const QString &entity)
 
 // --- Footnote handling ---
 
-void DocumentBuilder::extractFootnotes(const QString &markdownText)
-{
-    // Match footnote definitions: [^label]: text
-    static const QRegularExpression defRx(
-        QStringLiteral(R"(^\[\^([^\]]+)\]:\s*(.+)$)"),
-        QRegularExpression::MultilineOption);
-
-    auto it = defRx.globalMatch(markdownText);
-    while (it.hasNext()) {
-        auto match = it.next();
-        Footnote fn;
-        fn.label = match.captured(1);
-        fn.text = match.captured(2);
-        m_footnotes.append(fn);
-    }
-}
-
 void DocumentBuilder::appendFootnotes()
 {
-    // Insert a horizontal rule before footnotes
-    m_cursor.insertBlock();
-    QTextBlockFormat hrFmt;
-    hrFmt.setProperty(QTextFormat::BlockTrailingHorizontalRulerWidth,
-                      QTextLength(QTextLength::PercentageLength, 40));
-    hrFmt.setTopMargin(20.0);
-    hrFmt.setBottomMargin(8.0);
-    m_cursor.setBlockFormat(hrFmt);
+    // Separator line before footnotes
+    if (m_footnoteStyle.showSeparator) {
+        m_cursor.insertBlock();
+        QTextBlockFormat hrFmt;
+        hrFmt.setProperty(QTextFormat::BlockTrailingHorizontalRulerWidth,
+                          QTextLength(QTextLength::FixedLength, m_footnoteStyle.separatorLength));
+        hrFmt.setTopMargin(20.0);
+        hrFmt.setBottomMargin(8.0);
+        m_cursor.setBlockFormat(hrFmt);
+    }
 
     // Render each footnote
     for (int i = 0; i < m_footnotes.size(); ++i) {
         const Footnote &fn = m_footnotes[i];
+        int number = m_footnoteStyle.startNumber + i;
+        QString label = m_footnoteStyle.formatNumber(number);
 
         m_cursor.insertBlock();
         QTextBlockFormat bf;
@@ -901,12 +994,16 @@ void DocumentBuilder::appendFootnotes()
         bf.setTextIndent(-20.0);
         m_cursor.setBlockFormat(bf);
 
-        // Footnote number in superscript
+        // Footnote number
         QTextCharFormat numFmt;
-        numFmt.setVerticalAlignment(QTextCharFormat::AlignSuperScript);
-        numFmt.setFontPointSize(8);
+        if (m_footnoteStyle.superscriptNote) {
+            numFmt.setVerticalAlignment(QTextCharFormat::AlignSuperScript);
+            numFmt.setFontPointSize(8);
+        } else {
+            numFmt.setFontPointSize(9);
+        }
         numFmt.setForeground(QColor(0x03, 0x66, 0xd6));
-        m_cursor.insertText(QString::number(i + 1), numFmt);
+        m_cursor.insertText(label, numFmt);
 
         // Footnote text
         QTextCharFormat textFmt;

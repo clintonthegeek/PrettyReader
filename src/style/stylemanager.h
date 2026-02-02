@@ -2,7 +2,9 @@
 #define PRETTYREADER_STYLEMANAGER_H
 
 #include "characterstyle.h"
+#include "footnotestyle.h"
 #include "paragraphstyle.h"
+#include "tablestyle.h"
 
 #include <QHash>
 #include <QObject>
@@ -24,6 +26,12 @@ public:
     const QHash<QString, ParagraphStyle> &paragraphStyles() const { return m_paraStyles; }
     const QHash<QString, CharacterStyle> &characterStyles() const { return m_charStyles; }
 
+    // Table styles
+    void addTableStyle(const TableStyle &style);
+    TableStyle *tableStyle(const QString &name);
+    const QHash<QString, TableStyle> &tableStyles() const { return m_tableStyles; }
+    QStringList tableStyleNames() const;
+
     QStringList paragraphStyleNames() const;
     QStringList characterStyleNames() const;
 
@@ -36,6 +44,10 @@ public:
     QStringList paragraphStyleAncestors(const QString &name);
     QStringList characterStyleAncestors(const QString &name);
 
+    // Footnote style
+    FootnoteStyle footnoteStyle() const { return m_footnoteStyle; }
+    void setFootnoteStyle(const FootnoteStyle &style) { m_footnoteStyle = style; }
+
     // Deep-copy this style manager
     StyleManager *clone(QObject *parent = nullptr) const;
 
@@ -45,6 +57,8 @@ signals:
 private:
     QHash<QString, ParagraphStyle> m_paraStyles;
     QHash<QString, CharacterStyle> m_charStyles;
+    QHash<QString, TableStyle> m_tableStyles;
+    FootnoteStyle m_footnoteStyle;
 };
 
 #endif // PRETTYREADER_STYLEMANAGER_H

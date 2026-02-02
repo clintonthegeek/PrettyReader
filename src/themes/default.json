@@ -127,5 +127,50 @@
             "parent": "Default Character Style",
             "strikeOut": true
         }
+    },
+
+    "tableStyles": {
+        "Default": {
+            "borderCollapse": true,
+            "cellPadding": { "top": 3, "bottom": 3, "left": 6, "right": 6 },
+            "headerBackground": "#f0f0f0",
+            "alternateRowColor": "#f9f9f9",
+            "outerBorder": { "width": 1.0, "color": "#333333" },
+            "innerBorder": { "width": 0.5, "color": "#cccccc" },
+            "headerBottomBorder": { "width": 2.0, "color": "#333333" },
+            "headerParagraphStyle": "TableHeader",
+            "bodyParagraphStyle": "TableBody"
+        }
+    },
+
+    "footnoteStyle": {
+        "format": "arabic",
+        "startNumber": 1,
+        "restart": "per_document",
+        "prefix": "",
+        "suffix": "",
+        "superscriptRef": true,
+        "superscriptNote": false,
+        "asEndnotes": true,
+        "showSeparator": true,
+        "separatorWidth": 0.5,
+        "separatorLength": 72.0
+    },
+
+    "masterPages": {
+        "first": {
+            "headerEnabled": false,
+            "footerEnabled": true
+        },
+        "left": {
+            "headerLeft": "{title}",
+            "headerCenter": "",
+            "headerRight": ""
+        },
+        "right": {
+            "headerLeft": "",
+            "headerCenter": "",
+            "headerRight": "{title}"
+        }
     }
 }

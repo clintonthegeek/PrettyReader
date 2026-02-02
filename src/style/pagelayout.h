@@ -1,11 +1,14 @@
 #ifndef PRETTYREADER_PAGELAYOUT_H
 #define PRETTYREADER_PAGELAYOUT_H
 
+#include <QHash>
 #include <QMarginsF>
 #include <QPageLayout>
 #include <QPageSize>
 #include <QSizeF>
 #include <QString>
+
+#include "masterpage.h"
 
 struct PageLayout
 {
@@ -77,6 +80,59 @@ struct PageLayout
                          margins.top()    * mmToPt,
                          margins.right()  * mmToPt,
                          margins.bottom() * mmToPt);
+    }
+
+    // Master page templates: "first", "left", "right"
+    QHash<QString, MasterPage> masterPages;
+
+    // Resolve the effective PageLayout for a given page, applying
+    // master page overrides for the page type.
+    // pageNumber is 0-based, isChapterStart indicates first page or chapter opener.
+    PageLayout resolvedForPage(int pageNumber, bool isChapterStart = false) const
+    {
+        PageLayout resolved = *this;
+
+        // Determine page type
+        QString pageType;
+        if (pageNumber == 0 || isChapterStart) {
+            pageType = QStringLiteral("first");
+        } else if (pageNumber % 2 == 0) {
+            pageType = QStringLiteral("right"); // 0-based: even = right (pages 1,3,5...)
+        } else {
+            pageType = QStringLiteral("left");  // 0-based: odd = left (pages 2,4,6...)
+        }
+
+        auto it = masterPages.find(pageType);
+        if (it == masterPages.end())
+            return resolved;
+
+        const MasterPage &mp = it.value();
+
+        // Apply overrides
+        if (mp.headerEnabled >= 0)
+            resolved.headerEnabled = (mp.headerEnabled != 0);
+        if (mp.footerEnabled >= 0)
+            resolved.footerEnabled = (mp.footerEnabled != 0);
+        if (mp.hasHeaderLeft)   resolved.headerLeft   = mp.headerLeft;
+        if (mp.hasHeaderCenter) resolved.headerCenter = mp.headerCenter;
+        if (mp.hasHeaderRight)  resolved.headerRight  = mp.headerRight;
+        if (mp.hasFooterLeft)   resolved.footerLeft   = mp.footerLeft;
+        if (mp.hasFooterCenter) resolved.footerCenter = mp.footerCenter;
+        if (mp.hasFooterRight)  resolved.footerRight  = mp.footerRight;
+
+        if (mp.marginTop >= 0 || mp.marginBottom >= 0
+            || mp.marginLeft >= 0 || mp.marginRight >= 0) {
+            resolved.margins = QMarginsF(
+                mp.marginLeft >= 0   ? mp.marginLeft   : margins.left(),
+                mp.marginTop >= 0    ? mp.marginTop    : margins.top(),
+                mp.marginRight >= 0  ? mp.marginRight  : margins.right(),
+                mp.marginBottom >= 0 ? mp.marginBottom : margins.bottom());
+        }
+
+        // Don't copy masterPages into resolved to avoid recursion
+        resolved.masterPages.clear();
+
+        return resolved;
     }
 };
 
