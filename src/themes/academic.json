@@ -4,57 +4,60 @@
     "description": "Clean serif typography for academic reading",
 
     "paragraphStyles": {
-        "BodyText": {
+        "Default Paragraph Style": {
             "fontFamily": "Noto Serif",
             "fontSize": 12.0,
-            "lineHeightPercent": 160,
-            "spaceAfter": 8.0,
-            "alignment": "justify",
+            "lineHeightPercent": 100,
             "foreground": "#1a1a1a"
         },
-        "Heading1": {
-            "fontFamily": "Noto Serif",
-            "fontSize": 26.0,
+        "Heading": {
+            "parent": "Default Paragraph Style",
             "fontWeight": "bold",
+            "alignment": "left"
+        },
+        "BodyText": {
+            "parent": "Default Paragraph Style",
+            "spaceAfter": 8.0,
+            "alignment": "justify"
+        },
+        "Heading1": {
+            "parent": "Heading",
+            "fontSize": 26.0,
             "spaceBefore": 28.0,
             "spaceAfter": 14.0,
             "foreground": "#2c3e50"
         },
         "Heading2": {
-            "fontFamily": "Noto Serif",
+            "parent": "Heading",
             "fontSize": 20.0,
-            "fontWeight": "bold",
             "spaceBefore": 22.0,
             "spaceAfter": 10.0,
             "foreground": "#2c3e50"
         },
         "Heading3": {
-            "fontFamily": "Noto Serif",
+            "parent": "Heading",
             "fontSize": 16.0,
-            "fontWeight": "bold",
             "fontItalic": true,
             "spaceBefore": 18.0,
             "spaceAfter": 8.0,
             "foreground": "#2c3e50"
         },
         "Heading4": {
-            "fontFamily": "Noto Serif",
+            "parent": "Heading",
             "fontSize": 14.0,
-            "fontWeight": "bold",
             "spaceBefore": 14.0,
             "spaceAfter": 6.0,
             "foreground": "#2c3e50"
         },
         "Heading5": {
-            "fontFamily": "Noto Serif",
+            "parent": "Heading",
             "fontSize": 12.0,
-            "fontWeight": "bold",
             "spaceBefore": 12.0,
             "spaceAfter": 4.0,
             "foreground": "#2c3e50"
         },
         "Heading6": {
-            "fontFamily": "Noto Serif",
+            "parent": "Heading",
             "fontSize": 12.0,
             "fontItalic": true,
             "spaceBefore": 10.0,
@@ -62,11 +65,15 @@
             "foreground": "#2c3e50"
         },
         "BlockQuote": {
+            "parent": "BodyText",
             "fontItalic": true,
-            "foreground": "#666666",
-            "spaceAfter": 8.0
+            "foreground": "#666666"
+        },
+        "ListItem": {
+            "parent": "BodyText"
         },
         "CodeBlock": {
+            "parent": "Default Paragraph Style",
             "fontFamily": "Source Code Pro",
             "fontSize": 10.0,
             "background": "#f5f5f5",
@@ -75,18 +82,23 @@
     },
 
     "characterStyles": {
-        "DefaultText": {
+        "Default Character Style": {
             "fontFamily": "Noto Serif",
             "fontSize": 12.0,
             "foreground": "#000000"
         },
+        "DefaultText": {
+            "parent": "Default Character Style"
+        },
         "InlineCode": {
+            "parent": "Default Character Style",
             "fontFamily": "Source Code Pro",
             "fontSize": 10.5,
             "foreground": "#8b0000",
             "background": "#f5f5f0"
         },
         "Link": {
+            "parent": "Default Character Style",
             "foreground": "#1a0dab",
             "underline": true
         }

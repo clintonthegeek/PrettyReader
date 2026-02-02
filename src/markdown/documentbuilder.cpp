@@ -33,6 +33,7 @@ bool DocumentBuilder::build(const QString &markdownText)
     m_cursor = QTextCursor(m_document);
     m_charFormatStack.clear();
     m_listStack.clear();
+    m_listItemBlockReady = false;
     m_currentTable = nullptr;
     m_tableRow = 0;
     m_tableCol = 0;
@@ -50,9 +51,22 @@ bool DocumentBuilder::build(const QString &markdownText)
     // Extract footnotes before parsing
     extractFootnotes(markdownText);
 
-    // Set a default font on the document
-    QFont defaultFont(QStringLiteral("Noto Serif"), 11);
-    m_document->setDefaultFont(defaultFont);
+    // Set the document default font from the resolved root paragraph style.
+    // This ensures any text without explicit formatting matches the theme.
+    if (m_styleManager) {
+        ParagraphStyle rootStyle = m_styleManager->resolvedParagraphStyle(
+            QStringLiteral("Default Paragraph Style"));
+        QFont defaultFont(rootStyle.fontFamily());
+        defaultFont.setPointSizeF(rootStyle.fontSize());
+        if (rootStyle.hasFontWeight())
+            defaultFont.setWeight(rootStyle.fontWeight());
+        if (rootStyle.hasFontItalic())
+            defaultFont.setItalic(rootStyle.fontItalic());
+        m_document->setDefaultFont(defaultFont);
+    } else {
+        QFont defaultFont(QStringLiteral("Noto Serif"), 11);
+        m_document->setDefaultFont(defaultFont);
+    }
 
     // Safety net: force dark text so system dark-theme palette doesn't bleed through
     m_document->setDefaultStyleSheet(QStringLiteral("body { color: #1a1a1a; }"));
@@ -94,14 +108,13 @@ void DocumentBuilder::applyParagraphStyle(const QString &styleName)
 {
     if (!m_styleManager)
         return;
-    ParagraphStyle *style = m_styleManager->paragraphStyle(styleName);
-    if (!style)
-        return;
+    // Resolve through parent chain so inherited properties are included
+    ParagraphStyle resolved = m_styleManager->resolvedParagraphStyle(styleName);
     QTextBlockFormat bf = m_cursor.blockFormat();
-    style->applyBlockFormat(bf);
+    resolved.applyBlockFormat(bf);
     m_cursor.setBlockFormat(bf);
     QTextCharFormat cf;
-    style->applyCharFormat(cf);
+    resolved.applyCharFormat(cf);
     m_cursor.setBlockCharFormat(cf);
     m_cursor.setCharFormat(cf);
 }
@@ -110,11 +123,10 @@ void DocumentBuilder::applyCharacterStyle(const QString &styleName)
 {
     if (!m_styleManager)
         return;
-    CharacterStyle *style = m_styleManager->characterStyle(styleName);
-    if (!style)
-        return;
+    // Resolve through parent chain so inherited properties are included
+    CharacterStyle resolved = m_styleManager->resolvedCharacterStyle(styleName);
     QTextCharFormat cf;
-    style->applyFormat(cf);
+    resolved.applyFormat(cf);
     m_cursor.mergeCharFormat(cf);
 }
 
@@ -159,7 +171,13 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         break;
 
     case MD_BLOCK_P: {
-        ensureBlock();
+        // If LI already created a block for us, reuse it; otherwise make a new one
+        if (m_listItemBlockReady) {
+            m_listItemBlockReady = false;
+        } else {
+            ensureBlock();
+        }
+
         if (m_blockQuoteLevel > 0) {
             QTextBlockFormat bf = blockQuoteBlockFormat(m_blockQuoteLevel);
             m_cursor.setBlockFormat(bf);
@@ -174,6 +192,9 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
                 m_cursor.setBlockCharFormat(blockQuoteCharFormat());
                 m_cursor.setCharFormat(blockQuoteCharFormat());
             }
+        } else if (!m_listStack.isEmpty()) {
+            // Inside a list — ListItem style was already applied by LI handler.
+            // Don't overwrite with BodyText.
         } else {
             m_cursor.setBlockFormat(bodyBlockFormat());
             if (m_styleManager) {
@@ -190,7 +211,11 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
     case MD_BLOCK_H: {
         auto *d = static_cast<MD_BLOCK_H_DETAIL *>(detail);
         int level = static_cast<int>(d->level);
-        ensureBlock();
+        if (m_listItemBlockReady) {
+            m_listItemBlockReady = false;
+        } else {
+            ensureBlock();
+        }
         if (m_styleManager) {
             QString styleName = QStringLiteral("Heading%1").arg(level);
             QTextBlockFormat bf;
@@ -218,9 +243,8 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         case 2: listFmt.setStyle(QTextListFormat::ListCircle); break;
         default: listFmt.setStyle(QTextListFormat::ListSquare); break;
         }
-        ensureBlock();
-        QTextList *list = m_cursor.createList(listFmt);
-        m_listStack.push(list);
+        // Defer list creation to first content block inside MD_BLOCK_LI
+        m_listStack.push({listFmt, nullptr});
         break;
     }
 
@@ -230,22 +254,26 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         listFmt.setStyle(QTextListFormat::ListDecimal);
         listFmt.setIndent(m_listStack.size() + 1);
         listFmt.setStart(static_cast<int>(d->start));
-        ensureBlock();
-        QTextList *list = m_cursor.createList(listFmt);
-        m_listStack.push(list);
+        m_listStack.push({listFmt, nullptr});
         break;
     }
 
     case MD_BLOCK_LI: {
         auto *d = static_cast<MD_BLOCK_LI_DETAIL *>(detail);
+        ensureBlock();
+
+        // Create or add to the list
         if (!m_listStack.isEmpty()) {
-            // First item was already created by createList, subsequent need a new block
-            QTextList *list = m_listStack.top();
-            if (list->count() > 0) {
-                ensureBlock();
-                list->add(m_cursor.block());
+            auto &info = m_listStack.top();
+            if (!info.list) {
+                // First item — createList makes the current block the first item
+                info.list = m_cursor.createList(info.format);
+            } else {
+                info.list->add(m_cursor.block());
             }
         }
+
+        // Task list markers
         if (d->is_task) {
             QTextBlockFormat bf = m_cursor.blockFormat();
             bf.setMarker(d->task_mark == ' '
@@ -253,9 +281,17 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
                          : QTextBlockFormat::MarkerType::Checked);
             m_cursor.setBlockFormat(bf);
         }
-        QTextCharFormat cf;
-        m_cursor.setBlockCharFormat(cf);
-        m_cursor.setCharFormat(cf);
+
+        // Apply ListItem paragraph style
+        if (m_styleManager) {
+            applyParagraphStyle(QStringLiteral("ListItem"));
+            QTextBlockFormat bf = m_cursor.blockFormat();
+            bf.setIndent(m_listStack.size());
+            m_cursor.setBlockFormat(bf);
+        }
+
+        // Tell the next child block (P, H) to reuse this block
+        m_listItemBlockReady = true;
         break;
     }
 
@@ -269,9 +305,9 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         QTextFrameFormat frameFmt;
         QColor bgColor(0xf6, 0xf8, 0xfa);
         if (m_styleManager) {
-            ParagraphStyle *codeStyle = m_styleManager->paragraphStyle(QStringLiteral("CodeBlock"));
-            if (codeStyle && codeStyle->hasExplicitBackground())
-                bgColor = codeStyle->background();
+            ParagraphStyle codeStyle = m_styleManager->resolvedParagraphStyle(QStringLiteral("CodeBlock"));
+            if (codeStyle.hasBackground())
+                bgColor = codeStyle.background();
         }
         frameFmt.setBackground(bgColor);
         frameFmt.setPadding(8.0);
@@ -296,13 +332,11 @@ int DocumentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         m_cursor.setBlockFormat(bf);
         if (m_styleManager) {
             // Apply only char-level formatting from CodeBlock style (bg handled by frame)
-            ParagraphStyle *style = m_styleManager->paragraphStyle(QStringLiteral("CodeBlock"));
-            if (style) {
-                QTextCharFormat cf;
-                style->applyCharFormat(cf);
-                m_cursor.setBlockCharFormat(cf);
-                m_cursor.setCharFormat(cf);
-            }
+            ParagraphStyle style = m_styleManager->resolvedParagraphStyle(QStringLiteral("CodeBlock"));
+            QTextCharFormat cf;
+            style.applyCharFormat(cf);
+            m_cursor.setBlockCharFormat(cf);
+            m_cursor.setCharFormat(cf);
         } else {
             m_cursor.setBlockCharFormat(codeBlockCharFormat());
             m_cursor.setCharFormat(codeBlockCharFormat());
@@ -411,6 +445,10 @@ int DocumentBuilder::leaveBlock(MD_BLOCKTYPE type, void *detail)
     switch (type) {
     case MD_BLOCK_QUOTE:
         m_blockQuoteLevel--;
+        break;
+
+    case MD_BLOCK_LI:
+        m_listItemBlockReady = false;
         break;
 
     case MD_BLOCK_UL:
@@ -699,7 +737,10 @@ int DocumentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text,
 
     case MD_TEXT_CODE: {
         if (m_inCodeBlock) {
-            // Split lines -- each becomes its own block inside the code frame
+            // Split lines -- each becomes its own block inside the code frame.
+            // Capture the char format from the first block (set by enterBlock
+            // from the style manager or fallback) so all lines match.
+            const QTextCharFormat codeCf = m_cursor.charFormat();
             const QStringList lines = str.split(QLatin1Char('\n'));
             for (int i = 0; i < lines.size(); ++i) {
                 if (i > 0) {
@@ -711,8 +752,8 @@ int DocumentBuilder::onText(MD_TEXTTYPE type, const MD_CHAR *text,
                         bf.setProperty(QTextFormat::BlockCodeLanguage,
                                        m_codeLanguage);
                     m_cursor.setBlockFormat(bf);
-                    m_cursor.setBlockCharFormat(codeBlockCharFormat());
-                    m_cursor.setCharFormat(codeBlockCharFormat());
+                    m_cursor.setBlockCharFormat(codeCf);
+                    m_cursor.setCharFormat(codeCf);
                 }
                 m_cursor.insertText(lines[i]);
             }

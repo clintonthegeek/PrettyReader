@@ -2,18 +2,17 @@
 #define PRETTYREADER_STYLEDOCKWIDGET_H
 
 #include <QWidget>
+#include <functional>
 
-#include "pagelayout.h"
-
-class KColorButton;
+class QCheckBox;
 class QComboBox;
-class QDoubleSpinBox;
-class QFontComboBox;
-class QSpinBox;
-class QToolButton;
-class QVBoxLayout;
+class QPushButton;
+class QTreeView;
 class StyleManager;
+class StylePropertiesEditor;
+class StyleTreeModel;
 class ThemeManager;
+struct PageLayout;
 
 class StyleDockWidget : public QWidget
 {
@@ -26,77 +25,50 @@ public:
     QString currentThemeId() const;
     void setCurrentThemeId(const QString &id);
 
-    // Apply current dock settings to a style manager
-    void applyOverrides(StyleManager *sm);
+    // Get the editing copy of styles (replaces old applyOverrides)
+    StyleManager *currentStyleManager() const;
 
-    // Get current page layout from dock controls
-    PageLayout currentPageLayout() const;
-
-    // Update controls from current style manager state
+    // Populate the dock from a new theme's StyleManager
     void populateFromStyleManager(StyleManager *sm);
+
+    // Provide a callback to get the current page layout for theme saving
+    void setPageLayoutProvider(std::function<PageLayout()> provider);
 
 signals:
     void themeChanged(const QString &themeId);
     void styleOverrideChanged();
-    void pageLayoutChanged();
 
 private slots:
     void onThemeComboChanged(int index);
-    void onOverrideChanged();
-    void onPageLayoutChanged();
+    void onStylePropertyChanged();
+    void onTreeSelectionChanged();
+    void onNewTheme();
+    void onSaveTheme();
+    void onDeleteTheme();
+    void onThemesChanged();
 
 private:
     void buildUI();
-    QWidget *createTypographySection();
-    QWidget *createPageLayoutSection();
-    QWidget *createSpacingSection();
-    QWidget *createStyleGroup(const QString &label,
-                              QFontComboBox **fontCombo,
-                              QDoubleSpinBox **sizeSpin,
-                              QToolButton **boldBtn,
-                              QToolButton **italicBtn);
+    void loadSelectedStyle();
 
     ThemeManager *m_themeManager;
+    StyleManager *m_editingStyles = nullptr;
+    std::function<PageLayout()> m_pageLayoutProvider;
 
-    // Theme selector
+    // Theme section
     QComboBox *m_themeCombo = nullptr;
+    QPushButton *m_newBtn = nullptr;
+    QPushButton *m_saveBtn = nullptr;
+    QPushButton *m_deleteBtn = nullptr;
 
-    // Body text controls
-    QFontComboBox *m_bodyFontCombo = nullptr;
-    QDoubleSpinBox *m_bodySizeSpin = nullptr;
-    QToolButton *m_bodyBoldBtn = nullptr;
-    QToolButton *m_bodyItalicBtn = nullptr;
+    // Style tree + editor
+    QCheckBox *m_showPreviewsCheck = nullptr;
+    QTreeView *m_styleTree = nullptr;
+    StyleTreeModel *m_treeModel = nullptr;
+    StylePropertiesEditor *m_propsEditor = nullptr;
 
-    // Heading controls
-    QFontComboBox *m_headingFontCombo = nullptr;
-    QDoubleSpinBox *m_headingSizeSpin = nullptr;
-    QToolButton *m_headingBoldBtn = nullptr;
-    QToolButton *m_headingItalicBtn = nullptr;
-
-    // Code block controls
-    QFontComboBox *m_codeFontCombo = nullptr;
-    QDoubleSpinBox *m_codeSizeSpin = nullptr;
-    QToolButton *m_codeBoldBtn = nullptr;
-    QToolButton *m_codeItalicBtn = nullptr;
-
-    // Spacing controls
-    QSpinBox *m_lineHeightSpin = nullptr;
-    QDoubleSpinBox *m_firstLineIndentSpin = nullptr;
-
-    // Color controls
-    KColorButton *m_bodyFgColorBtn = nullptr;
-    KColorButton *m_headingFgColorBtn = nullptr;
-    KColorButton *m_codeFgColorBtn = nullptr;
-    KColorButton *m_codeBgColorBtn = nullptr;
-    KColorButton *m_linkFgColorBtn = nullptr;
-
-    // Page layout controls
-    QComboBox *m_pageSizeCombo = nullptr;
-    QComboBox *m_orientationCombo = nullptr;
-    QDoubleSpinBox *m_marginTopSpin = nullptr;
-    QDoubleSpinBox *m_marginBottomSpin = nullptr;
-    QDoubleSpinBox *m_marginLeftSpin = nullptr;
-    QDoubleSpinBox *m_marginRightSpin = nullptr;
+    QString m_selectedStyleName;
+    bool m_selectedIsParagraph = true;
 };
 
 #endif // PRETTYREADER_STYLEDOCKWIDGET_H

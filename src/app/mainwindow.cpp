@@ -8,6 +8,7 @@
 #include <KSharedConfig>
 
 #include "pagelayout.h"
+#include "pagelayoutwidget.h"
 #include "sidebar.h"
 #include "toolview.h"
 #include "codeblockhighlighter.h"
@@ -108,6 +109,12 @@ MainWindow::MainWindow(QWidget *parent)
     setMinimumSize(800, 600);
     resize(1200, 800);
 
+    // Load the first theme so the style tree is populated on startup
+    QStringList themes = m_themeManager->availableThemes();
+    if (!themes.isEmpty()) {
+        onThemeChanged(themes.first());
+    }
+
     restoreSession();
 }
 
@@ -161,7 +168,7 @@ void MainWindow::setupSidebars()
         }
     });
 
-    // Right sidebar: Style panel
+    // Right sidebar: Style panel + Page Layout panel
     m_rightSidebar = new Sidebar(Sidebar::Right, this);
 
     m_styleDockWidget = new StyleDockWidget(m_themeManager, this);
@@ -169,11 +176,19 @@ void MainWindow::setupSidebars()
     m_styleTabId = m_rightSidebar->addPanel(
         styleView, QIcon::fromTheme(QStringLiteral("preferences-desktop-font")), i18n("Style"));
 
+    m_pageLayoutWidget = new PageLayoutWidget(this);
+    auto *pageView = new ToolView(i18n("Page"), m_pageLayoutWidget);
+    m_pageLayoutTabId = m_rightSidebar->addPanel(
+        pageView, QIcon::fromTheme(QStringLiteral("document-properties")), i18n("Page"));
+
+    m_styleDockWidget->setPageLayoutProvider([this]() {
+        return m_pageLayoutWidget->currentPageLayout();
+    });
     connect(m_styleDockWidget, &StyleDockWidget::themeChanged,
             this, &MainWindow::onThemeChanged);
     connect(m_styleDockWidget, &StyleDockWidget::styleOverrideChanged,
             this, &MainWindow::onStyleOverrideChanged);
-    connect(m_styleDockWidget, &StyleDockWidget::pageLayoutChanged,
+    connect(m_pageLayoutWidget, &PageLayoutWidget::pageLayoutChanged,
             this, &MainWindow::onPageLayoutChanged);
 }
 
@@ -353,10 +368,8 @@ void MainWindow::onFileExportPdf()
     }
 
     auto *controller = new PrintController(view->document(), this);
-    PageLayout pl = m_styleDockWidget->currentPageLayout();
-    controller->setPageSize(pl.pageSizeId);
-    controller->setOrientation(pl.orientation);
-    controller->setMargins(pl.margins);
+    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+    controller->setPageLayout(pl);
     QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
     controller->setFileName(title);
     controller->exportPdf(QString(), this);
@@ -372,10 +385,8 @@ void MainWindow::onFilePrint()
     }
 
     auto *controller = new PrintController(view->document(), this);
-    PageLayout pl = m_styleDockWidget->currentPageLayout();
-    controller->setPageSize(pl.pageSizeId);
-    controller->setOrientation(pl.orientation);
-    controller->setMargins(pl.margins);
+    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+    controller->setPageLayout(pl);
     QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
     controller->setFileName(title);
     controller->print(this);
@@ -392,12 +403,18 @@ void MainWindow::onFileClose()
 
 void MainWindow::onThemeChanged(const QString &themeId)
 {
-    // Update color buttons from the newly loaded theme before rebuilding
+    // Load theme into a new StyleManager and hand it to the dock
     auto *sm = new StyleManager(this);
     if (!m_themeManager->loadTheme(themeId, sm))
         m_themeManager->loadDefaults(sm);
     m_styleDockWidget->populateFromStyleManager(sm);
     delete sm;
+
+    // Re-apply page layout from theme
+    PageLayout pl = m_themeManager->themePageLayout();
+    auto *view = currentDocumentView();
+    if (view)
+        view->setPageLayout(pl);
 
     rebuildCurrentDocument();
 }
@@ -409,10 +426,11 @@ void MainWindow::onStyleOverrideChanged()
 
 void MainWindow::onPageLayoutChanged()
 {
-    PageLayout pl = m_styleDockWidget->currentPageLayout();
+    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
     auto *view = currentDocumentView();
     if (view)
-        view->setPageSize(pl.pageSizePoints());
+        view->setPageLayout(pl);
+    rebuildCurrentDocument();
 }
 
 void MainWindow::onZoomIn()
@@ -555,12 +573,17 @@ void MainWindow::rebuildCurrentDocument()
         file.close();
     }
 
-    // Build with current theme + overrides
-    auto *styleManager = new StyleManager(this);
-    QString themeId = m_styleDockWidget->currentThemeId();
-    if (!m_themeManager->loadTheme(themeId, styleManager))
-        m_themeManager->loadDefaults(styleManager);
-    m_styleDockWidget->applyOverrides(styleManager);
+    // Use the editing copy from the style dock, or load fresh if none
+    StyleManager *editingSm = m_styleDockWidget->currentStyleManager();
+    StyleManager *styleManager;
+    if (editingSm) {
+        styleManager = editingSm->clone(this);
+    } else {
+        styleManager = new StyleManager(this);
+        QString themeId = m_styleDockWidget->currentThemeId();
+        if (!m_themeManager->loadTheme(themeId, styleManager))
+            m_themeManager->loadDefaults(styleManager);
+    }
 
     auto *doc = new QTextDocument(this);
     auto *builder = new DocumentBuilder(doc, this);
@@ -571,12 +594,17 @@ void MainWindow::rebuildCurrentDocument()
     CodeBlockHighlighter rebuildHighlighter;
     rebuildHighlighter.highlight(doc);
 
-    // Replace document in current tab's DocumentView
+    // Replace document in current tab's DocumentView, preserving view state
     auto *view = tab->documentView();
     if (view) {
+        ViewState state = view->saveViewState();
         QTextDocument *oldDoc = view->document();
         view->setDocument(doc);
         delete oldDoc;
+        view->restoreViewState(state);
+
+        QFileInfo fi(filePath);
+        view->setDocumentInfo(fi.fileName(), fi.baseName());
     }
 
     // Update TOC
@@ -610,12 +638,17 @@ void MainWindow::openFile(const QUrl &url)
     const QString markdown = QString::fromUtf8(file.readAll());
     file.close();
 
-    // Build document with style manager
-    auto *styleManager = new StyleManager(this);
-    QString themeId = m_styleDockWidget->currentThemeId();
-    if (!m_themeManager->loadTheme(themeId, styleManager))
-        m_themeManager->loadDefaults(styleManager);
-    m_styleDockWidget->applyOverrides(styleManager);
+    // Build document with style manager (use editing copy if available)
+    StyleManager *editingSm = m_styleDockWidget->currentStyleManager();
+    StyleManager *styleManager;
+    if (editingSm) {
+        styleManager = editingSm->clone(this);
+    } else {
+        styleManager = new StyleManager(this);
+        QString themeId = m_styleDockWidget->currentThemeId();
+        if (!m_themeManager->loadTheme(themeId, styleManager))
+            m_themeManager->loadDefaults(styleManager);
+    }
 
     auto *doc = new QTextDocument(this);
     auto *builder = new DocumentBuilder(doc, this);
@@ -630,9 +663,12 @@ void MainWindow::openFile(const QUrl &url)
     auto *tab = new DocumentTab(this);
     tab->setFilePath(filePath);
     tab->setSourceText(markdown);
-    PageLayout openPl = m_styleDockWidget->currentPageLayout();
-    tab->documentView()->setPageSize(openPl.pageSizePoints());
+    PageLayout openPl = m_pageLayoutWidget->currentPageLayout();
+    tab->documentView()->setPageLayout(openPl);
     tab->documentView()->setDocument(doc);
+
+    QFileInfo fi(filePath);
+    tab->documentView()->setDocumentInfo(fi.fileName(), fi.baseName());
 
     // Connect zoom signal to status bar spinbox
     connect(tab->documentView(), &DocumentView::zoomChanged,
@@ -642,8 +678,6 @@ void MainWindow::openFile(const QUrl &url)
             m_zoomSpinBox->setValue(percent);
         }
     });
-
-    QFileInfo fi(filePath);
     int index = m_tabWidget->addTab(tab, fi.fileName());
     m_tabWidget->setTabToolTip(index, filePath);
     m_tabWidget->setCurrentIndex(index);

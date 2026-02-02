@@ -15,7 +15,11 @@ public:
     QString name() const { return m_name; }
     void setName(const QString &name) { m_name = name; }
 
-    // Block formatting
+    // Parent style for cascading hierarchy
+    QString parentStyleName() const { return m_parentStyleName; }
+    void setParentStyleName(const QString &name) { m_parentStyleName = name; }
+
+    // Block formatting — setters
     void setAlignment(Qt::Alignment align) { m_alignment = align; m_hasAlignment = true; }
     void setSpaceBefore(qreal pts) { m_spaceBefore = pts; m_hasSpaceBefore = true; }
     void setSpaceAfter(qreal pts) { m_spaceAfter = pts; m_hasSpaceAfter = true; }
@@ -27,20 +31,54 @@ public:
     void setFirstLineIndent(qreal pts) { m_firstLineIndent = pts; m_hasFirstLineIndent = true; }
     void setWordSpacing(qreal pts) { m_wordSpacing = pts; m_hasWordSpacing = true; }
 
-    // Getters for querying explicit state
+    // Block formatting — getters
+    Qt::Alignment alignment() const { return m_alignment; }
+    qreal spaceBefore() const { return m_spaceBefore; }
+    qreal spaceAfter() const { return m_spaceAfter; }
+    qreal leftMargin() const { return m_leftMargin; }
+    qreal rightMargin() const { return m_rightMargin; }
+    int lineHeightPercent() const { return m_lineHeightPct; }
+    QColor background() const { return m_background; }
+    int headingLevel() const { return m_headingLevel; }
+    qreal firstLineIndent() const { return m_firstLineIndent; }
+    qreal wordSpacing() const { return m_wordSpacing; }
+
+    // Block formatting — has* flags
+    bool hasAlignment() const { return m_hasAlignment; }
+    bool hasSpaceBefore() const { return m_hasSpaceBefore; }
+    bool hasSpaceAfter() const { return m_hasSpaceAfter; }
+    bool hasLeftMargin() const { return m_hasLeftMargin; }
+    bool hasRightMargin() const { return m_hasRightMargin; }
+    bool hasLineHeight() const { return m_hasLineHeight; }
+    bool hasBackground() const { return m_hasBackground; }
+    bool hasFirstLineIndent() const { return m_hasFirstLineIndent; }
+    bool hasWordSpacing() const { return m_hasWordSpacing; }
+
+    // Backward compat aliases
     bool hasExplicitAlignment() const { return m_hasAlignment; }
     bool hasExplicitBackground() const { return m_hasBackground; }
     bool hasExplicitForeground() const { return m_hasForeground; }
-    QColor background() const { return m_background; }
-    QColor foreground() const { return m_foreground; }
-    int headingLevel() const { return m_headingLevel; }
 
-    // Character formatting (inherited by text in this paragraph)
+    // Character formatting (inherited by text in this paragraph) — setters
     void setFontFamily(const QString &family) { m_fontFamily = family; m_hasFontFamily = true; }
     void setFontSize(qreal pts) { m_fontSize = pts; m_hasFontSize = true; }
     void setFontWeight(QFont::Weight w) { m_fontWeight = w; m_hasFontWeight = true; }
     void setFontItalic(bool on) { m_fontItalic = on; m_hasFontItalic = true; }
     void setForeground(const QColor &c) { m_foreground = c; m_hasForeground = true; }
+
+    // Character formatting — getters
+    QString fontFamily() const { return m_fontFamily; }
+    qreal fontSize() const { return m_fontSize; }
+    QFont::Weight fontWeight() const { return m_fontWeight; }
+    bool fontItalic() const { return m_fontItalic; }
+    QColor foreground() const { return m_foreground; }
+
+    // Character formatting — has* flags
+    bool hasFontFamily() const { return m_hasFontFamily; }
+    bool hasFontSize() const { return m_hasFontSize; }
+    bool hasFontWeight() const { return m_hasFontWeight; }
+    bool hasFontItalic() const { return m_hasFontItalic; }
+    bool hasForeground() const { return m_hasForeground; }
 
     // Apply to QTextBlockFormat + QTextCharFormat
     void applyBlockFormat(QTextBlockFormat &bf) const;
@@ -51,6 +89,7 @@ public:
 
 private:
     QString m_name;
+    QString m_parentStyleName;
 
     // Block properties
     Qt::Alignment m_alignment = Qt::AlignLeft;

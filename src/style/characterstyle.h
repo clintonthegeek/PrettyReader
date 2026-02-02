@@ -15,6 +15,11 @@ public:
     QString name() const { return m_name; }
     void setName(const QString &name) { m_name = name; }
 
+    // Parent style for cascading hierarchy
+    QString parentStyleName() const { return m_parentStyleName; }
+    void setParentStyleName(const QString &name) { m_parentStyleName = name; }
+
+    // Setters
     void setFontFamily(const QString &family) { m_fontFamily = family; m_hasFontFamily = true; }
     void setFontSize(qreal pts) { m_fontSize = pts; m_hasFontSize = true; }
     void setFontWeight(QFont::Weight w) { m_fontWeight = w; m_hasFontWeight = true; }
@@ -25,6 +30,28 @@ public:
     void setBackground(const QColor &c) { m_background = c; m_hasBackground = true; }
     void setLetterSpacing(qreal pts) { m_letterSpacing = pts; m_hasLetterSpacing = true; }
 
+    // Getters
+    QString fontFamily() const { return m_fontFamily; }
+    qreal fontSize() const { return m_fontSize; }
+    QFont::Weight fontWeight() const { return m_fontWeight; }
+    bool fontItalic() const { return m_fontItalic; }
+    bool fontUnderline() const { return m_fontUnderline; }
+    bool fontStrikeOut() const { return m_fontStrikeOut; }
+    QColor foreground() const { return m_foreground; }
+    QColor background() const { return m_background; }
+    qreal letterSpacing() const { return m_letterSpacing; }
+
+    // Has* flags
+    bool hasFontFamily() const { return m_hasFontFamily; }
+    bool hasFontSize() const { return m_hasFontSize; }
+    bool hasFontWeight() const { return m_hasFontWeight; }
+    bool hasFontItalic() const { return m_hasFontItalic; }
+    bool hasFontUnderline() const { return m_hasFontUnderline; }
+    bool hasFontStrikeOut() const { return m_hasFontStrikeOut; }
+    bool hasForeground() const { return m_hasForeground; }
+    bool hasBackground() const { return m_hasBackground; }
+    bool hasLetterSpacing() const { return m_hasLetterSpacing; }
+
     // Apply to QTextCharFormat (merge -- does not reset existing properties)
     void applyFormat(QTextCharFormat &cf) const;
 
@@ -33,6 +60,7 @@ public:
 
 private:
     QString m_name;
+    QString m_parentStyleName;
     QString m_fontFamily;
     qreal m_fontSize = 0;
     QFont::Weight m_fontWeight = QFont::Normal;

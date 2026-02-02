@@ -1,5 +1,6 @@
 #include "documentview.h"
 #include "pageitem.h"
+#include "pagelayout.h"
 
 #include <QGraphicsScene>
 #include <QScrollBar>
@@ -35,17 +36,69 @@ void DocumentView::setDocument(QTextDocument *doc)
         return;
     }
 
-    // Set page size so QTextDocument paginates
-    m_document->setPageSize(m_pageSize);
+    // Use content size (minus margins and header/footer) for document pagination
+    QSizeF docPageSize = m_marginsPoints.isNull()
+        ? m_pageSize
+        : m_pageLayout.contentSizePoints();
+    m_document->setPageSize(docPageSize);
     m_pageCount = m_document->pageCount();
 
     layoutPages();
 
-    // Start at first page; defer fitWidth until layout is complete
+    // Start at first page; defer fitWidth unless restoring state
     if (!m_pageItems.isEmpty()) {
         m_currentPage = 0;
-        QTimer::singleShot(0, this, &DocumentView::fitWidth);
+        if (!m_skipAutoFit) {
+            QTimer::singleShot(0, this, &DocumentView::fitWidth);
+        }
+        m_skipAutoFit = false;
     }
+}
+
+void DocumentView::setDocumentInfo(const QString &fileName, const QString &title)
+{
+    m_fileName = fileName;
+    m_title = title;
+
+    // Update existing page items
+    for (auto *page : m_pageItems)
+        page->setDocumentInfo(m_pageCount, m_fileName, m_title);
+
+    // Trigger repaint so headers/footers update
+    if (m_scene)
+        m_scene->update();
+}
+
+ViewState DocumentView::saveViewState() const
+{
+    ViewState state;
+    state.zoomPercent = m_currentZoom;
+    state.currentPage = m_currentPage;
+    auto *vbar = verticalScrollBar();
+    if (vbar && vbar->maximum() > 0)
+        state.scrollFraction = static_cast<qreal>(vbar->value()) / vbar->maximum();
+    else
+        state.scrollFraction = 0.0;
+    state.valid = true;
+    return state;
+}
+
+void DocumentView::restoreViewState(const ViewState &state)
+{
+    if (!state.valid)
+        return;
+
+    m_skipAutoFit = true;
+    setZoomPercent(state.zoomPercent);
+
+    QTimer::singleShot(0, this, [this, state]() {
+        auto *vbar = verticalScrollBar();
+        if (vbar && vbar->maximum() > 0) {
+            vbar->setValue(qRound(state.scrollFraction * vbar->maximum()));
+        }
+        m_currentPage = qBound(0, state.currentPage, m_pageCount - 1);
+        Q_EMIT currentPageChanged(m_currentPage);
+    });
 }
 
 void DocumentView::layoutPages()
@@ -58,8 +111,12 @@ void DocumentView::layoutPages()
         if (i < m_pageItems.size()) {
             page = m_pageItems[i];
             page->setPageNumber(i);
+            page->setPageLayout(m_pageLayout);
+            page->setDocumentInfo(m_pageCount, m_fileName, m_title);
         } else {
-            page = new PageItem(i, m_pageSize, m_document);
+            page = new PageItem(i, m_pageSize, m_document, m_marginsPoints);
+            page->setPageLayout(m_pageLayout);
+            page->setDocumentInfo(m_pageCount, m_fileName, m_title);
             page->setFlag(QGraphicsItem::ItemUsesExtendedStyleOption);
             m_scene->addItem(page);
             m_pageItems.append(page);
@@ -85,8 +142,22 @@ void DocumentView::setPageSize(const QSizeF &size)
     if (size == m_pageSize)
         return;
     m_pageSize = size;
+    m_marginsPoints = QMarginsF();
     if (m_document) {
         m_document->setPageSize(m_pageSize);
+        m_pageCount = m_document->pageCount();
+        layoutPages();
+    }
+}
+
+void DocumentView::setPageLayout(const PageLayout &layout)
+{
+    m_pageLayout = layout;
+    m_pageSize = layout.pageSizePoints();
+    m_marginsPoints = layout.marginsPoints();
+
+    if (m_document) {
+        m_document->setPageSize(layout.contentSizePoints());
         m_pageCount = m_document->pageCount();
         layoutPages();
     }

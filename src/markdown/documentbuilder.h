@@ -71,7 +71,18 @@ private:
 
     // Tracking
     QStack<QTextCharFormat> m_charFormatStack;
-    QStack<QTextList *> m_listStack;
+
+    struct ListInfo {
+        QTextListFormat format;
+        QTextList *list = nullptr;
+    };
+    QStack<ListInfo> m_listStack;
+
+    // Set by MD_BLOCK_LI after it creates a block; tells the next child
+    // block handler (P, H, etc.) to skip ensureBlock() and reuse the
+    // block that LI already created.
+    bool m_listItemBlockReady = false;
+
     QTextTable *m_currentTable = nullptr;
     int m_tableRow = 0;
     int m_tableCol = 0;

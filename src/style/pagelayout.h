@@ -5,6 +5,7 @@
 #include <QPageLayout>
 #include <QPageSize>
 #include <QSizeF>
+#include <QString>
 
 struct PageLayout
 {
@@ -12,7 +13,33 @@ struct PageLayout
     QPageLayout::Orientation orientation = QPageLayout::Portrait;
     QMarginsF margins{25.0, 25.0, 25.0, 25.0}; // mm
 
+    // Header/footer configuration
+    bool headerEnabled = false;
+    bool footerEnabled = true;
+    QString headerLeft;
+    QString headerCenter;
+    QString headerRight;
+    QString footerLeft;
+    QString footerCenter;
+    QString footerRight{QStringLiteral("{page} / {pages}")};
+
+    // Height constants (points)
+    static constexpr qreal kHeaderHeight = 16.0;
+    static constexpr qreal kFooterHeight = 14.0;
+    static constexpr qreal kSeparatorGap = 6.0;
+
+    qreal headerTotalHeight() const
+    {
+        return headerEnabled ? (kHeaderHeight + kSeparatorGap) : 0.0;
+    }
+
+    qreal footerTotalHeight() const
+    {
+        return footerEnabled ? (kFooterHeight + kSeparatorGap) : 0.0;
+    }
+
     // Return the content area size in points (72 dpi)
+    // Subtracts margins and header/footer heights from the full page size.
     QSizeF contentSizePoints() const
     {
         QPageSize ps(pageSizeId);
@@ -28,7 +55,8 @@ struct PageLayout
         qreal bottom = margins.bottom() * mmToPt;
 
         return QSizeF(full.width() - left - right,
-                      full.height() - top - bottom);
+                      full.height() - top - bottom
+                          - headerTotalHeight() - footerTotalHeight());
     }
 
     // Return the full page size in points
@@ -39,6 +67,16 @@ struct PageLayout
         if (orientation == QPageLayout::Landscape)
             full.transpose();
         return full;
+    }
+
+    // Return margins in points
+    QMarginsF marginsPoints() const
+    {
+        constexpr qreal mmToPt = 72.0 / 25.4;
+        return QMarginsF(margins.left()   * mmToPt,
+                         margins.top()    * mmToPt,
+                         margins.right()  * mmToPt,
+                         margins.bottom() * mmToPt);
     }
 };
 

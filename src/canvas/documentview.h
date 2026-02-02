@@ -2,9 +2,21 @@
 #define PRETTYREADER_DOCUMENTVIEW_H
 
 #include <QGraphicsView>
+#include <QMarginsF>
+#include <QString>
 #include <QTextDocument>
 
+#include "pagelayout.h"
+
 class PageItem;
+
+struct ViewState
+{
+    int zoomPercent = 100;
+    int currentPage = 0;
+    qreal scrollFraction = 0.0;
+    bool valid = false;
+};
 
 class DocumentView : public QGraphicsView
 {
@@ -17,6 +29,12 @@ public:
     QTextDocument *document() const { return m_document; }
 
     void setPageSize(const QSizeF &size);
+    void setPageLayout(const PageLayout &layout);
+
+    void setDocumentInfo(const QString &fileName, const QString &title);
+
+    ViewState saveViewState() const;
+    void restoreViewState(const ViewState &state);
 
     // Zoom
     void setZoomPercent(int percent);
@@ -54,10 +72,15 @@ private:
     QTextDocument *m_document = nullptr;
     QList<PageItem *> m_pageItems;
     QSizeF m_pageSize;
+    PageLayout m_pageLayout;
+    QMarginsF m_marginsPoints;
+    QString m_fileName;
+    QString m_title;
     int m_pageCount = 0;
     int m_currentPage = 0;
     int m_currentZoom = 100;
     bool m_continuousMode = true;
+    bool m_skipAutoFit = false;
 
     static constexpr qreal kPageGap = 12.0;
     static constexpr qreal kSceneMargin = 40.0;

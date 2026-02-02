@@ -4,109 +4,127 @@
     "description": "Clean sans/serif typography for everyday reading",
 
     "paragraphStyles": {
-        "BodyText": {
+        "Default Paragraph Style": {
             "fontFamily": "Noto Serif",
             "fontSize": 11.0,
-            "lineHeightPercent": 150,
-            "spaceAfter": 6.0,
+            "lineHeightPercent": 100,
             "foreground": "#1a1a1a"
         },
-        "Heading1": {
+        "Heading": {
+            "parent": "Default Paragraph Style",
             "fontFamily": "Noto Sans",
-            "fontSize": 28.0,
             "fontWeight": "bold",
+            "alignment": "left"
+        },
+        "BodyText": {
+            "parent": "Default Paragraph Style",
+            "spaceAfter": 6.0
+        },
+        "Heading1": {
+            "parent": "Heading",
+            "fontSize": 28.0,
             "spaceBefore": 24.0,
             "spaceAfter": 12.0,
             "foreground": "#1a1a2e"
         },
         "Heading2": {
-            "fontFamily": "Noto Sans",
+            "parent": "Heading",
             "fontSize": 22.0,
-            "fontWeight": "bold",
             "spaceBefore": 20.0,
             "spaceAfter": 10.0,
             "foreground": "#1a1a2e"
         },
         "Heading3": {
-            "fontFamily": "Noto Sans",
+            "parent": "Heading",
             "fontSize": 18.0,
-            "fontWeight": "bold",
             "spaceBefore": 16.0,
             "spaceAfter": 8.0,
             "foreground": "#1a1a2e"
         },
         "Heading4": {
-            "fontFamily": "Noto Sans",
+            "parent": "Heading",
             "fontSize": 15.0,
-            "fontWeight": "bold",
             "spaceBefore": 12.0,
             "spaceAfter": 6.0,
             "foreground": "#1a1a2e"
         },
         "Heading5": {
-            "fontFamily": "Noto Sans",
+            "parent": "Heading",
             "fontSize": 13.0,
-            "fontWeight": "bold",
             "spaceBefore": 10.0,
             "spaceAfter": 4.0,
             "foreground": "#1a1a2e"
         },
         "Heading6": {
-            "fontFamily": "Noto Sans",
+            "parent": "Heading",
             "fontSize": 11.0,
-            "fontWeight": "bold",
             "fontItalic": true,
             "spaceBefore": 8.0,
             "spaceAfter": 4.0,
             "foreground": "#1a1a2e"
         },
         "BlockQuote": {
+            "parent": "BodyText",
             "fontItalic": true,
-            "foreground": "#555555",
-            "spaceAfter": 6.0
+            "foreground": "#555555"
+        },
+        "ListItem": {
+            "parent": "BodyText"
         },
         "CodeBlock": {
+            "parent": "Default Paragraph Style",
             "fontFamily": "JetBrains Mono",
             "fontSize": 10.0,
             "background": "#f6f8fa",
             "lineHeightPercent": 140
         },
         "TableHeader": {
+            "parent": "Default Paragraph Style",
             "fontWeight": "bold",
             "background": "#f0f0f0",
             "alignment": "center"
         },
         "TableBody": {
+            "parent": "Default Paragraph Style"
         }
     },
 
     "characterStyles": {
-        "DefaultText": {
+        "Default Character Style": {
             "fontFamily": "Noto Serif",
             "fontSize": 11.0,
             "foreground": "#1a1a1a"
         },
+        "DefaultText": {
+            "parent": "Default Character Style"
+        },
         "Emphasis": {
+            "parent": "Default Character Style",
             "fontItalic": true
         },
         "Strong": {
+            "parent": "Default Character Style",
             "fontWeight": "bold"
         },
         "StrongEmphasis": {
+            "parent": "Default Character Style",
             "fontWeight": "bold",
             "fontItalic": true
         },
         "InlineCode": {
+            "parent": "Default Character Style",
             "fontFamily": "JetBrains Mono",
             "fontSize": 10.0,
             "foreground": "#c7254e",
             "background": "#f0f0f0"
         },
         "Link": {
+            "parent": "Default Character Style",
             "foreground": "#0366d6",
             "underline": true
         },
         "Strikethrough": {
+            "parent": "Default Character Style",
             "strikeOut": true
         }
     }

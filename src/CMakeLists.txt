@@ -17,6 +17,8 @@ add_library(PrettyReaderCore STATIC
     canvas/pageitem.h
     canvas/documentview.cpp
     canvas/documentview.h
+    print/headerfooterrenderer.cpp
+    print/headerfooterrenderer.h
     print/printcontroller.cpp
     print/printcontroller.h
     style/pagelayout.h
@@ -26,12 +28,18 @@ add_library(PrettyReaderCore STATIC
     style/characterstyle.h
     style/stylemanager.cpp
     style/stylemanager.h
+    style/styletreemodel.cpp
+    style/styletreemodel.h
     style/thememanager.cpp
     style/thememanager.h
+    widgets/pagelayoutwidget.cpp
+    widgets/pagelayoutwidget.h
     widgets/sidebar.cpp
     widgets/sidebar.h
     widgets/styledockwidget.cpp
     widgets/styledockwidget.h
+    widgets/stylepropertieseditor.cpp
+    widgets/stylepropertieseditor.h
     widgets/toolview.cpp
     widgets/toolview.h
     widgets/filebrowserdock.cpp

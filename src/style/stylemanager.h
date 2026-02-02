@@ -21,8 +21,23 @@ public:
     ParagraphStyle *paragraphStyle(const QString &name);
     CharacterStyle *characterStyle(const QString &name);
 
+    const QHash<QString, ParagraphStyle> &paragraphStyles() const { return m_paraStyles; }
+    const QHash<QString, CharacterStyle> &characterStyles() const { return m_charStyles; }
+
     QStringList paragraphStyleNames() const;
     QStringList characterStyleNames() const;
+
+    // Resolve a style by walking its parent chain.
+    // Returns a fully-resolved copy with all inherited properties filled in.
+    ParagraphStyle resolvedParagraphStyle(const QString &name);
+    CharacterStyle resolvedCharacterStyle(const QString &name);
+
+    // Get ordered ancestor list for a style (for tree display)
+    QStringList paragraphStyleAncestors(const QString &name);
+    QStringList characterStyleAncestors(const QString &name);
+
+    // Deep-copy this style manager
+    StyleManager *clone(QObject *parent = nullptr) const;
 
 signals:
     void stylesChanged();

@@ -10,6 +10,7 @@ class QTabWidget;
 class KRecentFilesAction;
 class FileBrowserDock;
 class MetadataStore;
+class PageLayoutWidget;
 class Sidebar;
 class TocWidget;
 class ThemeManager;
@@ -65,8 +66,10 @@ private:
     int m_styleTabId = -1;
 
     StyleDockWidget *m_styleDockWidget = nullptr;
+    PageLayoutWidget *m_pageLayoutWidget = nullptr;
     FileBrowserDock *m_fileBrowserWidget = nullptr;
     TocWidget *m_tocWidget = nullptr;
+    int m_pageLayoutTabId = -1;
     KRecentFilesAction *m_recentFilesAction = nullptr;
     ThemeManager *m_themeManager = nullptr;
     MetadataStore *m_metadataStore = nullptr;
