@@ -42,20 +42,16 @@ private:
     struct TreeNode {
         QString name;
         QString styleName;   // empty for category nodes
-        bool isParagraph = true;
-        bool isCategory = false;
-        bool isTable = false;
-        bool isFootnote = false;
+        enum NodeType { Category, ParagraphStyleNode, CharacterStyleNode,
+                        TableStyleNode, FootnoteNode };
+        NodeType nodeType = Category;
         TreeNode *parent = nullptr;
         QList<TreeNode *> children;
         ~TreeNode() { qDeleteAll(children); }
     };
 
     void rebuildTree();
-    void addParagraphSubtree(TreeNode *root);
-    void addCharacterSubtree(TreeNode *root);
-    void addTableSubtree(TreeNode *root);
-    void addDocumentSubtree(TreeNode *root);
+    void buildSemanticTree(TreeNode *root);
     TreeNode *findChildByStyleName(TreeNode *parent, const QString &name) const;
 
     StyleManager *m_styleManager = nullptr;

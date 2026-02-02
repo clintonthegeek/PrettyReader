@@ -21,6 +21,12 @@ public:
     QString parentStyleName() const { return m_parentStyleName; }
     void setParentStyleName(const QString &name) { m_parentStyleName = name; }
 
+    // Base character style — a character style whose text properties (font, etc.)
+    // fill in unset char properties after the paragraph parent chain walk.
+    QString baseCharacterStyleName() const { return m_baseCharStyleName; }
+    void setBaseCharacterStyleName(const QString &name) { m_baseCharStyleName = name; }
+    bool hasBaseCharacterStyle() const { return !m_baseCharStyleName.isEmpty(); }
+
     // Block formatting — setters
     void setAlignment(Qt::Alignment align) { m_alignment = align; m_hasAlignment = true; }
     void setSpaceBefore(qreal pts) { m_spaceBefore = pts; m_hasSpaceBefore = true; }
@@ -95,6 +101,7 @@ public:
 private:
     QString m_name;
     QString m_parentStyleName;
+    QString m_baseCharStyleName;
 
     // Block properties
     Qt::Alignment m_alignment = Qt::AlignLeft;

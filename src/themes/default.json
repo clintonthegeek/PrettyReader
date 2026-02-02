@@ -1,6 +1,6 @@
 {
     "name": "Default",
-    "version": 1,
+    "version": 2,
     "description": "Clean sans/serif typography for everyday reading",
 
     "paragraphStyles": {
@@ -8,7 +8,8 @@
             "fontFamily": "Noto Serif",
             "fontSize": 11.0,
             "lineHeightPercent": 100,
-            "foreground": "#1a1a1a"
+            "foreground": "#1a1a1a",
+            "fontFeatures": ["liga", "kern", "calt", "onum"]
         },
         "Heading": {
             "parent": "Default Paragraph Style",
@@ -18,6 +19,7 @@
         },
         "BodyText": {
             "parent": "Default Paragraph Style",
+            "alignment": "justify",
             "spaceAfter": 6.0
         },
         "Heading1": {
@@ -71,10 +73,18 @@
         "ListItem": {
             "parent": "BodyText"
         },
+        "OrderedListItem": {
+            "parent": "ListItem"
+        },
+        "UnorderedListItem": {
+            "parent": "ListItem"
+        },
+        "TaskListItem": {
+            "parent": "ListItem"
+        },
         "CodeBlock": {
             "parent": "Default Paragraph Style",
-            "fontFamily": "JetBrains Mono",
-            "fontSize": 10.0,
+            "baseCharacterStyle": "Code",
             "background": "#f6f8fa",
             "lineHeightPercent": 140
         },
@@ -86,6 +96,12 @@
         },
         "TableBody": {
             "parent": "Default Paragraph Style"
+        },
+        "HorizontalRule": {
+            "parent": "Default Paragraph Style"
+        },
+        "MathDisplay": {
+            "parent": "Default Paragraph Style"
         }
     },
 
@@ -93,7 +109,8 @@
         "Default Character Style": {
             "fontFamily": "Noto Serif",
             "fontSize": 11.0,
-            "foreground": "#1a1a1a"
+            "foreground": "#1a1a1a",
+            "fontFeatures": ["liga", "kern", "calt", "onum"]
         },
         "DefaultText": {
             "parent": "Default Character Style"
@@ -111,10 +128,23 @@
             "fontWeight": "bold",
             "fontItalic": true
         },
-        "InlineCode": {
+        "Strikethrough": {
+            "parent": "Default Character Style",
+            "strikeOut": true
+        },
+        "Subscript": {
+            "parent": "Default Character Style"
+        },
+        "Superscript": {
+            "parent": "Default Character Style"
+        },
+        "Code": {
             "parent": "Default Character Style",
             "fontFamily": "JetBrains Mono",
-            "fontSize": 10.0,
+            "fontSize": 10.0
+        },
+        "InlineCode": {
+            "parent": "Code",
             "foreground": "#c7254e",
             "background": "#f0f0f0"
         },
@@ -123,9 +153,11 @@
             "foreground": "#0366d6",
             "underline": true
         },
-        "Strikethrough": {
-            "parent": "Default Character Style",
-            "strikeOut": true
+        "MathInline": {
+            "parent": "Default Character Style"
+        },
+        "Emoji": {
+            "parent": "Default Character Style"
         }
     },
 

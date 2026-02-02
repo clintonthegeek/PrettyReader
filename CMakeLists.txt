@@ -27,4 +27,16 @@ find_package(KF6ConfigWidgets REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6SyntaxHighlighting REQUIRED)
 
+# PDF rendering pipeline dependencies (Phase 4)
+find_package(Poppler REQUIRED COMPONENTS Qt6)
+find_package(Freetype REQUIRED)
+find_package(ICU REQUIRED COMPONENTS uc i18n)
+find_package(ZLIB REQUIRED)
+
+include(FindPkgConfig)
+pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+pkg_check_modules(HARFBUZZ REQUIRED harfbuzz)
+pkg_check_modules(HARFBUZZ_ICU REQUIRED harfbuzz-icu)
+pkg_check_modules(HARFBUZZ_SUBSET REQUIRED harfbuzz-subset)
+
 add_subdirectory(src)

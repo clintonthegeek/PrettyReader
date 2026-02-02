@@ -1,0 +1,85 @@
+/*
+ * pdfpageitem.cpp — Poppler-backed QGraphicsItem
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
+#include "pdfpageitem.h"
+#include "rendercache.h"
+
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
+
+PdfPageItem::PdfPageItem(int pageNumber, QSizeF pageSize, RenderCache *cache,
+                         QGraphicsItem *parent)
+    : QGraphicsItem(parent)
+    , m_pageNumber(pageNumber)
+    , m_pageSize(pageSize)
+    , m_cache(cache)
+{
+}
+
+QRectF PdfPageItem::boundingRect() const
+{
+    // Page shadow offset
+    constexpr qreal shadow = 4.0;
+    return QRectF(-1, -1, m_pageSize.width() + shadow + 2, m_pageSize.height() + shadow + 2);
+}
+
+void PdfPageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
+                        QWidget *widget)
+{
+    Q_UNUSED(option);
+    Q_UNUSED(widget);
+
+    QRectF pageRect(0, 0, m_pageSize.width(), m_pageSize.height());
+
+    // Drop shadow
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(QColor(0, 0, 0, 50));
+    painter->drawRect(pageRect.translated(4, 4));
+
+    // White page background
+    painter->setBrush(Qt::white);
+    painter->setPen(QPen(QColor(0xcc, 0xcc, 0xcc), 0.5));
+    painter->drawRect(pageRect);
+
+    // Render from cache
+    int renderWidth = static_cast<int>(m_pageSize.width() * m_zoom);
+    int renderHeight = static_cast<int>(m_pageSize.height() * m_zoom);
+
+    QImage img = m_cache->cachedPixmap(m_pageNumber, renderWidth, renderHeight);
+    if (!img.isNull()) {
+        painter->drawImage(pageRect, img);
+    } else {
+        // Request render
+        RenderCache::Request req;
+        req.pageNumber = m_pageNumber;
+        req.width = renderWidth;
+        req.height = renderHeight;
+        req.dpr = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+        m_cache->requestPixmap(req);
+
+        // Placeholder
+        painter->setPen(QColor(0xaa, 0xaa, 0xaa));
+        painter->drawText(pageRect, Qt::AlignCenter,
+                          QStringLiteral("Loading page %1...").arg(m_pageNumber + 1));
+    }
+}
+
+void PdfPageItem::invalidateCache()
+{
+    m_cache->invalidatePage(m_pageNumber);
+    update();
+}
+
+void PdfPageItem::setPageNumber(int page)
+{
+    m_pageNumber = page;
+    update();
+}
+
+void PdfPageItem::setZoomFactor(qreal zoom)
+{
+    m_zoom = zoom;
+    update();
+}

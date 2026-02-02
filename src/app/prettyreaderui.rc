@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="prettyreader" version="3">
+<gui name="prettyreader" version="5">
 
   <MenuBar>
     <Menu name="file">
@@ -25,6 +25,10 @@
       <Separator/>
       <Action name="view_continuous"/>
       <Action name="view_single_page"/>
+      <Action name="view_facing_pages"/>
+      <Action name="view_facing_first_alone"/>
+      <Action name="view_continuous_facing"/>
+      <Action name="view_continuous_facing_first_alone"/>
       <Separator/>
       <Action name="view_source_mode"/>
       <Separator/>

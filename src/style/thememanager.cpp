@@ -183,6 +183,8 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
                 featureList.append(f.toString());
             style.setFontFeatures(FontFeatures::fromStringList(featureList));
         }
+        if (props.contains(QLatin1String("baseCharacterStyle")))
+            style.setBaseCharacterStyleName(props.value(QLatin1String("baseCharacterStyle")).toString());
 
         sm->addParagraphStyle(style);
     }
@@ -449,32 +451,52 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
     };
 
     static const DefaultParentMap paraDefaults[] = {
-        {"BodyText",     "Default Paragraph Style"},
-        {"BlockQuote",   "BodyText"},
-        {"ListItem",     "BodyText"},
-        {"TableCell",    "BodyText"},
-        {"Heading1",     "Heading"},
-        {"Heading2",     "Heading"},
-        {"Heading3",     "Heading"},
-        {"Heading4",     "Heading"},
-        {"Heading5",     "Heading"},
-        {"Heading6",     "Heading"},
-        {"CodeBlock",    "Default Paragraph Style"},
-        {"TableHeader",  "Default Paragraph Style"},
-        {"TableBody",    "Default Paragraph Style"},
-        {"Heading",      "Default Paragraph Style"},
+        {"BodyText",           "Default Paragraph Style"},
+        {"BlockQuote",         "BodyText"},
+        {"ListItem",           "BodyText"},
+        {"OrderedListItem",    "ListItem"},
+        {"UnorderedListItem",  "ListItem"},
+        {"TaskListItem",       "ListItem"},
+        {"TableCell",          "BodyText"},
+        {"Heading1",           "Heading"},
+        {"Heading2",           "Heading"},
+        {"Heading3",           "Heading"},
+        {"Heading4",           "Heading"},
+        {"Heading5",           "Heading"},
+        {"Heading6",           "Heading"},
+        {"CodeBlock",          "Default Paragraph Style"},
+        {"TableHeader",        "Default Paragraph Style"},
+        {"TableBody",          "Default Paragraph Style"},
+        {"Heading",            "Default Paragraph Style"},
+        {"HorizontalRule",     "Default Paragraph Style"},
+        {"MathDisplay",        "Default Paragraph Style"},
     };
 
     for (const auto &def : paraDefaults) {
-        ParagraphStyle *s = sm->paragraphStyle(QString::fromLatin1(def.styleName));
-        if (s && s->parentStyleName().isEmpty()) {
+        QString styleName = QString::fromLatin1(def.styleName);
+        ParagraphStyle *s = sm->paragraphStyle(styleName);
+        if (!s) {
+            // Create stub paragraph style
+            ParagraphStyle stub(styleName);
+            stub.setParentStyleName(QString::fromLatin1(def.parentName));
+            sm->addParagraphStyle(stub);
+        } else if (s->parentStyleName().isEmpty()) {
             s->setParentStyleName(QString::fromLatin1(def.parentName));
         }
     }
 
+    // Set CodeBlock's baseCharacterStyle if not already set
+    ParagraphStyle *codeBlock = sm->paragraphStyle(QStringLiteral("CodeBlock"));
+    if (codeBlock && !codeBlock->hasBaseCharacterStyle())
+        codeBlock->setBaseCharacterStyleName(QStringLiteral("Code"));
+
     // Default character hierarchy:
     //   Default Character Style
-    //   ├── Emphasis, Strong, StrongEmphasis, InlineCode, Link, Strikethrough
+    //   ├── Emphasis, Strong, StrongEmphasis, Strikethrough, Subscript, Superscript
+    //   ├── Code
+    //   │   └── InlineCode
+    //   ├── Link
+    //   ├── Emoji, MathInline
 
     if (!sm->characterStyle(QStringLiteral("Default Character Style"))) {
         CharacterStyle dcs(QStringLiteral("Default Character Style"));
@@ -492,19 +514,39 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
         sm->addCharacterStyle(dcs);
     }
 
+    // Ensure "Code" character style exists (shared monospace base)
+    if (!sm->characterStyle(QStringLiteral("Code"))) {
+        CharacterStyle code(QStringLiteral("Code"));
+        code.setParentStyleName(QStringLiteral("Default Character Style"));
+        code.setFontFamily(QStringLiteral("JetBrains Mono"));
+        code.setFontSize(10.0);
+        sm->addCharacterStyle(code);
+    }
+
     static const DefaultParentMap charDefaults[] = {
         {"DefaultText",     "Default Character Style"},
         {"Emphasis",        "Default Character Style"},
         {"Strong",          "Default Character Style"},
         {"StrongEmphasis",  "Default Character Style"},
-        {"InlineCode",      "Default Character Style"},
+        {"InlineCode",      "Code"},
         {"Link",            "Default Character Style"},
         {"Strikethrough",   "Default Character Style"},
+        {"Subscript",       "Default Character Style"},
+        {"Superscript",     "Default Character Style"},
+        {"Emoji",           "Default Character Style"},
+        {"MathInline",      "Default Character Style"},
+        {"Code",            "Default Character Style"},
     };
 
     for (const auto &def : charDefaults) {
-        CharacterStyle *s = sm->characterStyle(QString::fromLatin1(def.styleName));
-        if (s && s->parentStyleName().isEmpty()) {
+        QString styleName = QString::fromLatin1(def.styleName);
+        CharacterStyle *s = sm->characterStyle(styleName);
+        if (!s) {
+            // Create stub character style
+            CharacterStyle stub(styleName);
+            stub.setParentStyleName(QString::fromLatin1(def.parentName));
+            sm->addCharacterStyle(stub);
+        } else if (s->parentStyleName().isEmpty()) {
             s->setParentStyleName(QString::fromLatin1(def.parentName));
         }
     }
@@ -580,12 +622,11 @@ void ThemeManager::loadDefaults(StyleManager *sm)
     makeHeading(QStringLiteral("Heading5"), 5, 14, 10,  4);
     makeHeading(QStringLiteral("Heading6"), 6, 12,  8,  4);
 
-    ParagraphStyle code(QStringLiteral("CodeBlock"));
-    code.setParentStyleName(QStringLiteral("Default Paragraph Style"));
-    code.setFontFamily(QStringLiteral("JetBrains Mono"));
-    code.setFontSize(10.0);
-    code.setBackground(QColor(0xf6, 0xf8, 0xfa));
-    sm->addParagraphStyle(code);
+    ParagraphStyle codeBlk(QStringLiteral("CodeBlock"));
+    codeBlk.setParentStyleName(QStringLiteral("Default Paragraph Style"));
+    codeBlk.setBaseCharacterStyleName(QStringLiteral("Code"));
+    codeBlk.setBackground(QColor(0xf6, 0xf8, 0xfa));
+    sm->addParagraphStyle(codeBlk);
 
     ParagraphStyle bq(QStringLiteral("BlockQuote"));
     bq.setParentStyleName(QStringLiteral("BodyText"));
@@ -608,10 +649,14 @@ void ThemeManager::loadDefaults(StyleManager *sm)
     def.setParentStyleName(QStringLiteral("Default Character Style"));
     sm->addCharacterStyle(def);
 
+    CharacterStyle codeChar(QStringLiteral("Code"));
+    codeChar.setParentStyleName(QStringLiteral("Default Character Style"));
+    codeChar.setFontFamily(QStringLiteral("JetBrains Mono"));
+    codeChar.setFontSize(10.0);
+    sm->addCharacterStyle(codeChar);
+
     CharacterStyle inlineCode(QStringLiteral("InlineCode"));
-    inlineCode.setParentStyleName(QStringLiteral("Default Character Style"));
-    inlineCode.setFontFamily(QStringLiteral("JetBrains Mono"));
-    inlineCode.setFontSize(10.0);
+    inlineCode.setParentStyleName(QStringLiteral("Code"));
     inlineCode.setForeground(QColor(0xc7, 0x25, 0x4e));
     inlineCode.setBackground(QColor(0xf0, 0xf0, 0xf0));
     sm->addCharacterStyle(inlineCode);
@@ -800,6 +845,8 @@ QJsonObject ThemeManager::serializeParagraphStyle(const ParagraphStyle &style)
             arr.append(f);
         obj[QLatin1String("fontFeatures")] = arr;
     }
+    if (style.hasBaseCharacterStyle())
+        obj[QLatin1String("baseCharacterStyle")] = style.baseCharacterStyleName();
     return obj;
 }
 

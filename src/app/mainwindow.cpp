@@ -29,7 +29,15 @@
 #include "preferencesdialog.h"
 #include "prettyreadersettings.h"
 
+// PDF rendering pipeline (Phase 4)
+#include "contentbuilder.h"
+#include "fontmanager.h"
+#include "textshaper.h"
+#include "layoutengine.h"
+#include "pdfgenerator.h"
+
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QFile>
@@ -74,6 +82,10 @@ MainWindow::MainWindow(QWidget *parent)
     // Typography engines
     m_hyphenator = new Hyphenator();
     m_shortWords = new ShortWords();
+
+    // PDF rendering pipeline (created once, reused across rebuilds)
+    m_fontManager = new FontManager();
+    m_textShaper = new TextShaper(m_fontManager);
 
     // Apply settings
     auto *settings = PrettyReaderSettings::self();
@@ -142,6 +154,8 @@ MainWindow::~MainWindow()
 {
     delete m_hyphenator;
     delete m_shortWords;
+    delete m_textShaper;
+    delete m_fontManager;
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -269,24 +283,69 @@ void MainWindow::setupActions()
     fitPage->setIcon(QIcon::fromTheme(QStringLiteral("zoom-fit-page")));
     connect(fitPage, &QAction::triggered, this, &MainWindow::onFitPage);
 
-    // View > Mode
+    // View > Mode (exclusive action group)
+    auto *viewModeGroup = new QActionGroup(this);
+    viewModeGroup->setExclusive(true);
+
     auto *continuous = ac->addAction(QStringLiteral("view_continuous"));
     continuous->setText(i18n("&Continuous Scroll"));
     continuous->setCheckable(true);
     continuous->setChecked(true);
+    continuous->setActionGroup(viewModeGroup);
     connect(continuous, &QAction::triggered, this, [this]() {
         auto *view = currentDocumentView();
         if (view)
-            view->setContinuousMode(true);
+            view->setViewMode(DocumentView::Continuous);
     });
 
     auto *singlePage = ac->addAction(QStringLiteral("view_single_page"));
     singlePage->setText(i18n("&Single Page"));
     singlePage->setCheckable(true);
+    singlePage->setActionGroup(viewModeGroup);
     connect(singlePage, &QAction::triggered, this, [this]() {
         auto *view = currentDocumentView();
         if (view)
-            view->setContinuousMode(false);
+            view->setViewMode(DocumentView::SinglePage);
+    });
+
+    auto *facingPages = ac->addAction(QStringLiteral("view_facing_pages"));
+    facingPages->setText(i18n("&Facing Pages"));
+    facingPages->setCheckable(true);
+    facingPages->setActionGroup(viewModeGroup);
+    connect(facingPages, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view)
+            view->setViewMode(DocumentView::FacingPages);
+    });
+
+    auto *facingFirstAlone = ac->addAction(QStringLiteral("view_facing_first_alone"));
+    facingFirstAlone->setText(i18n("Facing Pages (First &Alone)"));
+    facingFirstAlone->setCheckable(true);
+    facingFirstAlone->setActionGroup(viewModeGroup);
+    connect(facingFirstAlone, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view)
+            view->setViewMode(DocumentView::FacingPagesFirstAlone);
+    });
+
+    auto *continuousFacing = ac->addAction(QStringLiteral("view_continuous_facing"));
+    continuousFacing->setText(i18n("Continuous F&acing"));
+    continuousFacing->setCheckable(true);
+    continuousFacing->setActionGroup(viewModeGroup);
+    connect(continuousFacing, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view)
+            view->setViewMode(DocumentView::ContinuousFacing);
+    });
+
+    auto *continuousFacingFirstAlone = ac->addAction(QStringLiteral("view_continuous_facing_first_alone"));
+    continuousFacingFirstAlone->setText(i18n("Continuous Facing (First A&lone)"));
+    continuousFacingFirstAlone->setCheckable(true);
+    continuousFacingFirstAlone->setActionGroup(viewModeGroup);
+    connect(continuousFacingFirstAlone, &QAction::triggered, this, [this]() {
+        auto *view = currentDocumentView();
+        if (view)
+            view->setViewMode(DocumentView::ContinuousFacingFirstAlone);
     });
 
     // Go > Navigation
@@ -392,18 +451,85 @@ void MainWindow::onFileOpenRecent(const QUrl &url)
 void MainWindow::onFileExportPdf()
 {
     auto *view = currentDocumentView();
-    if (!view || !view->document()) {
+    if (!view) {
         statusBar()->showMessage(i18n("No document to export."), 3000);
         return;
     }
 
-    auto *controller = new PrintController(view->document(), this);
-    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
-    controller->setPageLayout(pl);
-    QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
-    controller->setFileName(title);
-    controller->exportPdf(QString(), this);
-    delete controller;
+    if (view->isPdfMode()) {
+        // New pipeline: the PDF data is already generated, just write to file
+        QString path = QFileDialog::getSaveFileName(
+            this, i18n("Export as PDF"),
+            QString(), i18n("PDF Files (*.pdf)"));
+        if (path.isEmpty())
+            return;
+
+        // Regenerate to get fresh PDF bytes (ensures current styles are applied)
+        auto *tab = currentDocumentTab();
+        if (!tab)
+            return;
+
+        QString filePath = tab->filePath();
+        QString markdown;
+        if (tab->isSourceMode()) {
+            markdown = tab->sourceText();
+        } else {
+            QFile file(filePath);
+            if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+                return;
+            markdown = QString::fromUtf8(file.readAll());
+            file.close();
+        }
+
+        StyleManager *editingSm = m_styleDockWidget->currentStyleManager();
+        StyleManager *styleManager;
+        if (editingSm) {
+            styleManager = editingSm->clone(this);
+        } else {
+            styleManager = new StyleManager(this);
+            QString themeId = m_styleDockWidget->currentThemeId();
+            if (!m_themeManager->loadTheme(themeId, styleManager))
+                m_themeManager->loadDefaults(styleManager);
+        }
+
+        QFileInfo fi(filePath);
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+
+        ContentBuilder contentBuilder;
+        contentBuilder.setBasePath(fi.absolutePath());
+        contentBuilder.setStyleManager(styleManager);
+        if (PrettyReaderSettings::self()->hyphenationEnabled())
+            contentBuilder.setHyphenator(m_hyphenator);
+        if (PrettyReaderSettings::self()->shortWordsEnabled())
+            contentBuilder.setShortWords(m_shortWords);
+        contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
+        Content::Document contentDoc = contentBuilder.build(markdown);
+
+        m_fontManager->resetUsage();
+
+        Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+
+        PdfGenerator pdfGen(m_fontManager);
+        if (pdfGen.generateToFile(layoutResult, pl, fi.baseName(), path)) {
+            statusBar()->showMessage(i18n("Exported to %1", path), 3000);
+        } else {
+            statusBar()->showMessage(i18n("Failed to export PDF."), 3000);
+        }
+    } else {
+        // Legacy pipeline
+        if (!view->document()) {
+            statusBar()->showMessage(i18n("No document to export."), 3000);
+            return;
+        }
+        auto *controller = new PrintController(view->document(), this);
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        controller->setPageLayout(pl);
+        QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
+        controller->setFileName(title);
+        controller->exportPdf(QString(), this);
+        delete controller;
+    }
 }
 
 void MainWindow::onFileExportRtf()
@@ -431,18 +557,35 @@ void MainWindow::onFileExportRtf()
 void MainWindow::onFilePrint()
 {
     auto *view = currentDocumentView();
-    if (!view || !view->document()) {
+    if (!view) {
         statusBar()->showMessage(i18n("No document to print."), 3000);
         return;
     }
 
-    auto *controller = new PrintController(view->document(), this);
-    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
-    controller->setPageLayout(pl);
-    QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
-    controller->setFileName(title);
-    controller->print(this);
-    delete controller;
+    if (view->isPdfMode()) {
+        // New pipeline: use PrintController with Poppler-based printing
+        auto *controller = new PrintController(nullptr, this);
+        controller->setPdfData(view->pdfData());
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        controller->setPageLayout(pl);
+        QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
+        controller->setFileName(title);
+        controller->print(this);
+        delete controller;
+    } else {
+        // Legacy pipeline
+        if (!view->document()) {
+            statusBar()->showMessage(i18n("No document to print."), 3000);
+            return;
+        }
+        auto *controller = new PrintController(view->document(), this);
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        controller->setPageLayout(pl);
+        QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
+        controller->setFileName(title);
+        controller->print(this);
+        delete controller;
+    }
 }
 
 void MainWindow::onFileClose()
@@ -665,35 +808,79 @@ void MainWindow::rebuildCurrentDocument()
             m_themeManager->loadDefaults(styleManager);
     }
 
-    auto *doc = new QTextDocument(this);
-    auto *builder = new DocumentBuilder(doc, this);
-    builder->setBasePath(QFileInfo(filePath).absolutePath());
-    builder->setStyleManager(styleManager);
-    if (PrettyReaderSettings::self()->hyphenationEnabled())
-        builder->setHyphenator(m_hyphenator);
-    if (PrettyReaderSettings::self()->shortWordsEnabled())
-        builder->setShortWords(m_shortWords);
-    builder->setFootnoteStyle(styleManager->footnoteStyle());
-    builder->build(markdown);
-
-    CodeBlockHighlighter rebuildHighlighter;
-    rebuildHighlighter.highlight(doc);
-
-    // Replace document in current tab's DocumentView, preserving view state
     auto *view = tab->documentView();
-    if (view) {
-        ViewState state = view->saveViewState();
+    if (!view)
+        return;
+
+    ViewState state = view->saveViewState();
+    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+    QFileInfo fi(filePath);
+
+    if (PrettyReaderSettings::self()->usePdfRenderer()) {
+        // --- New PDF rendering pipeline ---
+        ContentBuilder contentBuilder;
+        contentBuilder.setBasePath(fi.absolutePath());
+        contentBuilder.setStyleManager(styleManager);
+        if (PrettyReaderSettings::self()->hyphenationEnabled())
+            contentBuilder.setHyphenator(m_hyphenator);
+        if (PrettyReaderSettings::self()->shortWordsEnabled())
+            contentBuilder.setShortWords(m_shortWords);
+        contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
+        Content::Document contentDoc = contentBuilder.build(markdown);
+
+        m_fontManager->resetUsage();
+
+        Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+
+        PdfGenerator pdfGen(m_fontManager);
+        QByteArray pdf = pdfGen.generate(layoutResult, pl, fi.baseName());
+
+        // Clear legacy document if switching pipelines
+        QTextDocument *oldDoc = view->document();
+        if (oldDoc) {
+            view->setDocument(nullptr);
+            delete oldDoc;
+        }
+
+        view->setPdfData(pdf);
+        view->restoreViewState(state);
+        view->setDocumentInfo(fi.fileName(), fi.baseName());
+
+        // TOC from content model (build a temporary QTextDocument for TOC widget)
+        // TODO: build TOC directly from Content::Document
+        auto *tocDoc = new QTextDocument(this);
+        auto *tocBuilder = new DocumentBuilder(tocDoc, this);
+        tocBuilder->setBasePath(fi.absolutePath());
+        tocBuilder->setStyleManager(styleManager);
+        tocBuilder->build(markdown);
+        m_tocWidget->buildFromDocument(tocDoc);
+        delete tocBuilder;
+        delete tocDoc;
+    } else {
+        // --- Legacy QTextDocument pipeline ---
+        auto *doc = new QTextDocument(this);
+        auto *builder = new DocumentBuilder(doc, this);
+        builder->setBasePath(fi.absolutePath());
+        builder->setStyleManager(styleManager);
+        if (PrettyReaderSettings::self()->hyphenationEnabled())
+            builder->setHyphenator(m_hyphenator);
+        if (PrettyReaderSettings::self()->shortWordsEnabled())
+            builder->setShortWords(m_shortWords);
+        builder->setFootnoteStyle(styleManager->footnoteStyle());
+        builder->build(markdown);
+
+        CodeBlockHighlighter rebuildHighlighter;
+        rebuildHighlighter.highlight(doc);
+
         QTextDocument *oldDoc = view->document();
         view->setDocument(doc);
         delete oldDoc;
         view->restoreViewState(state);
-
-        QFileInfo fi(filePath);
         view->setDocumentInfo(fi.fileName(), fi.baseName());
-    }
 
-    // Update TOC
-    m_tocWidget->buildFromDocument(doc);
+        m_tocWidget->buildFromDocument(doc);
+    }
 
     statusBar()->showMessage(i18n("Theme applied"), 2000);
 }
@@ -735,30 +922,68 @@ void MainWindow::openFile(const QUrl &url)
             m_themeManager->loadDefaults(styleManager);
     }
 
-    auto *doc = new QTextDocument(this);
-    auto *builder = new DocumentBuilder(doc, this);
-    builder->setBasePath(QFileInfo(filePath).absolutePath());
-    builder->setStyleManager(styleManager);
-    if (PrettyReaderSettings::self()->hyphenationEnabled())
-        builder->setHyphenator(m_hyphenator);
-    if (PrettyReaderSettings::self()->shortWordsEnabled())
-        builder->setShortWords(m_shortWords);
-    builder->setFootnoteStyle(styleManager->footnoteStyle());
-    builder->build(markdown);
-
-    CodeBlockHighlighter highlighter;
-    highlighter.highlight(doc);
-
-    // Display in DocumentTab (reader + source modes)
     auto *tab = new DocumentTab(this);
     tab->setFilePath(filePath);
     tab->setSourceText(markdown);
     PageLayout openPl = m_pageLayoutWidget->currentPageLayout();
     tab->documentView()->setPageLayout(openPl);
-    tab->documentView()->setDocument(doc);
 
     QFileInfo fi(filePath);
+
+    if (PrettyReaderSettings::self()->usePdfRenderer()) {
+        // --- New PDF rendering pipeline ---
+        ContentBuilder contentBuilder;
+        contentBuilder.setBasePath(fi.absolutePath());
+        contentBuilder.setStyleManager(styleManager);
+        if (PrettyReaderSettings::self()->hyphenationEnabled())
+            contentBuilder.setHyphenator(m_hyphenator);
+        if (PrettyReaderSettings::self()->shortWordsEnabled())
+            contentBuilder.setShortWords(m_shortWords);
+        contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
+        Content::Document contentDoc = contentBuilder.build(markdown);
+
+        m_fontManager->resetUsage();
+
+        Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, openPl);
+
+        PdfGenerator pdfGen(m_fontManager);
+        QByteArray pdf = pdfGen.generate(layoutResult, openPl, fi.baseName());
+
+        tab->documentView()->setPdfData(pdf);
+    } else {
+        // --- Legacy QTextDocument pipeline ---
+        auto *doc = new QTextDocument(this);
+        auto *builder = new DocumentBuilder(doc, this);
+        builder->setBasePath(fi.absolutePath());
+        builder->setStyleManager(styleManager);
+        if (PrettyReaderSettings::self()->hyphenationEnabled())
+            builder->setHyphenator(m_hyphenator);
+        if (PrettyReaderSettings::self()->shortWordsEnabled())
+            builder->setShortWords(m_shortWords);
+        builder->setFootnoteStyle(styleManager->footnoteStyle());
+        builder->build(markdown);
+
+        CodeBlockHighlighter highlighter;
+        highlighter.highlight(doc);
+
+        tab->documentView()->setDocument(doc);
+    }
+
     tab->documentView()->setDocumentInfo(fi.fileName(), fi.baseName());
+
+    // Apply saved view mode from settings
+    auto settingsViewMode = PrettyReaderSettings::self()->viewMode();
+    DocumentView::ViewMode dvMode = DocumentView::Continuous;
+    switch (settingsViewMode) {
+    case PrettyReaderSettings::SinglePage:                dvMode = DocumentView::SinglePage; break;
+    case PrettyReaderSettings::FacingPages:               dvMode = DocumentView::FacingPages; break;
+    case PrettyReaderSettings::FacingPagesFirstAlone:     dvMode = DocumentView::FacingPagesFirstAlone; break;
+    case PrettyReaderSettings::ContinuousFacing:          dvMode = DocumentView::ContinuousFacing; break;
+    case PrettyReaderSettings::ContinuousFacingFirstAlone: dvMode = DocumentView::ContinuousFacingFirstAlone; break;
+    default: break;
+    }
+    tab->documentView()->setViewMode(dvMode);
 
     // Connect zoom signal to status bar spinbox
     connect(tab->documentView(), &DocumentView::zoomChanged,
@@ -775,7 +1000,19 @@ void MainWindow::openFile(const QUrl &url)
     m_recentFilesAction->addUrl(url);
 
     // Update TOC
-    m_tocWidget->buildFromDocument(doc);
+    if (!tab->documentView()->isPdfMode()) {
+        m_tocWidget->buildFromDocument(tab->documentView()->document());
+    } else {
+        // For PDF mode, build TOC from a temporary document
+        auto *tocDoc = new QTextDocument(this);
+        auto *tocBuilder = new DocumentBuilder(tocDoc, this);
+        tocBuilder->setBasePath(fi.absolutePath());
+        tocBuilder->setStyleManager(styleManager);
+        tocBuilder->build(markdown);
+        m_tocWidget->buildFromDocument(tocDoc);
+        delete tocBuilder;
+        delete tocDoc;
+    }
 
     statusBar()->showMessage(i18n("Opened %1", fi.fileName()), 3000);
 }

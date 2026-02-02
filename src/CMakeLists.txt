@@ -19,6 +19,10 @@ add_library(PrettyReaderCore STATIC
     canvas/pageitem.h
     canvas/documentview.cpp
     canvas/documentview.h
+    canvas/pdfpageitem.cpp
+    canvas/pdfpageitem.h
+    canvas/rendercache.cpp
+    canvas/rendercache.h
     print/headerfooterrenderer.cpp
     print/headerfooterrenderer.h
     print/printcontroller.cpp
@@ -46,6 +50,23 @@ add_library(PrettyReaderCore STATIC
     typography/shortwords.h
     export/rtfexporter.cpp
     export/rtfexporter.h
+    # PDF rendering pipeline (Phase 4)
+    model/contentbuilder.cpp
+    model/contentbuilder.h
+    model/contentmodel.h
+    font/fontmanager.cpp
+    font/fontmanager.h
+    font/textshaper.cpp
+    font/textshaper.h
+    font/sfnt.cpp
+    font/sfnt.h
+    layout/layoutengine.cpp
+    layout/layoutengine.h
+    pdf/pdfwriter.cpp
+    pdf/pdfwriter.h
+    pdf/pdfgenerator.cpp
+    pdf/pdfgenerator.h
+    # Widgets
     widgets/pagelayoutwidget.cpp
     widgets/pagelayoutwidget.h
     widgets/sidebar.cpp
@@ -81,6 +102,11 @@ target_include_directories(PrettyReaderCore
         ${CMAKE_CURRENT_SOURCE_DIR}/typography
         ${CMAKE_CURRENT_SOURCE_DIR}/export
         ${CMAKE_CURRENT_SOURCE_DIR}/widgets
+        # PDF pipeline directories (Phase 4)
+        ${CMAKE_CURRENT_SOURCE_DIR}/model
+        ${CMAKE_CURRENT_SOURCE_DIR}/font
+        ${CMAKE_CURRENT_SOURCE_DIR}/layout
+        ${CMAKE_CURRENT_SOURCE_DIR}/pdf
         ${CMAKE_CURRENT_BINARY_DIR}
 )
 
@@ -110,7 +136,14 @@ qt_add_resources(PrettyReaderCore "dicts"
         dicts/hyph_en_GB.dic
 )
 
-target_include_directories(PrettyReaderCore PRIVATE ${MD4C_INCLUDE_DIR} ${HYPHEN_INCLUDE_DIR})
+target_include_directories(PrettyReaderCore
+    PRIVATE
+        ${MD4C_INCLUDE_DIR}
+        ${HYPHEN_INCLUDE_DIR}
+        ${FONTCONFIG_INCLUDE_DIRS}
+        ${HARFBUZZ_INCLUDE_DIRS}
+        ${HARFBUZZ_SUBSET_INCLUDE_DIRS}
+)
 
 target_link_libraries(PrettyReaderCore
     PUBLIC
@@ -130,6 +163,16 @@ target_link_libraries(PrettyReaderCore
         KF6::SyntaxHighlighting
         ${MD4C_LIBRARY}
         ${HYPHEN_LIBRARY}
+        # PDF pipeline dependencies (Phase 4)
+        Poppler::Qt6
+        Freetype::Freetype
+        ICU::uc
+        ICU::i18n
+        ZLIB::ZLIB
+        ${FONTCONFIG_LIBRARIES}
+        ${HARFBUZZ_LIBRARIES}
+        ${HARFBUZZ_ICU_LIBRARIES}
+        ${HARFBUZZ_SUBSET_LIBRARIES}
 )
 
 qt_add_executable(PrettyReader

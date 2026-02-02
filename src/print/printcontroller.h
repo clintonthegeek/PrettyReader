@@ -9,6 +9,8 @@ class QTextDocument;
 class QPrinter;
 class QPainter;
 
+namespace Poppler { class Document; }
+
 class PrintController : public QObject
 {
     Q_OBJECT
@@ -22,6 +24,9 @@ public:
 
     void setPageLayout(const PageLayout &layout);
 
+    // PDF pipeline: set pre-generated PDF data for printing
+    void setPdfData(const QByteArray &pdf);
+
     // Document metadata
     void setFileName(const QString &name);
     void setDocumentTitle(const QString &title);
@@ -29,12 +34,16 @@ public:
 private:
     void configurePrinter(QPrinter *printer);
     void renderDocument(QPrinter *printer);
+    void renderDocumentFromPdf(QPrinter *printer);
     void renderPage(QPainter *painter, int pageNumber, int totalPages,
                     const QRectF &headerRect, const QRectF &bodyRect,
                     const QRectF &footerRect, qreal dpiScale);
 
     QTextDocument *m_document;
     PageLayout m_pageLayout;
+
+    // PDF pipeline
+    QByteArray m_pdfData;
 
     // Metadata
     QString m_fileName;

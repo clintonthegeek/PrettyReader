@@ -25,7 +25,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(Features)
 // Default features enabled in a new style
 inline Features defaultFeatures()
 {
-    return Ligatures | Kerning | ContextAlts;
+    return Ligatures | Kerning | ContextAlts | OldStyleNums;
 }
 
 // Apply font features to a QFont using QFont::setFeature() (Qt 6.6+).

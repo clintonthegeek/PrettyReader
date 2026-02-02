@@ -9,9 +9,11 @@ class QSpinBox;
 class QTabWidget;
 class KRecentFilesAction;
 class FileBrowserDock;
+class FontManager;
 class MetadataStore;
 class PageLayoutWidget;
 class Sidebar;
+class TextShaper;
 class TocWidget;
 class ThemeManager;
 class StyleDockWidget;
@@ -81,6 +83,10 @@ private:
     Hyphenator *m_hyphenator = nullptr;
     ShortWords *m_shortWords = nullptr;
     QSpinBox *m_zoomSpinBox = nullptr;
+
+    // PDF rendering pipeline (Phase 4)
+    FontManager *m_fontManager = nullptr;
+    TextShaper *m_textShaper = nullptr;
 };
 
 #endif // PRETTYREADER_MAINWINDOW_H

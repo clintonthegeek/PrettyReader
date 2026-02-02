@@ -49,6 +49,27 @@ ParagraphStyle StyleManager::resolvedParagraphStyle(const QString &name)
     QSet<QString> visited;
     visited.insert(name);
 
+    // Cross-type linkage: fill unset char properties from the referenced
+    // character style. Applied BEFORE the paragraph parent chain so the
+    // character style's properties (e.g. Code → monospace font) win over
+    // inherited paragraph defaults (e.g. Default Paragraph Style → serif).
+    QString baseCharName = it.value().baseCharacterStyleName();
+    if (!baseCharName.isEmpty()) {
+        CharacterStyle charResolved = resolvedCharacterStyle(baseCharName);
+        if (!resolved.hasFontFamily() && charResolved.hasFontFamily())
+            resolved.setFontFamily(charResolved.fontFamily());
+        if (!resolved.hasFontSize() && charResolved.hasFontSize())
+            resolved.setFontSize(charResolved.fontSize());
+        if (!resolved.hasFontWeight() && charResolved.hasFontWeight())
+            resolved.setFontWeight(charResolved.fontWeight());
+        if (!resolved.hasFontItalic() && charResolved.hasFontItalic())
+            resolved.setFontItalic(charResolved.fontItalic());
+        if (!resolved.hasForeground() && charResolved.hasForeground())
+            resolved.setForeground(charResolved.foreground());
+        if (!resolved.hasFontFeatures() && charResolved.hasFontFeatures())
+            resolved.setFontFeatures(charResolved.fontFeatures());
+    }
+
     QString parentName = resolved.parentStyleName();
     while (!parentName.isEmpty() && !visited.contains(parentName)) {
         visited.insert(parentName);

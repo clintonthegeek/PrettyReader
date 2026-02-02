@@ -1,0 +1,234 @@
+/*
+ * textshaper.cpp — BiDi + script itemization + HarfBuzz shaping
+ *
+ * Adapted from Scribus text/textshaper.cpp. Rewritten for our content model.
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
+#include "textshaper.h"
+#include "fontmanager.h"
+
+#include <hb.h>
+#include <hb-ft.h>
+#include <hb-icu.h>
+
+#include <unicode/ubidi.h>
+#include <unicode/uscript.h>
+#include <unicode/uchar.h>
+
+#include <QDebug>
+
+TextShaper::TextShaper(FontManager *fontManager)
+    : m_fontManager(fontManager)
+{
+}
+
+// --- BiDi itemization using ICU ---
+
+QList<TextShaper::InternalRun> TextShaper::itemizeBiDi(const QString &text) const
+{
+    QList<InternalRun> runs;
+    if (text.isEmpty())
+        return runs;
+
+    UErrorCode err = U_ZERO_ERROR;
+    UBiDi *bidi = ubidi_open();
+    ubidi_setPara(bidi, reinterpret_cast<const UChar *>(text.utf16()),
+                  text.length(), UBIDI_DEFAULT_LTR, nullptr, &err);
+
+    if (U_SUCCESS(err)) {
+        int32_t count = ubidi_countRuns(bidi, &err);
+        if (U_SUCCESS(err)) {
+            runs.reserve(count);
+            for (int32_t i = 0; i < count; ++i) {
+                int32_t start = 0, length = 0;
+                UBiDiDirection dir = ubidi_getVisualRun(bidi, i, &start, &length);
+                InternalRun run;
+                run.start = start;
+                run.length = length;
+                run.dir = (dir == UBIDI_RTL) ? 1 : 0;
+                run.script = USCRIPT_COMMON;
+                run.styleIndex = 0;
+                runs.append(run);
+            }
+        }
+    }
+
+    ubidi_close(bidi);
+    return runs;
+}
+
+// --- Script itemization using ICU uscript_getScript ---
+
+QList<TextShaper::InternalRun> TextShaper::itemizeScripts(
+    const QString &text, const QList<InternalRun> &runs) const
+{
+    QList<InternalRun> result;
+
+    for (const InternalRun &run : runs) {
+        int pos = run.start;
+        int end = run.start + run.length;
+
+        while (pos < end) {
+            UErrorCode err = U_ZERO_ERROR;
+            UScriptCode script = uscript_getScript(text.at(pos).unicode(), &err);
+            if (script == USCRIPT_COMMON || script == USCRIPT_INHERITED)
+                script = USCRIPT_LATIN; // default
+
+            int segStart = pos;
+            while (pos < end) {
+                UErrorCode err2 = U_ZERO_ERROR;
+                UScriptCode sc = uscript_getScript(text.at(pos).unicode(), &err2);
+                if (sc != USCRIPT_COMMON && sc != USCRIPT_INHERITED && sc != script)
+                    break;
+                if (sc != USCRIPT_COMMON && sc != USCRIPT_INHERITED)
+                    script = sc;
+                ++pos;
+            }
+
+            InternalRun sub;
+            sub.start = segStart;
+            sub.length = pos - segStart;
+            sub.dir = run.dir;
+            sub.script = script;
+            sub.styleIndex = run.styleIndex;
+            result.append(sub);
+        }
+    }
+
+    return result;
+}
+
+// --- Style itemization: split runs at style boundaries ---
+
+QList<TextShaper::InternalRun> TextShaper::itemizeStyles(
+    const QList<InternalRun> &runs, const QList<StyleRun> &styles) const
+{
+    QList<InternalRun> result;
+    if (styles.isEmpty())
+        return runs;
+
+    for (const InternalRun &run : runs) {
+        int pos = run.start;
+        int end = run.start + run.length;
+
+        for (int si = 0; si < styles.size() && pos < end; ++si) {
+            const StyleRun &style = styles[si];
+            int styleEnd = style.start + style.length;
+
+            if (styleEnd <= pos)
+                continue;
+            if (style.start >= end)
+                break;
+
+            int segStart = qMax(pos, style.start);
+            int segEnd = qMin(end, styleEnd);
+            if (segEnd <= segStart)
+                continue;
+
+            InternalRun sub;
+            sub.start = segStart;
+            sub.length = segEnd - segStart;
+            sub.dir = run.dir;
+            sub.script = run.script;
+            sub.styleIndex = si;
+            result.append(sub);
+            pos = segEnd;
+        }
+    }
+
+    return result;
+}
+
+// --- Main shaping entry point ---
+
+QList<ShapedRun> TextShaper::shape(const QString &text, const QList<StyleRun> &styles)
+{
+    QList<ShapedRun> result;
+    if (text.isEmpty() || styles.isEmpty())
+        return result;
+
+    // Pipeline: BiDi → Script → Style itemization
+    QList<InternalRun> bidiRuns = itemizeBiDi(text);
+    QList<InternalRun> scriptRuns = itemizeScripts(text, bidiRuns);
+    QList<InternalRun> textRuns = itemizeStyles(scriptRuns, styles);
+
+    for (const InternalRun &run : textRuns) {
+        if (run.styleIndex < 0 || run.styleIndex >= styles.size())
+            continue;
+        const StyleRun &style = styles[run.styleIndex];
+
+        // Load font
+        FontFace *face = m_fontManager->loadFont(
+            style.fontFamily, style.fontWeight, style.fontItalic);
+        if (!face || !face->hbFont)
+            continue;
+
+        // Configure HarfBuzz font size
+        FT_F26Dot6 ftSize = static_cast<FT_F26Dot6>(style.fontSize * 64);
+        hb_font_set_scale(face->hbFont, static_cast<int>(style.fontSize * 64),
+                          static_cast<int>(style.fontSize * 64));
+        FT_Set_Char_Size(face->ftFace, ftSize, 0, 72, 0);
+        hb_ft_font_changed(face->hbFont);
+
+        // Set up HarfBuzz buffer
+        hb_buffer_t *buf = hb_buffer_create();
+        hb_buffer_add_utf16(buf, text.utf16(), text.length(), run.start, run.length);
+        hb_buffer_set_direction(buf, run.dir ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
+        hb_buffer_set_script(buf, hb_icu_script_to_script(
+            static_cast<UScriptCode>(run.script)));
+        hb_buffer_set_cluster_level(buf, HB_BUFFER_CLUSTER_LEVEL_MONOTONE_CHARACTERS);
+
+        // Font features
+        QList<hb_feature_t> features;
+        for (const QString &feat : style.fontFeatures) {
+            hb_feature_t hbFeat;
+            QByteArray featBytes = feat.toUtf8();
+            if (hb_feature_from_string(featBytes.constData(), featBytes.size(), &hbFeat)) {
+                hbFeat.start = 0;
+                hbFeat.end = static_cast<unsigned int>(-1);
+                features.append(hbFeat);
+            }
+        }
+
+        // Shape
+        const char *shapers[] = {"ot", "fallback", nullptr};
+        hb_shape_full(face->hbFont, buf,
+                      features.isEmpty() ? nullptr : features.data(),
+                      features.size(), shapers);
+
+        // Extract results
+        unsigned int count = hb_buffer_get_length(buf);
+        hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buf, nullptr);
+        hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buf, nullptr);
+
+        ShapedRun shaped;
+        shaped.font = face;
+        shaped.fontSize = style.fontSize;
+        shaped.textStart = run.start;
+        shaped.textLength = run.length;
+        shaped.rtl = (run.dir != 0);
+        shaped.glyphs.reserve(static_cast<int>(count));
+
+        for (unsigned int i = 0; i < count; ++i) {
+            ShapedGlyph g;
+            g.glyphId = infos[i].codepoint;
+            // HarfBuzz positions are in 26.6 fixed-point (when using hb-ft)
+            // divided by 64 to get points
+            g.xAdvance = positions[i].x_advance / 64.0;
+            g.yAdvance = positions[i].y_advance / 64.0;
+            g.xOffset = positions[i].x_offset / 64.0;
+            g.yOffset = positions[i].y_offset / 64.0;
+            g.cluster = static_cast<int>(infos[i].cluster);
+
+            // Mark glyph as used for subsetting
+            m_fontManager->markGlyphUsed(face, g.glyphId);
+            shaped.glyphs.append(g);
+        }
+
+        result.append(shaped);
+        hb_buffer_destroy(buf);
+    }
+
+    return result;
+}
