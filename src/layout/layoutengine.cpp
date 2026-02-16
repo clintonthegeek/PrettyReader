@@ -301,8 +301,14 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
         }
     }
 
-    // Add soft hyphen positions as additional break opportunities
-    breakPositions.unite(collected.softHyphenPositions);
+    // Add soft hyphen positions as additional break opportunities.
+    // When HyphenateJustifiedText is off, skip them for justified paragraphs
+    // so that justify relies only on word boundaries (wider gaps, no mid-word breaks).
+    bool useSoftHyphens = !collected.softHyphenPositions.isEmpty();
+    if (format.alignment == Qt::AlignJustify && !m_hyphenateJustifiedText)
+        useSoftHyphens = false;
+    if (useSoftHyphens)
+        breakPositions.unite(collected.softHyphenPositions);
 
     // Build word-level glyph boxes by splitting shaped runs at break points.
     // Each shaped run may span multiple words. Using HarfBuzz cluster info

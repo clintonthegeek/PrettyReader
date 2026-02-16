@@ -78,6 +78,10 @@
       <min>3</min>
       <max>20</max>
     </entry>
+    <entry name="HyphenateJustifiedText" type="Bool">
+      <label>Use hyphenation to improve word spacing in justified text.</label>
+      <default>true</default>
+    </entry>
     <entry name="ShortWordsEnabled" type="Bool">
       <label>Insert non-breaking spaces after short prepositions and articles.</label>
       <default>true</default>

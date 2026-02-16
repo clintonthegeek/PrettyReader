@@ -112,7 +112,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Apply settings
     auto *settings = PrettyReaderSettings::self();
-    if (settings->hyphenationEnabled()) {
+    if (settings->hyphenationEnabled() || settings->hyphenateJustifiedText()) {
         m_hyphenator->loadDictionary(settings->hyphenationLanguage());
         m_hyphenator->setMinWordLength(settings->hyphenationMinWordLength());
     }
@@ -628,7 +628,8 @@ void MainWindow::onFileExportPdf()
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             contentBuilder.setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             contentBuilder.setShortWords(m_shortWords);
@@ -640,6 +641,8 @@ void MainWindow::onFileExportPdf()
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        layoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
 
         PdfGenerator pdfGen(m_fontManager);
@@ -836,7 +839,7 @@ void MainWindow::onSettingsChanged()
     auto *settings = PrettyReaderSettings::self();
 
     // Reconfigure hyphenator
-    if (settings->hyphenationEnabled()) {
+    if (settings->hyphenationEnabled() || settings->hyphenateJustifiedText()) {
         m_hyphenator->loadDictionary(settings->hyphenationLanguage());
         m_hyphenator->setMinWordLength(settings->hyphenationMinWordLength());
     }
@@ -949,7 +952,8 @@ void MainWindow::rebuildCurrentDocument()
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             contentBuilder.setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             contentBuilder.setShortWords(m_shortWords);
@@ -961,6 +965,8 @@ void MainWindow::rebuildCurrentDocument()
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        layoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
 
         PdfGenerator pdfGen(m_fontManager);
@@ -987,7 +993,8 @@ void MainWindow::rebuildCurrentDocument()
         auto *builder = new DocumentBuilder(doc, this);
         builder->setBasePath(fi.absolutePath());
         builder->setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             builder->setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             builder->setShortWords(m_shortWords);
@@ -1069,7 +1076,8 @@ void MainWindow::openFile(const QUrl &url)
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             contentBuilder.setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             contentBuilder.setShortWords(m_shortWords);
@@ -1081,6 +1089,8 @@ void MainWindow::openFile(const QUrl &url)
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        layoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, openPl);
 
         PdfGenerator pdfGen(m_fontManager);
@@ -1099,7 +1109,8 @@ void MainWindow::openFile(const QUrl &url)
         auto *builder = new DocumentBuilder(doc, this);
         builder->setBasePath(fi.absolutePath());
         builder->setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             builder->setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             builder->setShortWords(m_shortWords);

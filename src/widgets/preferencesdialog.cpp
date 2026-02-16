@@ -190,6 +190,10 @@ PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent,
     minWordRow->addStretch();
     hyphGroupLayout->addLayout(minWordRow);
 
+    auto *justifyHyphCheck = new QCheckBox(i18n("Hyphenate justified text to improve word spacing"));
+    justifyHyphCheck->setObjectName(QStringLiteral("kcfg_HyphenateJustifiedText"));
+    hyphGroupLayout->addWidget(justifyHyphCheck);
+
     typoLayout->addWidget(hyphGroup);
 
     auto *swGroup = new QGroupBox(i18n("Short Words"));

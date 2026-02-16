@@ -224,6 +224,8 @@ public:
 
     LayoutResult layout(const Content::Document &doc, const PageLayout &pageLayout);
 
+    void setHyphenateJustifiedText(bool enabled) { m_hyphenateJustifiedText = enabled; }
+
 private:
     // Block layout
     BlockBox layoutParagraph(const Content::Paragraph &para, qreal availWidth);
@@ -265,6 +267,7 @@ private:
 
     FontManager *m_fontManager;
     TextShaper *m_textShaper;
+    bool m_hyphenateJustifiedText = true;
 };
 
 } // namespace Layout
