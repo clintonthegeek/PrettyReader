@@ -646,6 +646,7 @@ void MainWindow::onFileExportPdf()
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
 
         PdfGenerator pdfGen(m_fontManager);
+        pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
         if (pdfGen.generateToFile(layoutResult, pl, fi.baseName(), path)) {
             statusBar()->showMessage(i18n("Exported to %1", path), 3000);
         } else {
@@ -970,6 +971,7 @@ void MainWindow::rebuildCurrentDocument()
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
 
         PdfGenerator pdfGen(m_fontManager);
+        pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
         QByteArray pdf = pdfGen.generate(layoutResult, pl, fi.baseName());
 
         // Clear legacy document if switching pipelines
@@ -1094,6 +1096,7 @@ void MainWindow::openFile(const QUrl &url)
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, openPl);
 
         PdfGenerator pdfGen(m_fontManager);
+        pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
         QByteArray pdf = pdfGen.generate(layoutResult, openPl, fi.baseName());
 
         tab->documentView()->setPdfData(pdf);

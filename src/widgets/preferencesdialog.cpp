@@ -196,6 +196,23 @@ PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent,
 
     typoLayout->addWidget(hyphGroup);
 
+    auto *justifyGroup = new QGroupBox(i18n("Justification"));
+    auto *justifyGroupLayout = new QVBoxLayout(justifyGroup);
+
+    auto *gapRow = new QHBoxLayout;
+    gapRow->addWidget(new QLabel(i18n("Max inter-word gap:")));
+    auto *gapSpin = new QDoubleSpinBox;
+    gapSpin->setObjectName(QStringLiteral("kcfg_MaxJustifyGap"));
+    gapSpin->setRange(4.0, 40.0);
+    gapSpin->setSingleStep(1.0);
+    gapSpin->setDecimals(1);
+    gapSpin->setSuffix(i18n(" pt"));
+    gapRow->addWidget(gapSpin);
+    gapRow->addStretch();
+    justifyGroupLayout->addLayout(gapRow);
+
+    typoLayout->addWidget(justifyGroup);
+
     auto *swGroup = new QGroupBox(i18n("Short Words"));
     auto *swGroupLayout = new QVBoxLayout(swGroup);
     auto *swCheck = new QCheckBox(i18n("Insert non-breaking spaces after short words"));

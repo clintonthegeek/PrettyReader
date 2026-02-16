@@ -34,6 +34,7 @@ public:
                         const QString &filePath);
 
     void setDocumentInfo(const QString &filename, const QString &title);
+    void setMaxJustifyGap(qreal gap) { m_maxJustifyGap = gap; }
 
 private:
     // Page content rendering
@@ -124,6 +125,7 @@ private:
     FontManager *m_fontManager;
     QString m_filename;
     QString m_title;
+    qreal m_maxJustifyGap = 14.0;
 };
 
 #endif // PRETTYREADER_PDFGENERATOR_H

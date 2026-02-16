@@ -82,6 +82,12 @@
       <label>Use hyphenation to improve word spacing in justified text.</label>
       <default>true</default>
     </entry>
+    <entry name="MaxJustifyGap" type="Double">
+      <label>Maximum inter-word gap (in points) before justification is abandoned for a line.</label>
+      <default>14.0</default>
+      <min>4.0</min>
+      <max>40.0</max>
+    </entry>
     <entry name="ShortWordsEnabled" type="Bool">
       <label>Insert non-breaking spaces after short prepositions and articles.</label>
       <default>true</default>
