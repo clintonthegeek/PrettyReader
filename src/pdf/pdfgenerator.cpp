@@ -450,10 +450,18 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         }
     }
 
+    bool markdownMode = m_exportOptions.markdownCopy;
+
     if (doJustify) {
         x = originX;
         for (int i = 0; i < line.glyphs.size(); ++i) {
+            if (markdownMode && !line.glyphs[i].mdPrefix.isEmpty())
+                renderHiddenText(line.glyphs[i].mdPrefix, line.glyphs[i].font,
+                                 line.glyphs[i].fontSize, x - 0.01, baselineY, stream);
             renderGlyphBox(line.glyphs[i], stream, x, baselineY);
+            if (markdownMode && !line.glyphs[i].mdSuffix.isEmpty())
+                renderHiddenText(line.glyphs[i].mdSuffix, line.glyphs[i].font,
+                                 line.glyphs[i].fontSize, x + line.glyphs[i].width + 0.01, baselineY, stream);
             x += line.glyphs[i].width;
             if (i < line.glyphs.size() - 1) {
                 bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
@@ -479,7 +487,13 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
 
         x = originX + xOffset;
         for (const auto &gbox : line.glyphs) {
+            if (markdownMode && !gbox.mdPrefix.isEmpty())
+                renderHiddenText(gbox.mdPrefix, gbox.font, gbox.fontSize,
+                                 x - 0.01, baselineY, stream);
             renderGlyphBox(gbox, stream, x, baselineY);
+            if (markdownMode && !gbox.mdSuffix.isEmpty())
+                renderHiddenText(gbox.mdSuffix, gbox.font, gbox.fontSize,
+                                 x + gbox.width + 0.01, baselineY, stream);
             x += gbox.width;
         }
     }
