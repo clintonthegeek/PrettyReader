@@ -254,6 +254,13 @@ void MainWindow::setupSidebars()
         }
     });
 
+    connect(m_tocWidget, &TocWidget::headingNavigate,
+            this, [this](int page, qreal yOffset) {
+        auto *view = currentDocumentView();
+        if (view)
+            view->scrollToPosition(page, yOffset);
+    });
+
     // Right sidebar: Style panel + Page Layout panel
     m_rightSidebar = new Sidebar(Sidebar::Right, this);
 
@@ -972,16 +979,8 @@ void MainWindow::rebuildCurrentDocument()
         view->restoreViewState(state);
         view->setDocumentInfo(fi.fileName(), fi.baseName());
 
-        // TOC from content model (build a temporary QTextDocument for TOC widget)
-        // TODO: build TOC directly from Content::Document
-        auto *tocDoc = new QTextDocument(this);
-        auto *tocBuilder = new DocumentBuilder(tocDoc, this);
-        tocBuilder->setBasePath(fi.absolutePath());
-        tocBuilder->setStyleManager(styleManager);
-        tocBuilder->build(markdown);
-        m_tocWidget->buildFromDocument(tocDoc);
-        delete tocBuilder;
-        delete tocDoc;
+        // Build TOC directly from content model + source map
+        m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
@@ -1091,6 +1090,9 @@ void MainWindow::openFile(const QUrl &url)
         tab->documentView()->setSourceData(
             contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
             layoutResult.codeBlockRegions);
+
+        // Build TOC from content model (PDF mode)
+        m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
@@ -1171,18 +1173,7 @@ void MainWindow::openFile(const QUrl &url)
     // Update TOC
     if (!tab->documentView()->isPdfMode()) {
         m_tocWidget->buildFromDocument(tab->documentView()->document());
-    } else {
-        // For PDF mode, build TOC from a temporary document
-        auto *tocDoc = new QTextDocument(this);
-        auto *tocBuilder = new DocumentBuilder(tocDoc, this);
-        tocBuilder->setBasePath(fi.absolutePath());
-        tocBuilder->setStyleManager(styleManager);
-        tocBuilder->build(markdown);
-        m_tocWidget->buildFromDocument(tocDoc);
-        delete tocBuilder;
-        delete tocDoc;
     }
-
     // A6: Update file path label in status bar
     if (m_filePathLabel)
         m_filePathLabel->setText(filePath);

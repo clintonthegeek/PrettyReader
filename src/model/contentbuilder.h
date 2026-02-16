@@ -95,8 +95,16 @@ private:
     QStack<Content::TextStyle> m_styleStack;
     Content::TextStyle m_currentStyle;
 
+    // Link tracking (href flows through TextStyle on each TextRun inside the span)
+    QString m_linkHref;
+
+    // Block routing: adds a completed block to the correct container
+    // (blockquote stack > list stack > doc.blocks)
+    void addBlock(Content::BlockNode block);
+
     // Block tracking
     int m_blockQuoteLevel = 0;
+    QStack<QList<Content::BlockNode>> m_blockQuoteStack;
     bool m_inCodeBlock = false;
     QString m_codeLanguage;
     QString m_codeText;

@@ -630,6 +630,37 @@ void DocumentView::goToPage(int page)
     Q_EMIT currentPageChanged(page);
 }
 
+void DocumentView::scrollToPosition(int page, qreal yOffset)
+{
+    if (page < 0 || page >= m_pageCount)
+        return;
+    m_currentPage = page;
+
+    if (m_pdfMode) {
+        bool isContinuous = (m_viewMode == Continuous || m_viewMode == ContinuousFacing
+                             || m_viewMode == ContinuousFacingFirstAlone);
+
+        if (!isContinuous) {
+            layoutPages(); // relayout to show the target page
+        }
+
+        // Find the page item and scroll to the y-offset within it
+        for (auto *item : m_pdfPageItems) {
+            if (item->pageNumber() == page) {
+                QPointF targetPos = item->pos() + QPointF(0, yOffset);
+                centerOn(targetPos);
+                break;
+            }
+        }
+    } else {
+        // Legacy path: fall back to goToPage
+        goToPage(page);
+        return;
+    }
+
+    Q_EMIT currentPageChanged(page);
+}
+
 void DocumentView::previousPage()
 {
     if (m_currentPage > 0)

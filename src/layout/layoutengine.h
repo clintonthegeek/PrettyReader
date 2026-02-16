@@ -86,7 +86,7 @@ struct LineBox {
 };
 
 struct BlockBox {
-    enum Type { ParagraphBlock, HeadingBlock, CodeBlockType, HRuleBlock, FootnoteSectionBlock };
+    enum Type { ParagraphBlock, HeadingBlock, CodeBlockType, HRuleBlock, FootnoteSectionBlock, ImageBlock };
     Type type = ParagraphBlock;
 
     QList<LineBox> lines;
@@ -106,6 +106,19 @@ struct BlockBox {
 
     // Heading level (0 = not heading)
     int headingLevel = 0;
+    bool keepWithNext = false; // headings: don't strand at page bottom
+    QString headingText;       // heading text for PDF bookmarks
+
+    // Image block data (when type == ImageBlock)
+    QImage image;
+    qreal imageWidth = 0;
+    qreal imageHeight = 0;
+    QString imageId;    // unique ID for PDF XObject reference
+
+    // Blockquote visual indicator
+    bool hasBlockQuoteBorder = false;
+    int blockQuoteLevel = 0;
+    qreal blockQuoteIndent = 0;
 
     // Source breadcrumb
     Content::SourceRange source;
@@ -216,8 +229,12 @@ private:
     BlockBox layoutHeading(const Content::Heading &heading, qreal availWidth);
     BlockBox layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth);
     BlockBox layoutHorizontalRule(const Content::HorizontalRule &hr, qreal availWidth);
+    BlockBox layoutImage(const Content::InlineImage &img, qreal availWidth);
     TableBox layoutTable(const Content::Table &table, qreal availWidth);
     FootnoteSectionBox layoutFootnoteSection(const Content::FootnoteSection &fs, qreal availWidth);
+
+    // Blockquote layout: flattens children with indentation + left border
+    QList<PageElement> layoutBlockQuote(const Content::BlockQuote &bq, qreal availWidth);
 
     // List layout: flattens list items into block boxes with indentation
     QList<PageElement> layoutList(const Content::List &list, qreal availWidth, int depth = 0);

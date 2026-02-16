@@ -46,6 +46,7 @@ struct TextStyle {
     bool superscript = false;
     bool subscript = false;
     QStringList fontFeatures;   // e.g. {"liga", "kern", "onum"}
+    QString linkHref;           // non-empty when this run is inside <a href="...">
 };
 
 struct ParagraphFormat {

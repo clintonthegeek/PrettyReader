@@ -3,6 +3,9 @@
 
 #include <QWidget>
 
+#include "contentmodel.h"
+#include "layoutengine.h"
+
 class QTreeWidget;
 class QTreeWidgetItem;
 class QTextDocument;
@@ -15,10 +18,13 @@ public:
     explicit TocWidget(QWidget *parent = nullptr);
 
     void buildFromDocument(QTextDocument *document);
+    void buildFromContentModel(const Content::Document &doc,
+                               const QList<Layout::SourceMapEntry> &sourceMap);
     void clear();
 
 Q_SIGNALS:
     void headingClicked(int blockNumber);
+    void headingNavigate(int page, qreal yOffset);
 
 private Q_SLOTS:
     void onItemClicked(QTreeWidgetItem *item, int column);

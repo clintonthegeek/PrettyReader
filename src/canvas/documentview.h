@@ -64,6 +64,7 @@ public:
 
     // Navigation
     void goToPage(int page);
+    void scrollToPosition(int page, qreal yOffset);
     void previousPage();
     void nextPage();
     int currentPage() const { return m_currentPage; }

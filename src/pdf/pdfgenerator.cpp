@@ -73,6 +73,9 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
 {
     m_embeddedFonts.clear();
     m_fontIndex.clear();
+    m_embeddedImages.clear();
+    m_imageIndex.clear();
+    m_pageAnnotations.clear();
     if (m_title.isEmpty())
         m_title = title;
 
@@ -113,6 +116,16 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         }
     }
 
+    // Also scan for images
+    for (const auto &page : layout.pages) {
+        for (const auto &elem : page.elements) {
+            if (auto *bb = std::get_if<Layout::BlockBox>(&elem)) {
+                if (bb->type == Layout::BlockBox::ImageBlock && !bb->image.isNull())
+                    ensureImageRegistered(bb->imageId, bb->image);
+            }
+        }
+    }
+
     // Also register header/footer font
     FontFace *hfFont = m_fontManager->loadFont(QStringLiteral("Noto Sans"), 400, false);
     if (hfFont)
@@ -121,20 +134,47 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     // Embed fonts
     embedFonts(writer);
 
+    // Embed images
+    embedImages(writer);
+
     // Build resource dictionary
     Pdf::ResourceDict resources;
     for (auto &ef : m_embeddedFonts)
         resources.fonts[ef.pdfName] = ef.fontObjId;
+    for (auto &ei : m_embeddedImages)
+        resources.xObjects[ei.pdfName] = ei.objId;
+
+    // Initialize per-page annotation lists
+    m_pageAnnotations.resize(layout.pages.size());
 
     // Write pages
     QList<Pdf::ObjId> pageObjIds;
-    for (const auto &page : layout.pages) {
-        QByteArray contentStream = renderPage(page, pageLayout, resources);
+    for (int pi = 0; pi < layout.pages.size(); ++pi) {
+        m_currentPageIndex = pi;
+        QByteArray contentStream = renderPage(layout.pages[pi], pageLayout, resources);
 
         // Content stream object
         Pdf::ObjId contentObj = writer.startObj();
         writer.write("<<\n");
         writer.endObjectWithStream(contentObj, contentStream);
+
+        // Write link annotation objects for this page
+        QList<Pdf::ObjId> annotObjIds;
+        for (const auto &annot : m_pageAnnotations[pi]) {
+            Pdf::ObjId annotObj = writer.startObj();
+            writer.write("<<\n/Type /Annot\n/Subtype /Link\n");
+            writer.write("/Rect ["
+                         + pdfCoord(annot.rect.left()) + " "
+                         + pdfCoord(annot.rect.bottom()) + " "
+                         + pdfCoord(annot.rect.right()) + " "
+                         + pdfCoord(annot.rect.top()) + "]\n");
+            writer.write("/Border [0 0 0]\n"); // no visible border
+            writer.write("/A <</Type /Action /S /URI /URI "
+                         + Pdf::toLiteralString(annot.href.toUtf8()) + ">>\n");
+            writer.write(">>");
+            writer.endObj(annotObj);
+            annotObjIds.append(annotObj);
+        }
 
         // Page object
         Pdf::ObjId pageObj = writer.startObj();
@@ -147,6 +187,12 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         writer.write("/Contents " + Pdf::toObjRef(contentObj) + "\n");
         writer.write("/Resources ");
         writer.writeResourceDict(resources);
+        if (!annotObjIds.isEmpty()) {
+            writer.write("/Annots [");
+            for (auto id : annotObjIds)
+                writer.write(Pdf::toObjRef(id) + " ");
+            writer.write("]\n");
+        }
         writer.write(">>");
         writer.endObj(pageObj);
         pageObjIds.append(pageObj);
@@ -160,6 +206,9 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     writer.write("]\n/Count " + Pdf::toPdf(pageObjIds.size()) + "\n>>");
     writer.endObj(writer.pagesObj());
 
+    // PDF Bookmarks / Outline tree
+    Pdf::ObjId outlineObj = writeOutlines(writer, pageObjIds, layout, pageLayout);
+
     // Info object
     writer.startObj(writer.infoObj());
     writer.write("<<\n");
@@ -172,7 +221,10 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
 
     // Catalog object
     writer.startObj(writer.catalogObj());
-    writer.write("<<\n/Type /Catalog\n/Pages " + Pdf::toObjRef(writer.pagesObj()) + "\n>>");
+    writer.write("<<\n/Type /Catalog\n/Pages " + Pdf::toObjRef(writer.pagesObj()) + "\n");
+    if (outlineObj)
+        writer.write("/Outlines " + Pdf::toObjRef(outlineObj) + "\n/PageMode /UseOutlines\n");
+    writer.write(">>");
     writer.endObj(writer.catalogObj());
 
     // XRef and trailer
@@ -274,6 +326,12 @@ void PdfGenerator::renderBlockBox(const Layout::BlockBox &box, QByteArray &strea
         stream += "Q\n";
     }
 
+    // Image block
+    if (box.type == Layout::BlockBox::ImageBlock) {
+        renderImageBlock(box, stream, originX, originY);
+        return;
+    }
+
     // Horizontal rule
     if (box.type == Layout::BlockBox::HRuleBlock) {
         stream += "q\n";
@@ -284,6 +342,20 @@ void PdfGenerator::renderBlockBox(const Layout::BlockBox &box, QByteArray &strea
                 + pdfCoord(originX + box.width) + " " + pdfCoord(ruleY) + " l S\n";
         stream += "Q\n";
         return;
+    }
+
+    // Blockquote left border
+    if (box.hasBlockQuoteBorder && box.blockQuoteLevel > 0) {
+        stream += "q\n";
+        stream += "0.80 0.80 0.80 RG\n"; // light gray border
+        stream += "2.0 w\n";
+        // Draw a vertical line at the left edge of the blockquote indent
+        qreal borderX = originX + box.blockQuoteIndent - 8.0;
+        qreal borderTop = blockY + box.spaceBefore;
+        qreal borderBottom = blockY - box.height - box.spaceAfter;
+        stream += pdfCoord(borderX) + " " + pdfCoord(borderTop) + " m "
+                + pdfCoord(borderX) + " " + pdfCoord(borderBottom) + " l S\n";
+        stream += "Q\n";
     }
 
     // Lines
@@ -516,6 +588,12 @@ void PdfGenerator::renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stre
         stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
                 + pdfCoord(curX) + " " + pdfCoord(sy) + " l S\n";
         stream += "Q\n";
+    }
+
+    // Collect link annotation rect
+    if (!gbox.style.linkHref.isEmpty()) {
+        collectLinkRect(x, y, curX - x, gbox.ascent, gbox.descent,
+                        gbox.style.linkHref);
     }
 }
 
@@ -760,6 +838,231 @@ void PdfGenerator::renderHeaderFooter(QByteArray &stream, const PageLayout &page
                 + pdfCoord(pageWidth - mRight) + " " + pdfCoord(sepY) + " l S\n";
         stream += "Q\n";
     }
+}
+
+// --- Image registration and embedding ---
+
+int PdfGenerator::ensureImageRegistered(const QString &imageId, const QImage &image)
+{
+    if (m_imageIndex.contains(imageId))
+        return m_imageIndex[imageId];
+
+    int idx = m_embeddedImages.size();
+    EmbeddedImage ei;
+    ei.pdfName = "Im" + QByteArray::number(idx);
+    ei.image = image;
+    ei.width = image.width();
+    ei.height = image.height();
+    m_embeddedImages.append(ei);
+    m_imageIndex[imageId] = idx;
+    return idx;
+}
+
+void PdfGenerator::embedImages(Pdf::Writer &writer)
+{
+    for (auto &ei : m_embeddedImages) {
+        // Convert image to raw RGB bytes
+        QImage rgb = ei.image.convertToFormat(QImage::Format_RGB888);
+        QByteArray rawData;
+        rawData.reserve(rgb.width() * rgb.height() * 3);
+        for (int y = 0; y < rgb.height(); ++y) {
+            const uchar *line = rgb.constScanLine(y);
+            rawData.append(reinterpret_cast<const char *>(line), rgb.width() * 3);
+        }
+
+        Pdf::ObjId imgObj = writer.startObj();
+        writer.write("<<\n/Type /XObject\n/Subtype /Image\n");
+        writer.write("/Width " + Pdf::toPdf(ei.width) + "\n");
+        writer.write("/Height " + Pdf::toPdf(ei.height) + "\n");
+        writer.write("/ColorSpace /DeviceRGB\n");
+        writer.write("/BitsPerComponent 8\n");
+        writer.endObjectWithStream(imgObj, rawData);
+        ei.objId = imgObj;
+    }
+}
+
+void PdfGenerator::renderImageBlock(const Layout::BlockBox &box, QByteArray &stream,
+                                     qreal originX, qreal originY)
+{
+    if (box.image.isNull() || box.imageId.isEmpty())
+        return;
+
+    auto it = m_imageIndex.find(box.imageId);
+    if (it == m_imageIndex.end())
+        return;
+
+    QByteArray imgName = m_embeddedImages[it.value()].pdfName;
+
+    // PDF image rendering: translate + scale with cm, then paint with Do
+    qreal imgX = originX + box.x;
+    qreal imgY = originY - box.y - box.imageHeight;
+
+    stream += "q\n";
+    stream += pdfCoord(box.imageWidth) + " 0 0 "
+            + pdfCoord(box.imageHeight) + " "
+            + pdfCoord(imgX) + " " + pdfCoord(imgY) + " cm\n";
+    stream += "/" + imgName + " Do\n";
+    stream += "Q\n";
+}
+
+// --- Link annotations ---
+
+void PdfGenerator::collectLinkRect(qreal x, qreal y, qreal width, qreal ascent,
+                                    qreal descent, const QString &href)
+{
+    if (href.isEmpty() || m_currentPageIndex < 0
+        || m_currentPageIndex >= m_pageAnnotations.size())
+        return;
+
+    // PDF coordinates: y is bottom-up, baseline at y, ascent goes up, descent goes down
+    LinkAnnotation annot;
+    annot.rect = QRectF(x, y - descent, width, ascent + descent);
+    annot.href = href;
+    m_pageAnnotations[m_currentPageIndex].append(annot);
+}
+
+// --- PDF Outline / Bookmarks ---
+
+Pdf::ObjId PdfGenerator::writeOutlines(Pdf::Writer &writer,
+                                        const QList<Pdf::ObjId> &pageObjIds,
+                                        const Layout::LayoutResult &layout,
+                                        const PageLayout &pageLayout)
+{
+    // 1. Collect headings from layout pages
+    QList<OutlineEntry> entries;
+
+    QSizeF pageSize = QPageSize(pageLayout.pageSizeId).sizePoints();
+    qreal pageHeight = pageSize.height();
+    qreal marginTop = pageLayout.margins.top() * 72.0 / 25.4;
+    qreal contentTop = pageHeight - marginTop;
+    if (pageLayout.headerEnabled)
+        contentTop -= (PageLayout::kHeaderHeight + PageLayout::kSeparatorGap);
+
+    for (int pi = 0; pi < layout.pages.size(); ++pi) {
+        for (const auto &elem : layout.pages[pi].elements) {
+            if (auto *bb = std::get_if<Layout::BlockBox>(&elem)) {
+                if (bb->headingLevel > 0 && !bb->headingText.isEmpty()) {
+                    OutlineEntry entry;
+                    entry.title = bb->headingText;
+                    entry.level = bb->headingLevel;
+                    entry.pageIndex = pi;
+                    // PDF y: position at top of heading with some breathing room
+                    entry.destY = contentTop - bb->y + bb->spaceBefore;
+                    entries.append(entry);
+                }
+            }
+        }
+    }
+
+    if (entries.isEmpty())
+        return 0;
+
+    // 2. Build tree structure using stack-based parent finding
+    //    (same algorithm as TocWidget)
+    // parents[level] = index of last entry at that heading level
+    int parents[7] = {-1, -1, -1, -1, -1, -1, -1};
+    // parentOf[i] = index of parent entry (-1 = top-level, parented to root)
+    QList<int> parentOf(entries.size(), -1);
+
+    for (int i = 0; i < entries.size(); ++i) {
+        int level = entries[i].level;
+
+        // Find nearest ancestor with lower level
+        int parentIdx = -1;
+        for (int l = level - 1; l >= 1; --l) {
+            if (parents[l] >= 0) {
+                parentIdx = parents[l];
+                break;
+            }
+        }
+        parentOf[i] = parentIdx;
+
+        if (parentIdx >= 0) {
+            entries[parentIdx].childIndices.append(i);
+        }
+
+        parents[level] = i;
+        // Clear deeper levels
+        for (int l = level + 1; l <= 6; ++l)
+            parents[l] = -1;
+    }
+
+    // 3. Reserve object IDs: one for root + one per entry
+    Pdf::ObjId rootObjId = writer.newObject();
+    for (auto &entry : entries)
+        entry.objId = writer.newObject();
+
+    // 4. Collect top-level entries (parentOf == -1)
+    QList<int> topLevel;
+    for (int i = 0; i < entries.size(); ++i) {
+        if (parentOf[i] < 0)
+            topLevel.append(i);
+    }
+
+    // 5. Helper: count all descendants recursively
+    std::function<int(int)> countDescendants = [&](int idx) -> int {
+        int count = 0;
+        for (int childIdx : entries[idx].childIndices) {
+            count += 1 + countDescendants(childIdx);
+        }
+        return count;
+    };
+
+    // 6. Write each outline entry
+    for (int i = 0; i < entries.size(); ++i) {
+        const auto &entry = entries[i];
+        Pdf::ObjId parentObj = (parentOf[i] >= 0) ? entries[parentOf[i]].objId : rootObjId;
+
+        // Find prev/next siblings within same parent
+        const QList<int> &siblings = (parentOf[i] >= 0)
+            ? entries[parentOf[i]].childIndices
+            : topLevel;
+
+        int siblingPos = siblings.indexOf(i);
+        int prevIdx = (siblingPos > 0) ? siblings[siblingPos - 1] : -1;
+        int nextIdx = (siblingPos < siblings.size() - 1) ? siblings[siblingPos + 1] : -1;
+
+        writer.startObj(entry.objId);
+        writer.write("<<\n");
+        writer.write("/Title " + Pdf::toLiteralString(Pdf::toUTF16(entry.title)) + "\n");
+        writer.write("/Parent " + Pdf::toObjRef(parentObj) + "\n");
+
+        // Destination: page + XYZ position
+        if (entry.pageIndex >= 0 && entry.pageIndex < pageObjIds.size()) {
+            writer.write("/Dest [" + Pdf::toObjRef(pageObjIds[entry.pageIndex])
+                         + " /XYZ 0 " + pdfCoord(entry.destY) + " null]\n");
+        }
+
+        if (prevIdx >= 0)
+            writer.write("/Prev " + Pdf::toObjRef(entries[prevIdx].objId) + "\n");
+        if (nextIdx >= 0)
+            writer.write("/Next " + Pdf::toObjRef(entries[nextIdx].objId) + "\n");
+
+        if (!entry.childIndices.isEmpty()) {
+            writer.write("/First " + Pdf::toObjRef(entries[entry.childIndices.first()].objId) + "\n");
+            writer.write("/Last " + Pdf::toObjRef(entries[entry.childIndices.last()].objId) + "\n");
+            writer.write("/Count " + Pdf::toPdf(countDescendants(i)) + "\n");
+        }
+
+        writer.write(">>");
+        writer.endObj(entry.objId);
+    }
+
+    // 7. Write root outline object
+
+    int totalCount = 0;
+    for (int idx : topLevel)
+        totalCount += 1 + countDescendants(idx);
+
+    writer.startObj(rootObjId);
+    writer.write("<<\n/Type /Outlines\n");
+    writer.write("/First " + Pdf::toObjRef(entries[topLevel.first()].objId) + "\n");
+    writer.write("/Last " + Pdf::toObjRef(entries[topLevel.last()].objId) + "\n");
+    writer.write("/Count " + Pdf::toPdf(totalCount) + "\n");
+    writer.write(">>");
+    writer.endObj(rootObjId);
+
+    return rootObjId;
 }
 
 // --- Font embedding ---

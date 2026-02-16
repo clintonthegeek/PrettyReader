@@ -52,23 +52,23 @@ LayoutResult Engine::layout(const Content::Document &doc, const PageLayout &page
         std::visit([&](const auto &b) {
             using T = std::decay_t<decltype(b)>;
             if constexpr (std::is_same_v<T, Content::Paragraph>) {
-                elements.append(layoutParagraph(b, availWidth));
+                // Detect image-only paragraphs (single InlineImage inline)
+                if (b.inlines.size() == 1
+                    && std::holds_alternative<Content::InlineImage>(b.inlines.first())) {
+                    const auto &img = std::get<Content::InlineImage>(b.inlines.first());
+                    if (!img.resolvedImageData.isEmpty()) {
+                        elements.append(layoutImage(img, availWidth));
+                    }
+                } else {
+                    elements.append(layoutParagraph(b, availWidth));
+                }
             } else if constexpr (std::is_same_v<T, Content::Heading>) {
                 elements.append(layoutHeading(b, availWidth));
             } else if constexpr (std::is_same_v<T, Content::CodeBlock>) {
                 elements.append(layoutCodeBlock(b, availWidth));
             } else if constexpr (std::is_same_v<T, Content::BlockQuote>) {
-                // Flatten blockquote children
-                for (const auto &child : b.children) {
-                    std::visit([&](const auto &c) {
-                        using U = std::decay_t<decltype(c)>;
-                        if constexpr (std::is_same_v<U, Content::Paragraph>) {
-                            auto box = layoutParagraph(c, availWidth - b.level * 20.0);
-                            box.x = b.level * 20.0;
-                            elements.append(box);
-                        }
-                    }, child);
-                }
+                auto bqElements = layoutBlockQuote(b, availWidth);
+                elements.append(bqElements);
             } else if constexpr (std::is_same_v<T, Content::List>) {
                 auto listElements = layoutList(b, availWidth);
                 elements.append(listElements);
@@ -552,6 +552,20 @@ BlockBox Engine::layoutHeading(const Content::Heading &heading, qreal availWidth
     }
 
     box.lines = breakIntoLines(heading.inlines, baseStyle, heading.format, availWidth);
+    box.keepWithNext = true;
+
+    // Extract heading text for PDF bookmarks
+    for (const auto &node : heading.inlines) {
+        std::visit([&](const auto &n) {
+            using T = std::decay_t<decltype(n)>;
+            if constexpr (std::is_same_v<T, Content::TextRun>)
+                box.headingText += n.text;
+            else if constexpr (std::is_same_v<T, Content::InlineCode>)
+                box.headingText += n.text;
+            else if constexpr (std::is_same_v<T, Content::Link>)
+                box.headingText += n.text;
+        }, node);
+    }
 
     qreal h = 0;
     for (const auto &line : box.lines)
@@ -825,6 +839,115 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
     return tbox;
 }
 
+// --- Image layout ---
+
+BlockBox Engine::layoutImage(const Content::InlineImage &img, qreal availWidth)
+{
+    BlockBox box;
+    box.type = BlockBox::ImageBlock;
+    box.width = availWidth;
+    box.spaceBefore = 6.0;
+    box.spaceAfter = 6.0;
+
+    QImage qimg;
+    qimg.loadFromData(img.resolvedImageData);
+    if (qimg.isNull()) {
+        box.height = 0;
+        return box;
+    }
+
+    // Scale image to fit available width, cap height at 500pt
+    static constexpr qreal kMaxImageHeight = 500.0;
+    qreal imgW = img.width > 0 ? img.width : qimg.width();
+    qreal imgH = img.height > 0 ? img.height : qimg.height();
+
+    if (imgW > availWidth) {
+        qreal scale = availWidth / imgW;
+        imgW = availWidth;
+        imgH *= scale;
+    }
+    if (imgH > kMaxImageHeight) {
+        qreal scale = kMaxImageHeight / imgH;
+        imgH = kMaxImageHeight;
+        imgW *= scale;
+    }
+
+    box.image = qimg.convertToFormat(QImage::Format_RGB888);
+    box.imageWidth = imgW;
+    box.imageHeight = imgH;
+    box.height = imgH;
+    // Generate unique image ID based on data hash
+    box.imageId = QStringLiteral("Img%1").arg(
+        QString::number(qHash(img.resolvedImageData), 16));
+
+    return box;
+}
+
+// --- Blockquote layout ---
+
+QList<PageElement> Engine::layoutBlockQuote(const Content::BlockQuote &bq, qreal availWidth)
+{
+    QList<PageElement> elements;
+    qreal indent = bq.level * 16.0;
+    qreal innerWidth = availWidth - indent;
+
+    for (const auto &child : bq.children) {
+        std::visit([&](const auto &c) {
+            using T = std::decay_t<decltype(c)>;
+            if constexpr (std::is_same_v<T, Content::Paragraph>) {
+                auto box = layoutParagraph(c, innerWidth);
+                box.x += indent;
+                box.hasBlockQuoteBorder = true;
+                box.blockQuoteLevel = bq.level;
+                box.blockQuoteIndent = indent;
+                elements.append(box);
+            } else if constexpr (std::is_same_v<T, Content::Heading>) {
+                auto box = layoutHeading(c, innerWidth);
+                box.x += indent;
+                box.hasBlockQuoteBorder = true;
+                box.blockQuoteLevel = bq.level;
+                box.blockQuoteIndent = indent;
+                elements.append(box);
+            } else if constexpr (std::is_same_v<T, Content::CodeBlock>) {
+                auto box = layoutCodeBlock(c, innerWidth);
+                box.x += indent;
+                box.hasBlockQuoteBorder = true;
+                box.blockQuoteLevel = bq.level;
+                box.blockQuoteIndent = indent;
+                elements.append(box);
+            } else if constexpr (std::is_same_v<T, Content::List>) {
+                auto listElements = layoutList(c, availWidth - indent);
+                for (auto &elem : listElements) {
+                    if (auto *bb = std::get_if<BlockBox>(&elem)) {
+                        bb->x += indent;
+                        bb->hasBlockQuoteBorder = true;
+                        bb->blockQuoteLevel = bq.level;
+                        bb->blockQuoteIndent = indent;
+                    }
+                }
+                elements.append(listElements);
+            } else if constexpr (std::is_same_v<T, Content::Table>) {
+                auto tbox = layoutTable(c, innerWidth);
+                tbox.x += indent;
+                elements.append(tbox);
+            } else if constexpr (std::is_same_v<T, Content::HorizontalRule>) {
+                auto box = layoutHorizontalRule(c, innerWidth);
+                box.x += indent;
+                box.hasBlockQuoteBorder = true;
+                box.blockQuoteLevel = bq.level;
+                box.blockQuoteIndent = indent;
+                elements.append(box);
+            } else if constexpr (std::is_same_v<T, Content::BlockQuote>) {
+                // Nested blockquote
+                auto nested = layoutBlockQuote(c, availWidth);
+                elements.append(nested);
+            }
+        }, child);
+    }
+
+    return elements;
+}
+
 // --- List layout ---
 
 QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidth, int depth)
@@ -1046,20 +1169,20 @@ void Engine::assignToPages(const QList<PageElement> &elements,
     currentPage.pageNumber = 0;
     qreal y = 0;
 
-    for (const auto &element : elements) {
+    for (int idx = 0; idx < elements.size(); ++idx) {
+        const auto &element = elements[idx];
+
         // Handle tables separately for page-splitting
         if (auto *tablePtr = std::get_if<TableBox>(&element)) {
             const TableBox &table = *tablePtr;
             qreal remaining = pageHeight - y;
 
             if (table.height <= remaining || currentPage.elements.isEmpty()) {
-                // Fits on current page (or page is empty — place whole table)
                 TableBox positioned = table;
                 positioned.y = y;
                 currentPage.elements.append(positioned);
                 y += table.height;
             } else {
-                // Split across pages
                 auto slices = splitTable(table, remaining, pageHeight);
                 for (int si = 0; si < slices.size(); ++si) {
                     if (si > 0) {
@@ -1081,7 +1204,8 @@ void Engine::assignToPages(const QList<PageElement> &elements,
         qreal elementHeight = 0;
         qreal spaceBefore = 0;
         qreal spaceAfter = 0;
-        int headingLevel = 0;
+        bool keepWithNext = false;
+        int lineCount = 0;
 
         std::visit([&](const auto &e) {
             using T = std::decay_t<decltype(e)>;
@@ -1089,7 +1213,8 @@ void Engine::assignToPages(const QList<PageElement> &elements,
                 elementHeight = e.height;
                 spaceBefore = e.spaceBefore;
                 spaceAfter = e.spaceAfter;
-                headingLevel = e.headingLevel;
+                keepWithNext = e.keepWithNext;
+                lineCount = e.lines.size();
             } else if constexpr (std::is_same_v<T, FootnoteSectionBox>) {
                 elementHeight = e.height;
                 spaceBefore = 20.0;
@@ -1101,9 +1226,53 @@ void Engine::assignToPages(const QList<PageElement> &elements,
         // Page break needed?
         bool needsPageBreak = (y + totalHeight > pageHeight) && !currentPage.elements.isEmpty();
 
-        // Widow/orphan: don't leave a heading at the bottom of a page
-        if (headingLevel > 0 && y + totalHeight + 30 > pageHeight && !currentPage.elements.isEmpty())
-            needsPageBreak = true;
+        // Keep-with-next: if this is a heading (or element with keepWithNext),
+        // peek at the next element. If both won't fit, break before this one.
+        if (keepWithNext && !needsPageBreak && idx + 1 < elements.size()
+            && !currentPage.elements.isEmpty()) {
+            qreal nextHeight = 0;
+            std::visit([&](const auto &ne) {
+                using T = std::decay_t<decltype(ne)>;
+                if constexpr (std::is_same_v<T, BlockBox>) {
+                    nextHeight = ne.spaceBefore + ne.height;
+                    // Only need the first couple of lines to keep with heading
+                    if (ne.lines.size() > 2) {
+                        qreal twoLineH = 0;
+                        for (int li = 0; li < 2 && li < ne.lines.size(); ++li)
+                            twoLineH += ne.lines[li].height;
+                        nextHeight = ne.spaceBefore + twoLineH;
+                    }
+                } else if constexpr (std::is_same_v<T, TableBox>) {
+                    nextHeight = ne.height;
+                } else if constexpr (std::is_same_v<T, FootnoteSectionBox>) {
+                    nextHeight = 20.0 + ne.height;
+                }
+            }, elements[idx + 1]);
+
+            if (y + totalHeight + nextHeight > pageHeight)
+                needsPageBreak = true;
+        }
+
+        // Orphan protection: if a multi-line paragraph would have fewer than
+        // 2 lines on the current page, push the whole paragraph to the next page.
+        if (!needsPageBreak && lineCount > 2 && !currentPage.elements.isEmpty()) {
+            // Calculate how many lines fit
+            qreal remaining = pageHeight - y - spaceBefore;
+            int linesFitting = 0;
+            qreal accum = 0;
+            // Access lines via the block box
+            if (auto *bb = std::get_if<BlockBox>(&element)) {
+                for (const auto &line : bb->lines) {
+                    accum += line.height;
+                    if (accum <= remaining)
+                        linesFitting++;
+                    else
+                        break;
+                }
+            }
+            if (linesFitting > 0 && linesFitting < 2)
+                needsPageBreak = true;
+        }
 
         if (needsPageBreak) {
             currentPage.contentHeight = y;

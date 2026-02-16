@@ -55,6 +55,17 @@ private:
                        qreal originX, qreal originY, qreal pageHeight,
                        qreal availWidth);
 
+    // Link annotations: collected per-page during rendering
+    struct LinkAnnotation {
+        QRectF rect;      // PDF coordinates (bottom-up)
+        QString href;
+    };
+    QList<QList<LinkAnnotation>> m_pageAnnotations; // indexed by page number
+    int m_currentPageIndex = 0;
+
+    void collectLinkRect(qreal x, qreal y, qreal width, qreal ascent,
+                         qreal descent, const QString &href);
+
     // Font embedding
     struct EmbeddedFont {
         Pdf::ObjId fontObjId = 0;
@@ -75,6 +86,36 @@ private:
     void renderHeaderFooter(QByteArray &stream, const PageLayout &pageLayout,
                             int pageNumber, int totalPages,
                             qreal pageWidth, qreal pageHeight);
+
+    // Image embedding
+    struct EmbeddedImage {
+        Pdf::ObjId objId = 0;
+        QByteArray pdfName; // e.g. "Im0", "Im1"
+        QImage image;
+        int width = 0;
+        int height = 0;
+    };
+    QList<EmbeddedImage> m_embeddedImages;
+    QHash<QString, int> m_imageIndex; // imageId → index in m_embeddedImages
+    int ensureImageRegistered(const QString &imageId, const QImage &image);
+    void embedImages(Pdf::Writer &writer);
+    void renderImageBlock(const Layout::BlockBox &box, QByteArray &stream,
+                          qreal originX, qreal originY);
+
+    // PDF Outline / Bookmarks
+    struct OutlineEntry {
+        QString title;
+        int level = 0;        // heading level 1-6
+        int pageIndex = 0;    // index into pageObjIds
+        qreal destY = 0;      // PDF y-coordinate for /Dest
+        Pdf::ObjId objId = 0;
+        QList<int> childIndices; // indices into flat list
+    };
+
+    Pdf::ObjId writeOutlines(Pdf::Writer &writer,
+                              const QList<Pdf::ObjId> &pageObjIds,
+                              const Layout::LayoutResult &layout,
+                              const PageLayout &pageLayout);
 
     // Utility
     static QByteArray colorOperator(const QColor &color, bool fill = true);
