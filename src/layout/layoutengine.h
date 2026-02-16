@@ -94,6 +94,7 @@ struct BlockBox {
     qreal y = 0;
     qreal width = 0;
     qreal height = 0;
+    qreal firstLineIndent = 0;
     qreal spaceBefore = 0;
     qreal spaceAfter = 0;
     QColor background; // invalid = none

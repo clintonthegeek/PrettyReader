@@ -46,8 +46,8 @@ void PdfPageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     painter->drawRect(pageRect);
 
     // Render from cache
-    int renderWidth = static_cast<int>(m_pageSize.width() * m_zoom);
-    int renderHeight = static_cast<int>(m_pageSize.height() * m_zoom);
+    int renderWidth = qRound(m_pageSize.width() * m_zoom);
+    int renderHeight = qRound(m_pageSize.height() * m_zoom);
 
     QImage img = m_cache->cachedPixmap(m_pageNumber, renderWidth, renderHeight);
     if (!img.isNull()) {

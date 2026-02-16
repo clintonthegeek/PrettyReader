@@ -360,10 +360,16 @@ void PdfGenerator::renderBlockBox(const Layout::BlockBox &box, QByteArray &strea
 
     // Lines
     qreal lineY = 0;
-    for (const auto &line : box.lines) {
-        renderLineBox(line, stream, originX + box.x, blockY - lineY,
-                      pageHeight, box.width);
-        lineY += line.height;
+    for (int li = 0; li < box.lines.size(); ++li) {
+        qreal lineX = originX + box.x;
+        qreal lineAvailWidth = box.width;
+        if (li == 0 && box.firstLineIndent != 0) {
+            lineX += box.firstLineIndent;
+            lineAvailWidth -= box.firstLineIndent;
+        }
+        renderLineBox(box.lines[li], stream, lineX, blockY - lineY,
+                      pageHeight, lineAvailWidth);
+        lineY += box.lines[li].height;
     }
 }
 

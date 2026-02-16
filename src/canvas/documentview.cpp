@@ -34,7 +34,7 @@ DocumentView::DocumentView(QWidget *parent)
     setRenderHint(QPainter::Antialiasing);
     setRenderHint(QPainter::TextAntialiasing);
     setDragMode(QGraphicsView::ScrollHandDrag);
-    setViewportUpdateMode(QGraphicsView::MinimalViewportUpdate);
+    setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
 
     // Default A4 page size in points (595 x 842)
     m_pageSize = QSizeF(595, 842);

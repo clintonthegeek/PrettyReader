@@ -527,6 +527,7 @@ BlockBox Engine::layoutParagraph(const Content::Paragraph &para, qreal availWidt
         h += line.height;
     box.height = h;
     box.x = para.format.leftMargin;
+    box.firstLineIndent = para.format.firstLineIndent;
     box.source = para.source;
 
     return box;
@@ -957,13 +958,13 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
 
     for (int i = 0; i < list.items.size(); ++i) {
         const auto &item = list.items[i];
+        qreal itemBulletWidth = 0; // track for subsequent paragraphs
 
         for (const auto &child : item.children) {
             std::visit([&](const auto &c) {
                 using T = std::decay_t<decltype(c)>;
                 if constexpr (std::is_same_v<T, Content::Paragraph>) {
                     Content::Paragraph para = c;
-                    para.format.leftMargin += indent;
 
                     bool isFirstPara = (&child == &item.children.first())
                                        && !para.inlines.isEmpty();
@@ -986,8 +987,8 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                         }
                     }
 
-                    // Add bullet/number text prefix (non-task items)
                     if (isFirstPara && !isTask) {
+                        // Bullet/number prefix: measure width, then use hanging indent
                         QString prefix;
                         if (list.type == Content::ListType::Ordered)
                             prefix = QString::number(list.startNumber + i) + QStringLiteral(". ");
@@ -997,14 +998,24 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                         Content::TextRun prefixRun;
                         prefixRun.text = prefix;
                         prefixRun.style = firstStyle;
-                        para.inlines.prepend(prefixRun);
-                    }
 
-                    // Task items: add extra margin for checkbox, layout, then prepend checkbox GlyphBox
-                    qreal cbWidth = 0;
-                    if (isTask) {
-                        cbWidth = firstStyle.fontSize * 0.85 + 3.0; // checkbox + gap
-                        para.format.leftMargin += cbWidth;
+                        QList<Content::InlineNode> prefixInlines;
+                        prefixInlines.append(prefixRun);
+                        itemBulletWidth = measureInlines(prefixInlines, firstStyle);
+
+                        para.inlines.prepend(prefixRun);
+                        para.format.leftMargin += indent + itemBulletWidth;
+                        para.format.firstLineIndent = -itemBulletWidth;
+                    } else if (isTask) {
+                        // Task items: checkbox width as hanging indent
+                        qreal cbWidth = firstStyle.fontSize * 0.85 + 3.0;
+                        itemBulletWidth = cbWidth;
+                        para.format.leftMargin += indent + cbWidth;
+                        para.format.firstLineIndent = -cbWidth;
+                    } else {
+                        // Subsequent paragraph in same list item:
+                        // align with continuation text (past bullet)
+                        para.format.leftMargin += indent + itemBulletWidth;
                     }
 
                     auto box = layoutParagraph(para, availWidth);
@@ -1015,11 +1026,11 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                             ? GlyphBox::Checked : GlyphBox::Unchecked;
                         cbBox.fontSize = firstStyle.fontSize;
                         cbBox.style = firstStyle;
-                        cbBox.width = cbWidth;
+                        cbBox.width = itemBulletWidth;
                         cbBox.ascent = firstStyle.fontSize * 0.8;
                         cbBox.descent = firstStyle.fontSize * 0.2;
                         box.lines.first().glyphs.prepend(cbBox);
-                        box.lines.first().width += cbWidth;
+                        box.lines.first().width += itemBulletWidth;
                     }
 
                     elements.append(box);
