@@ -97,6 +97,8 @@ add_library(PrettyReaderCore STATIC
     widgets/filebrowserdock.h
     widgets/tocwidget.cpp
     widgets/tocwidget.h
+    widgets/pdfexportdialog.cpp
+    widgets/pdfexportdialog.h
     widgets/documenttab.cpp
     widgets/documenttab.h
 )
