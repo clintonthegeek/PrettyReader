@@ -36,6 +36,10 @@
 #include "textshaper.h"
 #include "layoutengine.h"
 #include "pdfgenerator.h"
+#include "pdfexportdialog.h"
+#include "pdfexportoptions.h"
+#include "contentfilter.h"
+#include "pagerangeparser.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -44,6 +48,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QLabel>
 #include <QMenuBar>
 #include <QAbstractTextDocumentLayout>
@@ -592,14 +597,6 @@ void MainWindow::onFileExportPdf()
     }
 
     if (view->isPdfMode()) {
-        // New pipeline: the PDF data is already generated, just write to file
-        QString path = QFileDialog::getSaveFileName(
-            this, i18n("Export as PDF"),
-            QString(), i18n("PDF Files (*.pdf)"));
-        if (path.isEmpty())
-            return;
-
-        // Regenerate to get fresh PDF bytes (ensures current styles are applied)
         auto *tab = currentDocumentTab();
         if (!tab)
             return;
@@ -630,6 +627,7 @@ void MainWindow::onFileExportPdf()
         QFileInfo fi(filePath);
         PageLayout pl = m_pageLayoutWidget->currentPageLayout();
 
+        // Build content (needed for heading tree + page count)
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
@@ -640,18 +638,119 @@ void MainWindow::onFileExportPdf()
             contentBuilder.setShortWords(m_shortWords);
         contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
         Content::Document contentDoc = contentBuilder.build(markdown);
-
         view->applyLanguageOverrides(contentDoc);
 
+        // Pre-layout to get page count for dialog
         m_fontManager->resetUsage();
+        Layout::Engine preLayoutEngine(m_fontManager, m_textShaper);
+        preLayoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
+        Layout::LayoutResult preLayout = preLayoutEngine.layout(contentDoc, pl);
+        int pageCount = preLayout.pages.size();
 
+        // Load saved options from KConfig
+        PdfExportOptions opts;
+        auto *settings = PrettyReaderSettings::self();
+        opts.author = settings->pdfAuthor();
+        opts.textCopyMode = static_cast<PdfExportOptions::TextCopyMode>(
+            settings->pdfTextCopyMode());
+        opts.includeBookmarks = settings->pdfIncludeBookmarks();
+        opts.bookmarkMaxDepth = settings->pdfBookmarkMaxDepth();
+        opts.initialView = static_cast<PdfExportOptions::InitialView>(
+            settings->pdfInitialView());
+        opts.pageLayout = static_cast<PdfExportOptions::PageLayout>(
+            settings->pdfPageLayout());
+
+        // Overlay per-document options from MetadataStore
+        QJsonObject perDoc = m_metadataStore->load(filePath);
+        if (perDoc.contains(QStringLiteral("pdfExportOptions"))) {
+            QJsonObject saved = perDoc[QStringLiteral("pdfExportOptions")].toObject();
+            if (saved.contains(QStringLiteral("title")))
+                opts.title = saved[QStringLiteral("title")].toString();
+            if (saved.contains(QStringLiteral("author")))
+                opts.author = saved[QStringLiteral("author")].toString();
+            if (saved.contains(QStringLiteral("subject")))
+                opts.subject = saved[QStringLiteral("subject")].toString();
+            if (saved.contains(QStringLiteral("keywords")))
+                opts.keywords = saved[QStringLiteral("keywords")].toString();
+            if (saved.contains(QStringLiteral("pageRangeExpr")))
+                opts.pageRangeExpr = saved[QStringLiteral("pageRangeExpr")].toString();
+            if (saved.contains(QStringLiteral("excludedHeadingIndices"))) {
+                QJsonArray arr = saved[QStringLiteral("excludedHeadingIndices")].toArray();
+                for (const auto &v : arr)
+                    opts.excludedHeadingIndices.insert(v.toInt());
+            }
+        }
+
+        // Show export dialog
+        PdfExportDialog dlg(contentDoc, pageCount, fi.baseName(), this);
+        dlg.setOptions(opts);
+        if (dlg.exec() != QDialog::Accepted)
+            return;
+
+        opts = dlg.options();
+
+        // Save global defaults to KConfig
+        settings->setPdfAuthor(opts.author);
+        settings->setPdfTextCopyMode(static_cast<int>(opts.textCopyMode));
+        settings->setPdfIncludeBookmarks(opts.includeBookmarks);
+        settings->setPdfBookmarkMaxDepth(opts.bookmarkMaxDepth);
+        settings->setPdfInitialView(static_cast<int>(opts.initialView));
+        settings->setPdfPageLayout(static_cast<int>(opts.pageLayout));
+        settings->save();
+
+        // Save per-document options to MetadataStore
+        QJsonObject docOpts;
+        docOpts[QStringLiteral("title")] = opts.title;
+        docOpts[QStringLiteral("author")] = opts.author;
+        docOpts[QStringLiteral("subject")] = opts.subject;
+        docOpts[QStringLiteral("keywords")] = opts.keywords;
+        docOpts[QStringLiteral("pageRangeExpr")] = opts.pageRangeExpr;
+        QJsonArray excludedArr;
+        for (int idx : opts.excludedHeadingIndices)
+            excludedArr.append(idx);
+        docOpts[QStringLiteral("excludedHeadingIndices")] = excludedArr;
+        m_metadataStore->setValue(filePath, QStringLiteral("pdfExportOptions"), docOpts);
+
+        // File save dialog
+        QString path = QFileDialog::getSaveFileName(
+            this, i18n("Export as PDF"),
+            QString(), i18n("PDF Files (*.pdf)"));
+        if (path.isEmpty())
+            return;
+
+        // Filter content by excluded sections
+        Content::Document filteredDoc = contentDoc;
+        if (opts.sectionsModified && !opts.excludedHeadingIndices.isEmpty())
+            filteredDoc = ContentFilter::filterSections(contentDoc, opts.excludedHeadingIndices);
+
+        // Layout with filtered content
+        m_fontManager->resetUsage();
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
         layoutEngine.setHyphenateJustifiedText(
             PrettyReaderSettings::self()->hyphenateJustifiedText());
-        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+        Layout::LayoutResult layoutResult = layoutEngine.layout(filteredDoc, pl);
 
+        // Filter pages by range
+        if (opts.pageRangeModified && !opts.pageRangeExpr.isEmpty()) {
+            auto rangeResult = PageRangeParser::parse(opts.pageRangeExpr, layoutResult.pages.size());
+            if (rangeResult.valid && rangeResult.pages.size() < layoutResult.pages.size()) {
+                QList<Layout::Page> filteredPages;
+                for (int i = 0; i < layoutResult.pages.size(); ++i) {
+                    if (rangeResult.pages.contains(i + 1))  // 1-based
+                        filteredPages.append(layoutResult.pages[i]);
+                }
+                layoutResult.pages = filteredPages;
+                // Renumber pages
+                for (int i = 0; i < layoutResult.pages.size(); ++i)
+                    layoutResult.pages[i].pageNumber = i;
+            }
+        }
+
+        // Generate PDF with options
         PdfGenerator pdfGen(m_fontManager);
-        pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
+        pdfGen.setMaxJustifyGap(settings->maxJustifyGap());
+        pdfGen.setExportOptions(opts);
         if (pdfGen.generateToFile(layoutResult, pl, fi.baseName(), path)) {
             statusBar()->showMessage(i18n("Exported to %1", path), 3000);
         } else {
