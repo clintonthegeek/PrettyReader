@@ -127,4 +127,39 @@
       <default>true</default>
     </entry>
   </group>
+
+  <group name="PdfExport">
+    <entry name="PdfAuthor" type="String">
+      <label>Default author for PDF metadata.</label>
+      <default></default>
+    </entry>
+    <entry name="PdfTextCopyMode" type="Int">
+      <label>Text copy behavior: 0=PlainText, 1=MarkdownSource, 2=UnwrappedParagraphs.</label>
+      <default>0</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
+    <entry name="PdfIncludeBookmarks" type="Bool">
+      <label>Include PDF bookmarks/outlines.</label>
+      <default>true</default>
+    </entry>
+    <entry name="PdfBookmarkMaxDepth" type="Int">
+      <label>Maximum heading depth for bookmarks (1-6).</label>
+      <default>6</default>
+      <min>1</min>
+      <max>6</max>
+    </entry>
+    <entry name="PdfInitialView" type="Int">
+      <label>PDF initial view: 0=ViewerDefault, 1=ShowBookmarks, 2=ShowThumbnails.</label>
+      <default>1</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
+    <entry name="PdfPageLayout" type="Int">
+      <label>PDF page layout: 0=SinglePage, 1=Continuous, 2=FacingPages, 3=FacingPagesFirstAlone.</label>
+      <default>1</default>
+      <min>0</min>
+      <max>3</max>
+    </entry>
+  </group>
 </kcfg>
