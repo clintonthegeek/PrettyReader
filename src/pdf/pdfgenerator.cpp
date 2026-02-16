@@ -386,7 +386,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     // Skip sub-word boundaries (soft-hyphen splits) and intra-inline-code
     // gaps (adjacent glyph boxes with the same background color).
     // Cap maximum gap expansion to avoid rivers of whitespace.
-    static constexpr qreal kMaxJustifyGap = 6.0; // points
+    static constexpr qreal kMaxJustifyGap = 14.0; // points (~1.3x font size for 11pt body)
 
     bool doJustify = false;
     qreal extraPerGap = 0;

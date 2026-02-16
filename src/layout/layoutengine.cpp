@@ -483,6 +483,10 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                 break;
             }
         }
+        // Remove the glyph box entirely if trimming emptied it,
+        // otherwise justify counts it as a gap recipient
+        if (lastBox.glyphs.isEmpty())
+            lines[li].glyphs.removeLast();
     }
 
     // Compute line metrics
