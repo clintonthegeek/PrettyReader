@@ -652,8 +652,8 @@ void MainWindow::onFileExportPdf()
         PdfExportOptions opts;
         auto *settings = PrettyReaderSettings::self();
         opts.author = settings->pdfAuthor();
-        opts.textCopyMode = static_cast<PdfExportOptions::TextCopyMode>(
-            settings->pdfTextCopyMode());
+        opts.markdownCopy = settings->pdfMarkdownCopy();
+        opts.unwrapParagraphs = settings->pdfUnwrapParagraphs();
         opts.includeBookmarks = settings->pdfIncludeBookmarks();
         opts.bookmarkMaxDepth = settings->pdfBookmarkMaxDepth();
         opts.initialView = static_cast<PdfExportOptions::InitialView>(
@@ -692,7 +692,8 @@ void MainWindow::onFileExportPdf()
 
         // Save global defaults to KConfig
         settings->setPdfAuthor(opts.author);
-        settings->setPdfTextCopyMode(static_cast<int>(opts.textCopyMode));
+        settings->setPdfMarkdownCopy(opts.markdownCopy);
+        settings->setPdfUnwrapParagraphs(opts.unwrapParagraphs);
         settings->setPdfIncludeBookmarks(opts.includeBookmarks);
         settings->setPdfBookmarkMaxDepth(opts.bookmarkMaxDepth);
         settings->setPdfInitialView(static_cast<int>(opts.initialView));

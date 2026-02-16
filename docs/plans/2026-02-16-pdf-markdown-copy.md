@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** When the user selects "Markdown source" as the text copy mode in the PDF export dialog, text copied from the exported PDF in any external viewer returns markdown syntax (`**bold**`, `# Heading`, `` `code` ``, `[link](url)`, etc.).
+**Goal:** When the user enables the "Embed markdown syntax" checkbox in the PDF export dialog, text copied from the exported PDF in any external viewer returns markdown syntax (`**bold**`, `# Heading`, `` `code` ``, `[link](url)`, etc.).
 
 **Architecture:** Hidden glyphs rendered in the page background color (white) are drawn beneath visible text in the PDF content stream. Every PDF viewer extracts these as real characters during copy. The layout engine annotates glyph boxes with markdown prefix/suffix strings derived from the content model's inline node types. The PDF generator emits these as separate `BT`/`ET` blocks at tiny x-offsets to ensure correct reading order without visually disturbing the layout.
 
@@ -319,7 +319,7 @@ In `renderLineBox()`, find the loop that iterates over glyph boxes and calls `re
 Find the rendering section where glyph boxes are iterated (the block that computes `x` position and calls `renderGlyphBox`). Add markdown emission:
 
 ```cpp
-    bool markdownMode = (m_exportOptions.textCopyMode == PdfExportOptions::MarkdownSource);
+    bool markdownMode = m_exportOptions.markdownCopy;
 ```
 
 Before each `renderGlyphBox(gbox, stream, x, pdfY)` call:
@@ -361,11 +361,11 @@ git commit -m "Emit hidden markdown glyphs in renderLineBox when markdown mode a
 In `onFileExportPdf()`, after creating the `Layout::Engine layoutEngine(...)` (the final layout, not the pre-layout), add:
 
 ```cpp
-    if (opts.textCopyMode == PdfExportOptions::MarkdownSource)
+    if (opts.markdownCopy)
         layoutEngine.setMarkdownDecorations(true);
 ```
 
-This ensures the layout engine populates `mdPrefix`/`mdSuffix` only when the user selected "Markdown source" mode.
+This ensures the layout engine populates `mdPrefix`/`mdSuffix` only when the user enabled the "Embed markdown syntax" checkbox.
 
 The pre-layout (used for page count) should NOT have markdown decorations since it's only for counting pages.
 
@@ -399,7 +399,7 @@ git commit -m "Wire markdown decoration flag through export pipeline"
 3. Export PDF with "Markdown source" text copy mode
 4. Open in Okular, select all text, copy
 5. Paste into a text editor — should see `**bold**`, `*italic*`, `` `code` ``, `[text](url)`, `# Heading`
-6. Export same file with "Plain text" mode — copied text should be normal (no markdown syntax)
+6. Export same file with "Embed markdown syntax" unchecked — copied text should be normal (no markdown syntax)
 7. Verify visible rendering is identical between the two modes (hidden glyphs should be invisible)
 
 ## Not in Scope (Future Work)
@@ -407,4 +407,4 @@ git commit -m "Wire markdown decoration flag through export pipeline"
 - **Code block fences** (` ``` `): Code blocks use a different rendering path (`shapeAndBreak`). Can be added later.
 - **List markers**: Visible bullets (`•`) would need hidden `- ` equivalents. Requires changes to `layoutList()`.
 - **Block quotes**: Would need `> ` prefix on each line.
-- **Unwrapped paragraphs mode**: Completely different approach (ActualText spans or Tagged PDF). Separate feature.
+- **Unwrapped paragraphs mode**: Uses same hidden-glyph technique but embeds full paragraph text. Can be combined with markdown copy. Separate implementation.

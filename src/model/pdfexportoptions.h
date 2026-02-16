@@ -16,9 +16,9 @@ struct PdfExportOptions {
     QString subject;
     QString keywords;           // comma-separated
 
-    // General — text copy behavior
-    enum TextCopyMode { PlainText, MarkdownSource, UnwrappedParagraphs };
-    TextCopyMode textCopyMode = PlainText;
+    // General — text copy behavior (independent flags, can be combined)
+    bool markdownCopy = false;      // embed hidden markdown syntax in PDF
+    bool unwrapParagraphs = false;  // embed unwrapped paragraph text in PDF
 
     // Content — section selection
     QSet<int> excludedHeadingIndices;   // indices into doc.blocks of unchecked headings

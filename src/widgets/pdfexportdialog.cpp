@@ -75,11 +75,17 @@ void PdfExportDialog::setupGeneralPage()
     auto *copyGroup = new QGroupBox(i18n("Text Copy Behavior"), page);
     auto *copyForm = new QFormLayout(copyGroup);
 
-    m_textCopyCombo = new QComboBox(copyGroup);
-    m_textCopyCombo->addItem(i18n("Plain text"), PdfExportOptions::PlainText);
-    m_textCopyCombo->addItem(i18n("Markdown source"), PdfExportOptions::MarkdownSource);
-    m_textCopyCombo->addItem(i18n("Unwrapped paragraphs"), PdfExportOptions::UnwrappedParagraphs);
-    copyForm->addRow(i18n("When text is copied from PDF:"), m_textCopyCombo);
+    m_markdownCopyCheck = new QCheckBox(i18n("Embed markdown syntax"), copyGroup);
+    m_markdownCopyCheck->setToolTip(
+        i18n("Hidden markdown characters (bold, italic, links, etc.) are embedded "
+             "so that copying text from the PDF returns markdown source."));
+    copyForm->addRow(m_markdownCopyCheck);
+
+    m_unwrapParagraphsCheck = new QCheckBox(i18n("Unwrap paragraphs"), copyGroup);
+    m_unwrapParagraphsCheck->setToolTip(
+        i18n("Hidden text is embedded so that copying from the PDF returns "
+             "paragraphs without soft line breaks."));
+    copyForm->addRow(m_unwrapParagraphsCheck);
 
     layout->addWidget(copyGroup);
     layout->addStretch();
@@ -379,8 +385,8 @@ PdfExportOptions PdfExportDialog::options() const
     opts.author = m_authorEdit->text();
     opts.subject = m_subjectEdit->text();
     opts.keywords = m_keywordsEdit->text();
-    opts.textCopyMode = static_cast<PdfExportOptions::TextCopyMode>(
-        m_textCopyCombo->currentData().toInt());
+    opts.markdownCopy = m_markdownCopyCheck->isChecked();
+    opts.unwrapParagraphs = m_unwrapParagraphsCheck->isChecked();
 
     // Content — excluded headings
     std::function<void(QTreeWidgetItem *)> collectExcluded =
@@ -421,8 +427,8 @@ void PdfExportDialog::setOptions(const PdfExportOptions &opts)
     m_authorEdit->setText(opts.author);
     m_subjectEdit->setText(opts.subject);
     m_keywordsEdit->setText(opts.keywords);
-    m_textCopyCombo->setCurrentIndex(
-        m_textCopyCombo->findData(opts.textCopyMode));
+    m_markdownCopyCheck->setChecked(opts.markdownCopy);
+    m_unwrapParagraphsCheck->setChecked(opts.unwrapParagraphs);
 
     // Content — page range
     m_pageRangeEdit->setText(opts.pageRangeExpr);

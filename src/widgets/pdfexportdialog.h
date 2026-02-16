@@ -50,7 +50,8 @@ private:
     QLineEdit *m_authorEdit = nullptr;
     QLineEdit *m_subjectEdit = nullptr;
     QLineEdit *m_keywordsEdit = nullptr;
-    QComboBox *m_textCopyCombo = nullptr;
+    QCheckBox *m_markdownCopyCheck = nullptr;
+    QCheckBox *m_unwrapParagraphsCheck = nullptr;
 
     // Content page
     QTreeWidget *m_headingTree = nullptr;

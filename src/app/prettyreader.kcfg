@@ -133,11 +133,13 @@
       <label>Default author for PDF metadata.</label>
       <default></default>
     </entry>
-    <entry name="PdfTextCopyMode" type="Int">
-      <label>Text copy behavior: 0=PlainText, 1=MarkdownSource, 2=UnwrappedParagraphs.</label>
-      <default>0</default>
-      <min>0</min>
-      <max>2</max>
+    <entry name="PdfMarkdownCopy" type="Bool">
+      <label>Embed hidden markdown syntax in exported PDFs.</label>
+      <default>false</default>
+    </entry>
+    <entry name="PdfUnwrapParagraphs" type="Bool">
+      <label>Embed unwrapped paragraph text in exported PDFs.</label>
+      <default>false</default>
     </entry>
     <entry name="PdfIncludeBookmarks" type="Bool">
       <label>Include PDF bookmarks/outlines.</label>
