@@ -140,6 +140,88 @@ QList<TextShaper::InternalRun> TextShaper::itemizeStyles(
     return result;
 }
 
+// --- Font coverage itemization: split runs at primary/fallback boundaries ---
+
+QList<TextShaper::InternalRun> TextShaper::itemizeFontCoverage(
+    const QString &text, const QList<InternalRun> &runs,
+    const QList<StyleRun> &styles) const
+{
+    if (!m_fallbackFont || !m_fallbackFont->ftFace)
+        return runs;
+
+    QList<InternalRun> result;
+
+    for (const InternalRun &run : runs) {
+        if (run.styleIndex < 0 || run.styleIndex >= styles.size()) {
+            result.append(run);
+            continue;
+        }
+        const StyleRun &style = styles[run.styleIndex];
+
+        FontFace *primary = m_fontManager->loadFont(
+            style.fontFamily, style.fontWeight, style.fontItalic);
+        if (!primary || !primary->ftFace) {
+            result.append(run);
+            continue;
+        }
+
+        int pos = run.start;
+        int end = run.start + run.length;
+
+        while (pos < end) {
+            // Decode codepoint (handle surrogate pairs)
+            uint cp;
+            if (pos + 1 < end
+                && QChar::isHighSurrogate(text.at(pos).unicode())
+                && QChar::isLowSurrogate(text.at(pos + 1).unicode())) {
+                cp = QChar::surrogateToUcs4(text.at(pos), text.at(pos + 1));
+            } else {
+                cp = text.at(pos).unicode();
+            }
+
+            bool primaryHas = FT_Get_Char_Index(primary->ftFace, cp) != 0;
+            bool useFallback = !primaryHas
+                && FT_Get_Char_Index(m_fallbackFont->ftFace, cp) != 0;
+
+            int segStart = pos;
+            // Advance past first character
+            pos += (cp > 0xFFFF) ? 2 : 1;
+
+            // Consume consecutive characters with the same font choice
+            while (pos < end) {
+                uint cp2;
+                if (pos + 1 < end
+                    && QChar::isHighSurrogate(text.at(pos).unicode())
+                    && QChar::isLowSurrogate(text.at(pos + 1).unicode())) {
+                    cp2 = QChar::surrogateToUcs4(text.at(pos), text.at(pos + 1));
+                } else {
+                    cp2 = text.at(pos).unicode();
+                }
+
+                bool p2 = FT_Get_Char_Index(primary->ftFace, cp2) != 0;
+                bool f2 = !p2
+                    && FT_Get_Char_Index(m_fallbackFont->ftFace, cp2) != 0;
+
+                if (f2 != useFallback)
+                    break;
+
+                pos += (cp2 > 0xFFFF) ? 2 : 1;
+            }
+
+            InternalRun sub;
+            sub.start = segStart;
+            sub.length = pos - segStart;
+            sub.dir = run.dir;
+            sub.script = run.script;
+            sub.styleIndex = run.styleIndex;
+            sub.useFallbackFont = useFallback;
+            result.append(sub);
+        }
+    }
+
+    return result;
+}
+
 // --- Main shaping entry point ---
 
 QList<ShapedRun> TextShaper::shape(const QString &text, const QList<StyleRun> &styles)
@@ -148,19 +230,25 @@ QList<ShapedRun> TextShaper::shape(const QString &text, const QList<StyleRun> &s
     if (text.isEmpty() || styles.isEmpty())
         return result;
 
-    // Pipeline: BiDi → Script → Style itemization
+    // Pipeline: BiDi → Script → Style → Font-coverage itemization
     QList<InternalRun> bidiRuns = itemizeBiDi(text);
     QList<InternalRun> scriptRuns = itemizeScripts(text, bidiRuns);
-    QList<InternalRun> textRuns = itemizeStyles(scriptRuns, styles);
+    QList<InternalRun> styledRuns = itemizeStyles(scriptRuns, styles);
+    QList<InternalRun> textRuns = itemizeFontCoverage(text, styledRuns, styles);
 
     for (const InternalRun &run : textRuns) {
         if (run.styleIndex < 0 || run.styleIndex >= styles.size())
             continue;
         const StyleRun &style = styles[run.styleIndex];
 
-        // Load font
-        FontFace *face = m_fontManager->loadFont(
-            style.fontFamily, style.fontWeight, style.fontItalic);
+        // Load font (use fallback if coverage itemization flagged this run)
+        FontFace *face;
+        if (run.useFallbackFont && m_fallbackFont) {
+            face = m_fallbackFont;
+        } else {
+            face = m_fontManager->loadFont(
+                style.fontFamily, style.fontWeight, style.fontItalic);
+        }
         if (!face || !face->hbFont)
             continue;
 

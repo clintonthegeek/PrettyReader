@@ -143,6 +143,14 @@ qt_add_resources(PrettyReaderCore "dicts"
         dicts/hyph_en_GB.dic
 )
 
+# Bundle fallback symbol font as Qt resource
+qt_add_resources(PrettyReaderCore "fonts"
+    PREFIX "/fonts"
+    BASE dicts
+    FILES
+        dicts/PrettySymbolsFallback.ttf
+)
+
 # Bundle glyph artwork (checkbox SVGs) as Qt resources
 qt_add_resources(PrettyReaderCore "glyphs"
     PREFIX "/glyphs"

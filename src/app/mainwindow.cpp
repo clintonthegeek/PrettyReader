@@ -110,6 +110,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_fontManager = new FontManager();
     m_textShaper = new TextShaper(m_fontManager);
 
+    // Load bundled symbol fallback font for glyphs missing in body fonts
+    FontFace *fallback = m_fontManager->loadFontFromPath(
+        QStringLiteral(":/fonts/PrettySymbolsFallback.ttf"));
+    m_textShaper->setFallbackFont(fallback);
+
     // Apply settings
     auto *settings = PrettyReaderSettings::self();
     if (settings->hyphenationEnabled() || settings->hyphenateJustifiedText()) {
