@@ -29,7 +29,7 @@ PdfExportDialog::PdfExportDialog(const Content::Document &doc,
     , m_pageCount(pageCount)
 {
     setWindowTitle(i18n("PDF Export Options"));
-    setFaceType(KPageDialog::FlatList);
+    setFaceType(KPageDialog::List);
     setStandardButtons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
     setupGeneralPage();
@@ -147,6 +147,7 @@ void PdfExportDialog::setupContentPage()
     // Conflict warning (hidden by default)
     m_conflictWarning = new KMessageWidget(page);
     m_conflictWarning->setMessageType(KMessageWidget::Warning);
+    m_conflictWarning->setWordWrap(true);
     m_conflictWarning->setText(
         i18n("Both section selection and page range are active. "
              "Only pages that match both filters will be exported. "
