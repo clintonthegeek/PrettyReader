@@ -5,6 +5,7 @@
 
 #include "pdfexportdialog.h"
 
+#include "pagerangeparser.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
@@ -334,7 +335,26 @@ void PdfExportDialog::onSectionCheckboxChanged()
 
 void PdfExportDialog::onPageRangeChanged()
 {
-    m_pageRangeModified = !m_pageRangeEdit->text().trimmed().isEmpty();
+    QString text = m_pageRangeEdit->text().trimmed();
+    m_pageRangeModified = !text.isEmpty();
+
+    if (m_pageRangeModified && m_pageCount > 0) {
+        auto result = PageRangeParser::parse(text, m_pageCount);
+        if (!result.valid) {
+            m_pageRangeEdit->setStyleSheet(
+                QStringLiteral("QLineEdit { border: 1px solid red; }"));
+            m_pageRangeEdit->setToolTip(result.errorMessage);
+        } else {
+            m_pageRangeEdit->setStyleSheet(QString());
+            m_pageRangeEdit->setToolTip(
+                i18np("%1 page selected", "%1 pages selected",
+                      result.pages.size()));
+        }
+    } else {
+        m_pageRangeEdit->setStyleSheet(QString());
+        m_pageRangeEdit->setToolTip(QString());
+    }
+
     updateConflictWarning();
 }
 
