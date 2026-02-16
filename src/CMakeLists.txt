@@ -57,6 +57,7 @@ add_library(PrettyReaderCore STATIC
     model/contentbuilder.cpp
     model/contentbuilder.h
     model/contentmodel.h
+    model/pdfexportoptions.h
     font/fontmanager.cpp
     font/fontmanager.h
     font/textshaper.cpp
