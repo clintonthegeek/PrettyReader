@@ -465,6 +465,26 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
     if (!lines.isEmpty())
         lines.last().isLastLine = true;
 
+    // Trim trailing whitespace glyphs from non-last lines.
+    // ICU break positions place spaces at the end of the preceding word.
+    // For justify, this trailing space inflates line.width and prevents the
+    // last visible character from reaching the right margin.
+    for (int li = 0; li < lines.size(); ++li) {
+        if (lines[li].isLastLine || lines[li].glyphs.isEmpty())
+            continue;
+        auto &lastBox = lines[li].glyphs.last();
+        while (!lastBox.glyphs.isEmpty()) {
+            int cluster = lastBox.glyphs.last().cluster;
+            if (cluster < collected.text.size() && collected.text[cluster].isSpace()) {
+                lastBox.width -= lastBox.glyphs.last().xAdvance;
+                lastBox.textLength--;
+                lastBox.glyphs.removeLast();
+            } else {
+                break;
+            }
+        }
+    }
+
     // Compute line metrics
     for (auto &line : lines) {
         qreal maxAscent = 0;
