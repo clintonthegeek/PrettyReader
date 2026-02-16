@@ -56,6 +56,9 @@ struct GlyphBox {
     bool trailingSoftHyphen = false; // word ended at a soft hyphen break point
     bool startsAfterSoftHyphen = false; // continues a soft-hyphenated word
     bool isListMarker = false; // bullet/number prefix — excluded from justify expansion
+    // Markdown copy mode: hidden prefix/suffix text for PDF markdown extraction
+    QString mdPrefix;  // e.g. "**", "`", "[", "# "
+    QString mdSuffix;  // e.g. "**", "`", "](url)"
     // Task list checkbox (rendered as vector graphic, not font glyph)
     CheckboxState checkboxState = NoCheckbox;
 };
@@ -226,6 +229,7 @@ public:
     LayoutResult layout(const Content::Document &doc, const PageLayout &pageLayout);
 
     void setHyphenateJustifiedText(bool enabled) { m_hyphenateJustifiedText = enabled; }
+    void setMarkdownDecorations(bool enabled) { m_markdownDecorations = enabled; }
 
 private:
     // Block layout
@@ -269,6 +273,7 @@ private:
     FontManager *m_fontManager;
     TextShaper *m_textShaper;
     bool m_hyphenateJustifiedText = true;
+    bool m_markdownDecorations = false;
 };
 
 } // namespace Layout
