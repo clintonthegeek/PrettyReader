@@ -213,8 +213,15 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     writer.startObj(writer.infoObj());
     writer.write("<<\n");
     writer.write("/Producer " + Pdf::toLiteralString(QStringLiteral("PrettyReader")) + "\n");
-    if (!m_title.isEmpty())
-        writer.write("/Title " + Pdf::toLiteralString(Pdf::toUTF16(m_title)) + "\n");
+    QString infoTitle = m_exportOptions.title.isEmpty() ? m_title : m_exportOptions.title;
+    if (!infoTitle.isEmpty())
+        writer.write("/Title " + Pdf::toLiteralString(Pdf::toUTF16(infoTitle)) + "\n");
+    if (!m_exportOptions.author.isEmpty())
+        writer.write("/Author " + Pdf::toLiteralString(Pdf::toUTF16(m_exportOptions.author)) + "\n");
+    if (!m_exportOptions.subject.isEmpty())
+        writer.write("/Subject " + Pdf::toLiteralString(Pdf::toUTF16(m_exportOptions.subject)) + "\n");
+    if (!m_exportOptions.keywords.isEmpty())
+        writer.write("/Keywords " + Pdf::toLiteralString(Pdf::toUTF16(m_exportOptions.keywords)) + "\n");
     writer.write("/CreationDate " + Pdf::toDateString(QDateTime::currentDateTime()) + "\n");
     writer.write(">>");
     writer.endObj(writer.infoObj());
@@ -222,8 +229,36 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     // Catalog object
     writer.startObj(writer.catalogObj());
     writer.write("<<\n/Type /Catalog\n/Pages " + Pdf::toObjRef(writer.pagesObj()) + "\n");
-    if (outlineObj)
-        writer.write("/Outlines " + Pdf::toObjRef(outlineObj) + "\n/PageMode /UseOutlines\n");
+    if (outlineObj && m_exportOptions.includeBookmarks)
+        writer.write("/Outlines " + Pdf::toObjRef(outlineObj) + "\n");
+    // PageMode
+    switch (m_exportOptions.initialView) {
+    case PdfExportOptions::ShowBookmarks:
+        if (outlineObj && m_exportOptions.includeBookmarks)
+            writer.write("/PageMode /UseOutlines\n");
+        break;
+    case PdfExportOptions::ShowThumbnails:
+        writer.write("/PageMode /UseThumbs\n");
+        break;
+    case PdfExportOptions::ViewerDefault:
+    default:
+        break;
+    }
+    // PageLayout
+    switch (m_exportOptions.pageLayout) {
+    case PdfExportOptions::SinglePage:
+        writer.write("/PageLayout /SinglePage\n");
+        break;
+    case PdfExportOptions::Continuous:
+        writer.write("/PageLayout /OneColumn\n");
+        break;
+    case PdfExportOptions::FacingPages:
+        writer.write("/PageLayout /TwoColumnLeft\n");
+        break;
+    case PdfExportOptions::FacingPagesFirstAlone:
+        writer.write("/PageLayout /TwoColumnRight\n");
+        break;
+    }
     writer.write(">>");
     writer.endObj(writer.catalogObj());
 
@@ -940,6 +975,9 @@ Pdf::ObjId PdfGenerator::writeOutlines(Pdf::Writer &writer,
                                         const Layout::LayoutResult &layout,
                                         const PageLayout &pageLayout)
 {
+    if (!m_exportOptions.includeBookmarks)
+        return 0;
+
     // 1. Collect headings from layout pages
     QList<OutlineEntry> entries;
 
@@ -953,7 +991,8 @@ Pdf::ObjId PdfGenerator::writeOutlines(Pdf::Writer &writer,
     for (int pi = 0; pi < layout.pages.size(); ++pi) {
         for (const auto &elem : layout.pages[pi].elements) {
             if (auto *bb = std::get_if<Layout::BlockBox>(&elem)) {
-                if (bb->headingLevel > 0 && !bb->headingText.isEmpty()) {
+                if (bb->headingLevel > 0 && bb->headingLevel <= m_exportOptions.bookmarkMaxDepth
+                    && !bb->headingText.isEmpty()) {
                     OutlineEntry entry;
                     entry.title = bb->headingText;
                     entry.level = bb->headingLevel;

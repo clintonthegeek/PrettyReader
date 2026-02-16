@@ -17,6 +17,7 @@
 #include "layoutengine.h"
 #include "pagelayout.h"
 #include "pdfwriter.h"
+#include "pdfexportoptions.h"
 
 class FontManager;
 struct FontFace;
@@ -35,6 +36,7 @@ public:
 
     void setDocumentInfo(const QString &filename, const QString &title);
     void setMaxJustifyGap(qreal gap) { m_maxJustifyGap = gap; }
+    void setExportOptions(const PdfExportOptions &opts) { m_exportOptions = opts; }
 
 private:
     // Page content rendering
@@ -126,6 +128,7 @@ private:
     QString m_filename;
     QString m_title;
     qreal m_maxJustifyGap = 14.0;
+    PdfExportOptions m_exportOptions;
 };
 
 #endif // PRETTYREADER_PDFGENERATOR_H
