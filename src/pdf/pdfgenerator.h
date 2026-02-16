@@ -54,6 +54,8 @@ private:
                         qreal x, qreal y);
     void renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
                         qreal x, qreal y);
+    void renderHiddenText(const QString &text, FontFace *font, qreal fontSize,
+                          qreal x, qreal y, QByteArray &stream);
     void renderLineBox(const Layout::LineBox &line, QByteArray &stream,
                        qreal originX, qreal originY, qreal pageHeight,
                        qreal availWidth);

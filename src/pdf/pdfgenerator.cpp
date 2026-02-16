@@ -644,6 +644,46 @@ void PdfGenerator::renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stre
     }
 }
 
+void PdfGenerator::renderHiddenText(const QString &text, FontFace *font,
+                                     qreal fontSize, qreal x, qreal y,
+                                     QByteArray &stream)
+{
+    if (text.isEmpty() || !font)
+        return;
+
+    QByteArray fontName = pdfFontName(font);
+
+    stream += "BT\n";
+    stream += "/" + fontName + " " + pdfCoord(fontSize) + " Tf\n";
+    stream += "1 1 1 rg\n";  // white fill — hidden beneath visible text
+
+    qreal curX = x;
+    for (int i = 0; i < text.size(); ++i) {
+        uint cp = text[i].unicode();
+        // Handle surrogate pairs
+        if (QChar::isHighSurrogate(text[i].unicode()) && i + 1 < text.size()) {
+            cp = QChar::surrogateToUcs4(text[i].unicode(), text[i + 1].unicode());
+            ++i;
+        }
+        FT_UInt gid = FT_Get_Char_Index(font->ftFace, cp);
+        if (gid == 0) continue;  // skip unmapped characters
+
+        // Track glyph for font subsetting
+        font->usedGlyphs.insert(gid);
+
+        stream += "1 0 0 1 " + pdfCoord(curX) + " " + pdfCoord(y) + " Tm\n";
+        stream += Pdf::toHexString16(static_cast<quint16>(gid)) + " Tj\n";
+
+        // Advance by glyph width
+        FT_Load_Glyph(font->ftFace, gid, FT_LOAD_NO_SCALE);
+        qreal advance = static_cast<qreal>(font->ftFace->glyph->advance.x)
+                         / font->ftFace->units_per_EM * fontSize;
+        curX += advance;
+    }
+
+    stream += "ET\n";
+}
+
 // --- Table rendering ---
 
 void PdfGenerator::renderTableBox(const Layout::TableBox &box, QByteArray &stream,
