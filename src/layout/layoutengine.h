@@ -55,6 +55,7 @@ struct GlyphBox {
     bool rtl = false;
     bool trailingSoftHyphen = false; // word ended at a soft hyphen break point
     bool startsAfterSoftHyphen = false; // continues a soft-hyphenated word
+    bool isListMarker = false; // bullet/number prefix — excluded from justify expansion
     // Task list checkbox (rendered as vector graphic, not font glyph)
     CheckboxState checkboxState = NoCheckbox;
 };

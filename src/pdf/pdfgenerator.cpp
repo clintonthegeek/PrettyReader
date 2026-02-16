@@ -402,6 +402,9 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
                 && line.glyphs[i - 1].style.background.isValid()
                 && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
                 continue;
+            // Don't justify the gap after a bullet/number prefix
+            if (line.glyphs[i - 1].isListMarker)
+                continue;
             gapCount++;
         }
         if (gapCount > 0) {
@@ -423,6 +426,9 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
                 if (line.glyphs[i + 1].style.background.isValid()
                     && line.glyphs[i].style.background.isValid()
                     && line.glyphs[i + 1].style.background == line.glyphs[i].style.background)
+                    skipGap = true;
+                // Don't add justification space after bullet/number prefix
+                if (line.glyphs[i].isListMarker)
                     skipGap = true;
                 if (!skipGap)
                     x += extraPerGap;

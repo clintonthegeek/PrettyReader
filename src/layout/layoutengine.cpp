@@ -1024,6 +1024,7 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                         }
                     }
 
+                    int prefixLen = 0;
                     if (isFirstPara && !isTask) {
                         // Bullet/number prefix: measure width, then use hanging indent
                         QString prefix;
@@ -1031,6 +1032,7 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                             prefix = QString::number(list.startNumber + i) + QStringLiteral(". ");
                         else
                             prefix = QStringLiteral("\u2022 ");
+                        prefixLen = prefix.size();
 
                         Content::TextRun prefixRun;
                         prefixRun.text = prefix;
@@ -1056,6 +1058,16 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                     }
 
                     auto box = layoutParagraph(para, availWidth);
+
+                    // Mark bullet/number glyph boxes so justify skips them
+                    if (prefixLen > 0 && !box.lines.isEmpty()) {
+                        for (auto &gb : box.lines.first().glyphs) {
+                            if (gb.textStart < prefixLen)
+                                gb.isListMarker = true;
+                            else
+                                break;
+                        }
+                    }
 
                     if (isTask && !box.lines.isEmpty()) {
                         GlyphBox cbBox;
