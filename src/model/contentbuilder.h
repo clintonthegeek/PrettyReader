@@ -105,11 +105,10 @@ private:
     struct ListInfo {
         Content::ListType type;
         int startNumber;
-        int depth;
         QList<Content::ListItem> items;
+        bool hasImplicitParagraph = false; // current item has implicit para on inline stack
     };
     QStack<ListInfo> m_listStack;
-    bool m_inListItem = false;
 
     // Table tracking
     bool m_inTable = false;

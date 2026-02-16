@@ -162,7 +162,6 @@ enum class ListType { Unordered, Ordered };
 struct List {
     ListType type = ListType::Unordered;
     int startNumber = 1;
-    int depth = 0;
     QList<ListItem> items;
     SourceRange source;
 };

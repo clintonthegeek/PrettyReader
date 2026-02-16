@@ -606,41 +606,48 @@ void PdfGenerator::renderHeaderFooter(QByteArray &stream, const PageLayout &page
         stream += "/" + fname + " " + pdfCoord(fontSize) + " Tf\n";
         stream += "0.53 0.53 0.53 rg\n"; // #888888
 
+        // Helper: measure text width and collect glyph IDs
+        auto measureText = [&](const QString &text) -> qreal {
+            qreal w = 0;
+            for (QChar ch : text) {
+                FT_UInt gid = FT_Get_Char_Index(font->ftFace, ch.unicode());
+                w += m_fontManager->glyphWidth(font, gid, fontSize);
+            }
+            return w;
+        };
+
+        // Helper: emit glyph string (marks glyphs used for subsetting)
+        auto emitText = [&](const QString &text) {
+            for (QChar ch : text) {
+                FT_UInt gid = FT_Get_Char_Index(font->ftFace, ch.unicode());
+                m_fontManager->markGlyphUsed(font, gid);
+                stream += Pdf::toHexString16(static_cast<quint16>(gid)) + " Tj\n";
+            }
+        };
+
         // Left field
         QString leftText = resolveField(left);
         if (!leftText.isEmpty()) {
             stream += "1 0 0 1 " + pdfCoord(marginLeft) + " " + pdfCoord(textY) + " Tm\n";
-            // Simple ASCII text rendering for header/footer
-            for (QChar ch : leftText) {
-                FT_UInt gid = FT_Get_Char_Index(font->ftFace, ch.unicode());
-                m_fontManager->markGlyphUsed(font, gid);
-                stream += Pdf::toHexString16(static_cast<quint16>(gid)) + " Tj\n";
-                qreal advance = m_fontManager->glyphWidth(font, gid, fontSize);
-            }
+            emitText(leftText);
         }
 
         // Center field
         QString centerText = resolveField(center);
         if (!centerText.isEmpty()) {
-            qreal centerX = pageWidth / 2; // approximate centering
+            qreal textWidth = measureText(centerText);
+            qreal centerX = (pageWidth - textWidth) / 2;
             stream += "1 0 0 1 " + pdfCoord(centerX) + " " + pdfCoord(textY) + " Tm\n";
-            for (QChar ch : centerText) {
-                FT_UInt gid = FT_Get_Char_Index(font->ftFace, ch.unicode());
-                m_fontManager->markGlyphUsed(font, gid);
-                stream += Pdf::toHexString16(static_cast<quint16>(gid)) + " Tj\n";
-            }
+            emitText(centerText);
         }
 
         // Right field
         QString rightText = resolveField(right);
         if (!rightText.isEmpty()) {
-            qreal rightX = pageWidth - marginRight - 50; // approximate
+            qreal textWidth = measureText(rightText);
+            qreal rightX = pageWidth - marginRight - textWidth;
             stream += "1 0 0 1 " + pdfCoord(rightX) + " " + pdfCoord(textY) + " Tm\n";
-            for (QChar ch : rightText) {
-                FT_UInt gid = FT_Get_Char_Index(font->ftFace, ch.unicode());
-                m_fontManager->markGlyphUsed(font, gid);
-                stream += Pdf::toHexString16(static_cast<quint16>(gid)) + " Tj\n";
-            }
+            emitText(rightText);
         }
 
         stream += "ET\n";

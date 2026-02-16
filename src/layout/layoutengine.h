@@ -216,7 +216,7 @@ private:
     FootnoteSectionBox layoutFootnoteSection(const Content::FootnoteSection &fs, qreal availWidth);
 
     // List layout: flattens list items into block boxes with indentation
-    QList<PageElement> layoutList(const Content::List &list, qreal availWidth);
+    QList<PageElement> layoutList(const Content::List &list, qreal availWidth, int depth = 0);
 
     // Line breaking
     QList<LineBox> breakIntoLines(const QList<Content::InlineNode> &inlines,

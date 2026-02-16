@@ -464,7 +464,7 @@ void ContentRtfExporter::writeCodeBlock(QByteArray &out, const Content::CodeBloc
     }
 }
 
-void ContentRtfExporter::writeList(QByteArray &out, const Content::List &list)
+void ContentRtfExporter::writeList(QByteArray &out, const Content::List &list, int depth)
 {
     int itemNumber = list.startNumber;
     for (const auto &item : list.items) {
@@ -481,7 +481,7 @@ void ContentRtfExporter::writeList(QByteArray &out, const Content::List &list)
             }
         }
 
-        int indentTwips = 720 * (list.depth + 1);
+        int indentTwips = 720 * (depth + 1);
 
         // Write child blocks of this list item
         for (int i = 0; i < item.children.size(); ++i) {
@@ -506,7 +506,7 @@ void ContentRtfExporter::writeList(QByteArray &out, const Content::List &list)
 
             // Nested list or other block type: write recursively
             if (auto *nestedList = std::get_if<Content::List>(&child)) {
-                writeList(out, *nestedList);
+                writeList(out, *nestedList, depth + 1);
             } else {
                 writeBlock(out, child);
             }

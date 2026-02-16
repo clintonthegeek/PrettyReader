@@ -99,8 +99,26 @@ Content::ParagraphFormat ContentBuilder::resolveParagraphFormat(const QString &s
 
 void ContentBuilder::appendInlineNode(Content::InlineNode node)
 {
-    if (auto *inlines = currentInlines())
+    if (auto *inlines = currentInlines()) {
         inlines->append(std::move(node));
+        return;
+    }
+
+    // Tight list item: MD4C didn't emit MD_BLOCK_P, create implicit paragraph
+    if (!m_listStack.isEmpty()) {
+        auto &info = m_listStack.top();
+        if (!info.items.isEmpty()) {
+            Content::ParagraphFormat fmt;
+            if (m_styleManager)
+                fmt = resolveParagraphFormat(QStringLiteral("ListItem"));
+            auto &children = info.items.last().children;
+            children.append(Content::Paragraph{fmt, {}});
+            auto *p = std::get_if<Content::Paragraph>(&children.last());
+            m_inlineStack.push(&p->inlines);
+            info.hasImplicitParagraph = true;
+            p->inlines.append(std::move(node));
+        }
+    }
 }
 
 QList<Content::InlineNode> *ContentBuilder::currentInlines()
@@ -145,7 +163,6 @@ Content::Document ContentBuilder::build(const QString &markdownText)
     m_collectingAltText = false;
     m_altText.clear();
     m_footnotes.clear();
-    m_inListItem = false;
 
     // Resolve default text style
     if (m_styleManager)
@@ -257,63 +274,41 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         break;
 
     case MD_BLOCK_P: {
-        auto *para = new Content::Paragraph;
+        // Resolve paragraph format and text style
+        Content::ParagraphFormat fmt;
         if (m_blockQuoteLevel > 0) {
             if (m_styleManager) {
-                para->format = resolveParagraphFormat(QStringLiteral("BlockQuote"));
+                fmt = resolveParagraphFormat(QStringLiteral("BlockQuote"));
                 m_currentStyle = resolveTextStyle(QStringLiteral("BlockQuote"));
             } else {
-                para->format.leftMargin = 20.0 * m_blockQuoteLevel;
+                fmt.leftMargin = 20.0 * m_blockQuoteLevel;
                 m_currentStyle.italic = true;
                 m_currentStyle.foreground = QColor(0x55, 0x55, 0x55);
             }
         } else if (!m_listStack.isEmpty()) {
             if (m_styleManager) {
-                para->format = resolveParagraphFormat(QStringLiteral("ListItem"));
+                fmt = resolveParagraphFormat(QStringLiteral("ListItem"));
                 m_currentStyle = resolveTextStyle(QStringLiteral("ListItem"));
             }
         } else {
             if (m_styleManager) {
-                para->format = resolveParagraphFormat(QStringLiteral("BodyText"));
+                fmt = resolveParagraphFormat(QStringLiteral("BodyText"));
                 m_currentStyle = resolveTextStyle(QStringLiteral("BodyText"));
             } else {
-                para->format.spaceAfter = 6.0;
+                fmt.spaceAfter = 6.0;
             }
         }
-        m_inlineStack.push(&para->inlines);
 
-        // Store para pointer temporarily via a lambda trick: we push to doc on leave
-        // Actually, store as a variant in the doc blocks and get a reference
-        if (m_inListItem && !m_listStack.isEmpty()) {
-            auto &items = m_listStack.top().items;
-            if (!items.isEmpty()) {
-                items.last().children.append(Content::Paragraph{para->format, {}});
-                auto &lastBlock = items.last().children.last();
-                auto *p = std::get_if<Content::Paragraph>(&lastBlock);
-                m_inlineStack.pop();
-                m_inlineStack.push(&p->inlines);
-                delete para;
-            } else {
-                m_doc.blocks.append(Content::Paragraph{para->format, {}});
-                auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
-                m_inlineStack.pop();
-                m_inlineStack.push(&p->inlines);
-                delete para;
-            }
-        } else if (m_blockQuoteLevel > 0) {
-            // Find the innermost blockquote and add to its children
-            // For simplicity in flat output, add directly to doc
-            m_doc.blocks.append(Content::Paragraph{para->format, {}});
-            auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
-            m_inlineStack.pop();
+        // Place paragraph in the right container
+        if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
+            auto &children = m_listStack.top().items.last().children;
+            children.append(Content::Paragraph{fmt, {}});
+            auto *p = std::get_if<Content::Paragraph>(&children.last());
             m_inlineStack.push(&p->inlines);
-            delete para;
         } else {
-            m_doc.blocks.append(Content::Paragraph{para->format, {}});
+            m_doc.blocks.append(Content::Paragraph{fmt, {}});
             auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
-            m_inlineStack.pop();
             m_inlineStack.push(&p->inlines);
-            delete para;
         }
         break;
     }
@@ -353,20 +348,30 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         break;
 
     case MD_BLOCK_UL: {
+        // Close parent item's implicit paragraph before nesting
+        if (!m_listStack.isEmpty() && m_listStack.top().hasImplicitParagraph) {
+            if (!m_inlineStack.isEmpty())
+                m_inlineStack.pop();
+            m_listStack.top().hasImplicitParagraph = false;
+        }
         ListInfo info;
         info.type = Content::ListType::Unordered;
         info.startNumber = 1;
-        info.depth = m_listStack.size();
         m_listStack.push(info);
         break;
     }
 
     case MD_BLOCK_OL: {
+        // Close parent item's implicit paragraph before nesting
+        if (!m_listStack.isEmpty() && m_listStack.top().hasImplicitParagraph) {
+            if (!m_inlineStack.isEmpty())
+                m_inlineStack.pop();
+            m_listStack.top().hasImplicitParagraph = false;
+        }
         auto *d = static_cast<MD_BLOCK_OL_DETAIL *>(detail);
         ListInfo info;
         info.type = Content::ListType::Ordered;
         info.startNumber = static_cast<int>(d->start);
-        info.depth = m_listStack.size();
         m_listStack.push(info);
         break;
     }
@@ -374,12 +379,20 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
     case MD_BLOCK_LI: {
         auto *d = static_cast<MD_BLOCK_LI_DETAIL *>(detail);
         if (!m_listStack.isEmpty()) {
+            // Close previous item's implicit paragraph
+            if (m_listStack.top().hasImplicitParagraph) {
+                if (!m_inlineStack.isEmpty())
+                    m_inlineStack.pop();
+                m_listStack.top().hasImplicitParagraph = false;
+            }
             Content::ListItem item;
             item.isTask = d->is_task;
             item.taskChecked = (d->task_mark != ' ');
             m_listStack.top().items.append(item);
         }
-        m_inListItem = true;
+        // Set list item text style for tight lists (no P block will set it)
+        if (m_styleManager)
+            m_currentStyle = resolveTextStyle(QStringLiteral("ListItem"));
         break;
     }
 
@@ -480,10 +493,10 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
                 range.startLine = byteOffsetToLine(tracker.firstByteOffset);
                 range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
             }
-            if (m_inListItem && !m_listStack.isEmpty()) {
-                auto &items = m_listStack.top().items;
-                if (!items.isEmpty() && !items.last().children.isEmpty()) {
-                    auto *p = std::get_if<Content::Paragraph>(&items.last().children.last());
+            if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
+                auto &children = m_listStack.top().items.last().children;
+                if (!children.isEmpty()) {
+                    auto *p = std::get_if<Content::Paragraph>(&children.last());
                     if (p) p->source = range;
                 }
             } else if (!m_doc.blocks.isEmpty()) {
@@ -517,7 +530,12 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
         break;
 
     case MD_BLOCK_LI:
-        m_inListItem = false;
+        // Close implicit paragraph if open
+        if (!m_listStack.isEmpty() && m_listStack.top().hasImplicitParagraph) {
+            if (!m_inlineStack.isEmpty())
+                m_inlineStack.pop();
+            m_listStack.top().hasImplicitParagraph = false;
+        }
         break;
 
     case MD_BLOCK_UL:
@@ -535,17 +553,12 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
             Content::List list;
             list.type = info.type;
             list.startNumber = info.startNumber;
-            list.depth = info.depth;
             list.items = info.items;
             list.source = range;
 
-            if (!m_listStack.isEmpty() && m_inListItem) {
+            if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
                 // Nested list: add to parent list's current item
-                auto &parentItems = m_listStack.top().items;
-                if (!parentItems.isEmpty())
-                    parentItems.last().children.append(std::move(list));
-                else
-                    m_doc.blocks.append(std::move(list));
+                m_listStack.top().items.last().children.append(std::move(list));
             } else {
                 m_doc.blocks.append(std::move(list));
             }

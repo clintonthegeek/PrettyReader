@@ -827,10 +827,10 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
 
 // --- List layout ---
 
-QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidth)
+QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidth, int depth)
 {
     QList<PageElement> elements;
-    qreal indent = 20.0 * (list.depth + 1);
+    qreal indent = 20.0 * (depth + 1);
 
     for (int i = 0; i < list.items.size(); ++i) {
         const auto &item = list.items[i];
@@ -841,22 +841,23 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                 if constexpr (std::is_same_v<T, Content::Paragraph>) {
                     Content::Paragraph para = c;
                     para.format.leftMargin += indent;
-                    // Add bullet/number prefix to first paragraph
+                    // Add bullet/number/checkbox prefix to first paragraph
                     if (&child == &item.children.first() && !para.inlines.isEmpty()) {
                         QString prefix;
                         if (list.type == Content::ListType::Ordered)
                             prefix = QString::number(list.startNumber + i) + QStringLiteral(". ");
+                        else if (item.isTask)
+                            prefix = item.taskChecked ? QStringLiteral("\u2611 ") : QStringLiteral("\u2610 ");
                         else
-                            prefix = QStringLiteral("\u2022 "); // bullet
+                            prefix = QStringLiteral("\u2022 ");
 
                         Content::TextRun prefixRun;
                         prefixRun.text = prefix;
-                        // Inherit style from first inline
+                        // Inherit style from first inline (any type that has .style)
                         std::visit([&](const auto &n) {
                             using U = std::decay_t<decltype(n)>;
-                            if constexpr (std::is_same_v<U, Content::TextRun>) {
+                            if constexpr (requires { n.style; })
                                 prefixRun.style = n.style;
-                            }
                         }, para.inlines.first());
                         if (prefixRun.style.fontFamily.isEmpty()) {
                             prefixRun.style.fontFamily = QStringLiteral("Noto Serif");
@@ -867,7 +868,7 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                     elements.append(layoutParagraph(para, availWidth));
                 } else if constexpr (std::is_same_v<T, Content::List>) {
                     // Nested list
-                    auto nested = layoutList(c, availWidth);
+                    auto nested = layoutList(c, availWidth, depth + 1);
                     elements.append(nested);
                 }
             }, child);
