@@ -730,6 +730,8 @@ void MainWindow::onFileExportPdf()
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
         layoutEngine.setHyphenateJustifiedText(
             PrettyReaderSettings::self()->hyphenateJustifiedText());
+        if (opts.markdownCopy)
+            layoutEngine.setMarkdownDecorations(true);
         Layout::LayoutResult layoutResult = layoutEngine.layout(filteredDoc, pl);
 
         // Filter pages by range
