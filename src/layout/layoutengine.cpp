@@ -631,6 +631,12 @@ BlockBox Engine::layoutHeading(const Content::Heading &heading, qreal availWidth
     }
 
     box.lines = breakIntoLines(heading.inlines, baseStyle, heading.format, availWidth);
+
+    if (m_markdownDecorations && !box.lines.isEmpty() && !box.lines.first().glyphs.isEmpty()) {
+        QString headingPrefix = QString(heading.level, QLatin1Char('#')) + QLatin1Char(' ');
+        box.lines.first().glyphs.first().mdPrefix.prepend(headingPrefix);
+    }
+
     box.keepWithNext = true;
 
     // Extract heading text for PDF bookmarks
