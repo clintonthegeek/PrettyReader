@@ -140,12 +140,20 @@ LayoutResult Engine::layout(const Content::Document &doc, const PageLayout &page
 
 namespace {
 
+struct MarkdownRange {
+    int textStart;       // position in collected text
+    int textEnd;         // position + length
+    QString prefix;      // markdown opening syntax
+    QString suffix;      // markdown closing syntax
+};
+
 // Collect all text and style runs from inline nodes
 struct CollectedText {
     QString text;
     QList<StyleRun> styleRuns;
     QList<Content::TextStyle> textStyles; // rendering styles, parallel to styleRuns
     QSet<int> softHyphenPositions;        // cleaned-text positions at soft hyphens
+    QList<MarkdownRange> markdownRanges;
 };
 
 // Strip U+00AD (soft hyphen) from text, recording their cleaned-text positions
@@ -163,7 +171,8 @@ QString stripSoftHyphens(const QString &text, int offset, QSet<int> &positions)
 }
 
 CollectedText collectInlines(const QList<Content::InlineNode> &inlines,
-                              const Content::TextStyle &baseStyle)
+                              const Content::TextStyle &baseStyle,
+                              bool markdownMode = false)
 {
     CollectedText result;
     for (const auto &node : inlines) {
@@ -183,6 +192,18 @@ CollectedText collectInlines(const QList<Content::InlineNode> &inlines,
                 result.styleRuns.append(sr);
                 result.textStyles.append(n.style);
                 result.text.append(clean);
+                if (markdownMode) {
+                    QString prefix, suffix;
+                    bool bold = (n.style.fontWeight >= 700);
+                    bool italic = n.style.italic;
+                    bool strike = n.style.strikethrough;
+                    if (bold && italic) { prefix += QStringLiteral("***"); suffix.prepend(QStringLiteral("***")); }
+                    else if (bold)      { prefix += QStringLiteral("**");  suffix.prepend(QStringLiteral("**")); }
+                    else if (italic)    { prefix += QStringLiteral("*");   suffix.prepend(QStringLiteral("*")); }
+                    if (strike)         { prefix += QStringLiteral("~~");  suffix.prepend(QStringLiteral("~~")); }
+                    if (!prefix.isEmpty())
+                        result.markdownRanges.append({startPos, startPos + static_cast<int>(clean.size()), prefix, suffix});
+                }
             } else if constexpr (std::is_same_v<T, Content::InlineCode>) {
                 StyleRun sr;
                 sr.start = result.text.size();
@@ -195,6 +216,9 @@ CollectedText collectInlines(const QList<Content::InlineNode> &inlines,
                 result.styleRuns.append(sr);
                 result.textStyles.append(n.style);
                 result.text.append(n.text);
+                if (markdownMode)
+                    result.markdownRanges.append({sr.start, sr.start + sr.length,
+                                                   QStringLiteral("`"), QStringLiteral("`")});
             } else if constexpr (std::is_same_v<T, Content::FootnoteRef>) {
                 StyleRun sr;
                 sr.start = result.text.size();
@@ -244,6 +268,10 @@ CollectedText collectInlines(const QList<Content::InlineNode> &inlines,
                 result.styleRuns.append(sr);
                 result.textStyles.append(n.style);
                 result.text.append(clean);
+                if (markdownMode)
+                    result.markdownRanges.append({startPos, startPos + static_cast<int>(clean.size()),
+                                                   QStringLiteral("["),
+                                                   QStringLiteral("](") + n.href + QStringLiteral(")")});
             } else if constexpr (std::is_same_v<T, Content::InlineImage>) {
                 // Placeholder for inline images — represented as object replacement
                 // Images are handled separately during rendering
@@ -275,7 +303,7 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                                        qreal availWidth)
 {
     QList<LineBox> lines;
-    auto collected = collectInlines(inlines, baseStyle);
+    auto collected = collectInlines(inlines, baseStyle, m_markdownDecorations);
     if (collected.text.isEmpty())
         return lines;
 
@@ -389,6 +417,26 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
         // Finalize last word of run
         if (!currentWord.glyphs.isEmpty())
             words.append({currentWord, false});
+    }
+
+    // Apply markdown decorations to glyph boxes
+    if (m_markdownDecorations && !collected.markdownRanges.isEmpty()) {
+        for (const auto &range : collected.markdownRanges) {
+            GlyphBox *first = nullptr;
+            GlyphBox *last = nullptr;
+            for (auto &w : words) {
+                if (w.isNewline) continue;
+                auto &gb = w.gbox;
+                int gbEnd = gb.textStart + gb.textLength;
+                // Check if this glyph box overlaps the markdown range
+                if (gbEnd > range.textStart && gb.textStart < range.textEnd) {
+                    if (!first) first = &gb;
+                    last = &gb;
+                }
+            }
+            if (first) first->mdPrefix += range.prefix;
+            if (last) last->mdSuffix.prepend(range.suffix);
+        }
     }
 
     // Greedy line breaking on word boxes
