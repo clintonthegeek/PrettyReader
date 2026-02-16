@@ -500,7 +500,6 @@ BlockBox Engine::layoutParagraph(const Content::Paragraph &para, qreal availWidt
 {
     BlockBox box;
     box.type = BlockBox::ParagraphBlock;
-    box.width = availWidth;
     box.spaceBefore = para.format.spaceBefore;
     box.spaceAfter = para.format.spaceAfter;
 
@@ -520,6 +519,7 @@ BlockBox Engine::layoutParagraph(const Content::Paragraph &para, qreal availWidt
 
     qreal effectiveWidth = availWidth - para.format.leftMargin - para.format.rightMargin;
     box.lines = breakIntoLines(para.inlines, baseStyle, para.format, effectiveWidth);
+    box.width = effectiveWidth;
 
     // Compute total height
     qreal h = 0;
@@ -970,17 +970,24 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                                        && !para.inlines.isEmpty();
                     bool isTask = isFirstPara && item.isTask;
 
-                    // Resolve style from first inline for prefix sizing
+                    // Resolve body text style for bullet prefix sizing.
+                    // Skip InlineCode to avoid inheriting monospace font.
                     Content::TextStyle firstStyle;
                     if (isFirstPara) {
-                        std::visit([&](const auto &n) {
-                            using U = std::decay_t<decltype(n)>;
-                            if constexpr (std::is_same_v<U, Content::TextRun>
-                                          || std::is_same_v<U, Content::InlineCode>
-                                          || std::is_same_v<U, Content::Link>
-                                          || std::is_same_v<U, Content::FootnoteRef>)
-                                firstStyle = n.style;
-                        }, para.inlines.first());
+                        for (const auto &inl : para.inlines) {
+                            bool found = false;
+                            std::visit([&](const auto &n) {
+                                using U = std::decay_t<decltype(n)>;
+                                if constexpr (std::is_same_v<U, Content::TextRun>
+                                              || std::is_same_v<U, Content::Link>
+                                              || std::is_same_v<U, Content::FootnoteRef>) {
+                                    firstStyle = n.style;
+                                    found = true;
+                                }
+                            }, inl);
+                            if (found)
+                                break;
+                        }
                         if (firstStyle.fontFamily.isEmpty()) {
                             firstStyle.fontFamily = QStringLiteral("Noto Serif");
                             firstStyle.fontSize = 11.0;
