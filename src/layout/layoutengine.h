@@ -40,6 +40,8 @@ struct GlyphInfo {
 };
 
 struct GlyphBox {
+    enum CheckboxState { NoCheckbox, Unchecked, Checked };
+
     QList<GlyphInfo> glyphs;
     FontFace *font = nullptr;
     qreal fontSize = 0;
@@ -53,6 +55,8 @@ struct GlyphBox {
     bool rtl = false;
     bool trailingSoftHyphen = false; // word ended at a soft hyphen break point
     bool startsAfterSoftHyphen = false; // continues a soft-hyphenated word
+    // Task list checkbox (rendered as vector graphic, not font glyph)
+    CheckboxState checkboxState = NoCheckbox;
 };
 
 struct ImageBox {

@@ -841,31 +841,65 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                 if constexpr (std::is_same_v<T, Content::Paragraph>) {
                     Content::Paragraph para = c;
                     para.format.leftMargin += indent;
-                    // Add bullet/number/checkbox prefix to first paragraph
-                    if (&child == &item.children.first() && !para.inlines.isEmpty()) {
+
+                    bool isFirstPara = (&child == &item.children.first())
+                                       && !para.inlines.isEmpty();
+                    bool isTask = isFirstPara && item.isTask;
+
+                    // Resolve style from first inline for prefix sizing
+                    Content::TextStyle firstStyle;
+                    if (isFirstPara) {
+                        std::visit([&](const auto &n) {
+                            using U = std::decay_t<decltype(n)>;
+                            if constexpr (std::is_same_v<U, Content::TextRun>
+                                          || std::is_same_v<U, Content::InlineCode>
+                                          || std::is_same_v<U, Content::Link>
+                                          || std::is_same_v<U, Content::FootnoteRef>)
+                                firstStyle = n.style;
+                        }, para.inlines.first());
+                        if (firstStyle.fontFamily.isEmpty()) {
+                            firstStyle.fontFamily = QStringLiteral("Noto Serif");
+                            firstStyle.fontSize = 11.0;
+                        }
+                    }
+
+                    // Add bullet/number text prefix (non-task items)
+                    if (isFirstPara && !isTask) {
                         QString prefix;
                         if (list.type == Content::ListType::Ordered)
                             prefix = QString::number(list.startNumber + i) + QStringLiteral(". ");
-                        else if (item.isTask)
-                            prefix = item.taskChecked ? QStringLiteral("\u2611 ") : QStringLiteral("\u2610 ");
                         else
                             prefix = QStringLiteral("\u2022 ");
 
                         Content::TextRun prefixRun;
                         prefixRun.text = prefix;
-                        // Inherit style from first inline (any type that has .style)
-                        std::visit([&](const auto &n) {
-                            using U = std::decay_t<decltype(n)>;
-                            if constexpr (requires { n.style; })
-                                prefixRun.style = n.style;
-                        }, para.inlines.first());
-                        if (prefixRun.style.fontFamily.isEmpty()) {
-                            prefixRun.style.fontFamily = QStringLiteral("Noto Serif");
-                            prefixRun.style.fontSize = 11.0;
-                        }
+                        prefixRun.style = firstStyle;
                         para.inlines.prepend(prefixRun);
                     }
-                    elements.append(layoutParagraph(para, availWidth));
+
+                    // Task items: add extra margin for checkbox, layout, then prepend checkbox GlyphBox
+                    qreal cbWidth = 0;
+                    if (isTask) {
+                        cbWidth = firstStyle.fontSize * 0.85 + 3.0; // checkbox + gap
+                        para.format.leftMargin += cbWidth;
+                    }
+
+                    auto box = layoutParagraph(para, availWidth);
+
+                    if (isTask && !box.lines.isEmpty()) {
+                        GlyphBox cbBox;
+                        cbBox.checkboxState = item.taskChecked
+                            ? GlyphBox::Checked : GlyphBox::Unchecked;
+                        cbBox.fontSize = firstStyle.fontSize;
+                        cbBox.style = firstStyle;
+                        cbBox.width = cbWidth;
+                        cbBox.ascent = firstStyle.fontSize * 0.8;
+                        cbBox.descent = firstStyle.fontSize * 0.2;
+                        box.lines.first().glyphs.prepend(cbBox);
+                        box.lines.first().width += cbWidth;
+                    }
+
+                    elements.append(box);
                 } else if constexpr (std::is_same_v<T, Content::List>) {
                     // Nested list
                     auto nested = layoutList(c, availWidth, depth + 1);

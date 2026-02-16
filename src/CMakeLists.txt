@@ -143,6 +143,15 @@ qt_add_resources(PrettyReaderCore "dicts"
         dicts/hyph_en_GB.dic
 )
 
+# Bundle glyph artwork (checkbox SVGs) as Qt resources
+qt_add_resources(PrettyReaderCore "glyphs"
+    PREFIX "/glyphs"
+    BASE glyphs
+    FILES
+        glyphs/checkbox-unchecked.svg
+        glyphs/checkbox-checked.svg
+)
+
 target_include_directories(PrettyReaderCore
     PRIVATE
         ${MD4C_INCLUDE_DIR}

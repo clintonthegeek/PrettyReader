@@ -382,9 +382,82 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     }
 }
 
+void PdfGenerator::renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
+                                   qreal x, qreal y)
+{
+    // Draw a checkbox as PDF vector paths, sized to the font
+    qreal size = gbox.fontSize * 0.7;  // checkbox size relative to font
+    qreal cx = x + 1.0;               // small left offset
+    qreal cy = y - size * 0.03;       // baseline adjustment — vertically centered with text x-height
+    qreal r = size * 0.12;            // corner radius
+    qreal lw = size * 0.07;           // line width scales with size
+
+    // Stroke color from text style, default to dark gray
+    QColor strokeColor = gbox.style.foreground.isValid()
+        ? gbox.style.foreground : QColor(0x33, 0x33, 0x33);
+
+    stream += "q\n";
+    stream += colorOperator(strokeColor, false); // stroke color
+    stream += pdfCoord(lw) + " w\n";
+
+    // Rounded rectangle path (clockwise from bottom-left)
+    // Bottom edge
+    stream += pdfCoord(cx + r) + " " + pdfCoord(cy) + " m\n";
+    stream += pdfCoord(cx + size - r) + " " + pdfCoord(cy) + " l\n";
+    // Bottom-right corner
+    stream += pdfCoord(cx + size) + " " + pdfCoord(cy) + " "
+            + pdfCoord(cx + size) + " " + pdfCoord(cy + r) + " v\n";
+    // Right edge
+    stream += pdfCoord(cx + size) + " " + pdfCoord(cy + size - r) + " l\n";
+    // Top-right corner
+    stream += pdfCoord(cx + size) + " " + pdfCoord(cy + size) + " "
+            + pdfCoord(cx + size - r) + " " + pdfCoord(cy + size) + " v\n";
+    // Top edge
+    stream += pdfCoord(cx + r) + " " + pdfCoord(cy + size) + " l\n";
+    // Top-left corner
+    stream += pdfCoord(cx) + " " + pdfCoord(cy + size) + " "
+            + pdfCoord(cx) + " " + pdfCoord(cy + size - r) + " v\n";
+    // Left edge
+    stream += pdfCoord(cx) + " " + pdfCoord(cy + r) + " l\n";
+    // Bottom-left corner
+    stream += pdfCoord(cx) + " " + pdfCoord(cy) + " "
+            + pdfCoord(cx + r) + " " + pdfCoord(cy) + " v\n";
+
+    if (gbox.checkboxState == Layout::GlyphBox::Checked) {
+        // Fill with light accent, then stroke
+        stream += "0.92 0.95 1.0 rg\n"; // light blue fill
+        stream += "B\n"; // fill + stroke path
+
+        // Checkmark path
+        stream += colorOperator(strokeColor, false);
+        stream += pdfCoord(lw * 1.5) + " w\n";
+        stream += "1 J 1 j\n"; // round caps and joins
+        qreal mx = cx + size * 0.20; // checkmark start
+        qreal my = cy + size * 0.50;
+        qreal kx = cx + size * 0.42; // checkmark knee
+        qreal ky = cy + size * 0.25;
+        qreal ex = cx + size * 0.82; // checkmark end
+        qreal ey = cy + size * 0.78;
+        stream += pdfCoord(mx) + " " + pdfCoord(my) + " m\n";
+        stream += pdfCoord(kx) + " " + pdfCoord(ky) + " l\n";
+        stream += pdfCoord(ex) + " " + pdfCoord(ey) + " l\n";
+        stream += "S\n";
+    } else {
+        stream += "S\n"; // stroke only
+    }
+
+    stream += "Q\n";
+}
+
 void PdfGenerator::renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
                                    qreal x, qreal y)
 {
+    // Checkbox: render as vector graphic instead of font glyphs
+    if (gbox.checkboxState != Layout::GlyphBox::NoCheckbox) {
+        renderCheckbox(gbox, stream, x, y);
+        return;
+    }
+
     if (gbox.glyphs.isEmpty() || !gbox.font)
         return;
 

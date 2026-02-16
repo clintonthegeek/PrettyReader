@@ -49,6 +49,8 @@ private:
                                   qreal originX, qreal originY, qreal pageHeight);
     void renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
                         qreal x, qreal y);
+    void renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
+                        qreal x, qreal y);
     void renderLineBox(const Layout::LineBox &line, QByteArray &stream,
                        qreal originX, qreal originY, qreal pageHeight,
                        qreal availWidth);
