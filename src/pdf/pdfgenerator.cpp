@@ -1234,6 +1234,72 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
     }
 }
 
+PdfGenerator::GlyphFormEntry PdfGenerator::ensureGlyphForm(
+    const HersheyFont *font, uint glyphId, bool bold)
+{
+    GlyphFormKey key{font, glyphId, bold};
+    auto it = m_glyphForms.find(key);
+    if (it != m_glyphForms.end())
+        return it.value();
+
+    const HersheyGlyph *hGlyph = font->glyph(static_cast<char32_t>(glyphId));
+    if (!hGlyph) {
+        GlyphFormEntry dummy;
+        return dummy;
+    }
+
+    // Build the Form stream in glyph-local coordinates.
+    // Origin: left baseline (x=0 at leftBound, y=0 at baseline).
+    // Coordinates are in Hershey font units (scaled at call site via cm).
+    QByteArray formStream;
+    formStream += "1 J 1 j\n"; // round cap & join
+
+    // Stroke width in glyph units. Call site scales by fontSize/unitsPerEm,
+    // so: strokeWidth_glyphUnits * (fontSize/upm) = 0.02 * fontSize
+    // Therefore: strokeWidth_glyphUnits = 0.02 * upm
+    qreal strokeWidth = 0.02 * font->unitsPerEm();
+    if (bold)
+        strokeWidth *= 1.8;
+    formStream += pdfCoord(strokeWidth) + " w\n";
+
+    for (const auto &stroke : hGlyph->strokes) {
+        if (stroke.size() < 2)
+            continue;
+        qreal px = stroke[0].x() - hGlyph->leftBound;
+        qreal py = stroke[0].y();
+        formStream += pdfCoord(px) + " " + pdfCoord(py) + " m\n";
+        for (int si = 1; si < stroke.size(); ++si) {
+            px = stroke[si].x() - hGlyph->leftBound;
+            py = stroke[si].y();
+            formStream += pdfCoord(px) + " " + pdfCoord(py) + " l\n";
+        }
+        formStream += "S\n";
+    }
+
+    // BBox in glyph units
+    qreal advW = hGlyph->rightBound - hGlyph->leftBound;
+    qreal bboxBottom = -font->descent();
+    qreal bboxTop = font->ascent();
+
+    // Write the Form XObject to PDF
+    Pdf::ObjId objId = m_writer->startObj();
+    m_writer->write("<<\n/Type /XObject\n/Subtype /Form\n");
+    m_writer->write("/BBox [0 " + pdfCoord(bboxBottom) + " "
+                    + pdfCoord(advW) + " " + pdfCoord(bboxTop) + "]\n");
+    m_writer->endObjectWithStream(objId, formStream);
+
+    // Register in resource dict and cache
+    GlyphFormEntry entry;
+    entry.objId = objId;
+    entry.pdfName = "HG" + QByteArray::number(m_nextGlyphFormIdx++);
+    entry.advanceWidth = advW;
+    m_glyphForms.insert(key, entry);
+
+    m_resources->xObjects[entry.pdfName] = objId;
+
+    return entry;
+}
+
 QByteArray PdfGenerator::toUtf16BeHex(const QString &text)
 {
     QByteArray hex;
