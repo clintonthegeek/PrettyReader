@@ -141,6 +141,7 @@ qt_add_resources(PrettyReaderCore "themes"
     FILES
         themes/default.json
         themes/academic.json
+        themes/hershey.json
 )
 
 # Bundle hyphenation dictionaries as Qt resources
