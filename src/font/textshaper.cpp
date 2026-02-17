@@ -171,24 +171,39 @@ QList<TextShaper::InternalRun> TextShaper::itemizeFontCoverage(
             int pos = run.start;
             int end = run.start + run.length;
             while (pos < end) {
-                char32_t cp = text.at(pos).unicode();
+                // Decode codepoint (handle surrogate pairs)
+                char32_t cp;
+                if (pos + 1 < end
+                    && QChar::isHighSurrogate(text.at(pos).unicode())
+                    && QChar::isLowSurrogate(text.at(pos + 1).unicode())) {
+                    cp = QChar::surrogateToUcs4(text.at(pos), text.at(pos + 1));
+                } else {
+                    cp = text.at(pos).unicode();
+                }
                 bool primaryHas = primary->hersheyFont->hasGlyph(cp);
                 bool useFallback = !primaryHas
                     && m_fallbackFont && m_fallbackFont->ftFace
                     && FT_Get_Char_Index(m_fallbackFont->ftFace, cp) != 0;
 
                 int segStart = pos;
-                pos++;
+                pos += (cp > 0xFFFF) ? 2 : 1;
 
                 // Consume consecutive chars with same font choice
                 while (pos < end) {
-                    char32_t cp2 = text.at(pos).unicode();
+                    char32_t cp2;
+                    if (pos + 1 < end
+                        && QChar::isHighSurrogate(text.at(pos).unicode())
+                        && QChar::isLowSurrogate(text.at(pos + 1).unicode())) {
+                        cp2 = QChar::surrogateToUcs4(text.at(pos), text.at(pos + 1));
+                    } else {
+                        cp2 = text.at(pos).unicode();
+                    }
                     bool p2 = primary->hersheyFont->hasGlyph(cp2);
                     bool f2 = !p2 && m_fallbackFont && m_fallbackFont->ftFace
                         && FT_Get_Char_Index(m_fallbackFont->ftFace, cp2) != 0;
                     if (f2 != useFallback)
                         break;
-                    pos++;
+                    pos += (cp2 > 0xFFFF) ? 2 : 1;
                 }
 
                 InternalRun sub;
@@ -324,6 +339,10 @@ QList<ShapedRun> TextShaper::shape(const QString &text, const QList<StyleRun> &s
                 g.yOffset = 0;
                 g.cluster = ci;
                 shaped.glyphs.append(g);
+
+                // Skip low surrogate of a pair
+                if (cp > 0xFFFF)
+                    ++ci;
             }
 
             result.append(shaped);
