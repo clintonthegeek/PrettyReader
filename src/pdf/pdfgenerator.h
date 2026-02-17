@@ -106,6 +106,30 @@ private:
         int width = 0;
         int height = 0;
     };
+    // Glyph Form XObjects (reusable vector glyph drawings)
+    struct GlyphFormKey {
+        const HersheyFont *font = nullptr;
+        uint glyphId = 0;
+        bool bold = false;
+
+        bool operator==(const GlyphFormKey &o) const {
+            return font == o.font && glyphId == o.glyphId && bold == o.bold;
+        }
+    };
+    friend size_t qHash(const PdfGenerator::GlyphFormKey &k, size_t seed = 0) {
+        return qHashMulti(seed, quintptr(k.font), k.glyphId, k.bold);
+    }
+
+    struct GlyphFormEntry {
+        Pdf::ObjId objId = 0;
+        QByteArray pdfName;    // "HG0", "HG1", ...
+        qreal advanceWidth = 0; // in glyph units
+    };
+
+    QHash<GlyphFormKey, GlyphFormEntry> m_glyphForms;
+    int m_nextGlyphFormIdx = 0;
+    GlyphFormEntry ensureGlyphForm(const HersheyFont *font, uint glyphId, bool bold);
+
     QList<EmbeddedImage> m_embeddedImages;
     QHash<QString, int> m_imageIndex; // imageId → index in m_embeddedImages
     int ensureImageRegistered(const QString &imageId, const QImage &image);
@@ -139,6 +163,8 @@ private:
     PdfExportOptions m_exportOptions;
     bool m_codeBlockLines = false; // true while rendering code block lines
     bool m_hersheyMode = false;
+    Pdf::Writer *m_writer = nullptr;           // set during generate(), null otherwise
+    Pdf::ResourceDict *m_resources = nullptr;  // set during generate(), null otherwise
 };
 
 #endif // PRETTYREADER_PDFGENERATOR_H
