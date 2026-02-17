@@ -1141,19 +1141,14 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
         stream += "Q\n";
     }
 
-    // Stroke style
-    qreal baseWidth = 0.02 * fontSize;
-    if (gbox.font->hersheyBold)
-        baseWidth *= 1.8;
-
-    stream += "q\n";
-    stream += "1 J\n";   // round line cap
-    stream += "1 j\n";   // round line join
-    stream += pdfCoord(baseWidth) + " w\n";
-    stream += colorOperator(gbox.style.foreground, false); // stroke color
-
     qreal curX = x;
     for (const auto &g : gbox.glyphs) {
+        auto entry = ensureGlyphForm(hFont, g.glyphId, gbox.font->hersheyBold);
+        if (entry.objId == 0) {
+            curX += g.xAdvance;
+            continue;
+        }
+
         qreal gx = curX + g.xOffset;
         qreal gy = y - g.yOffset;
 
@@ -1163,53 +1158,26 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
         else if (gbox.style.subscript)
             gy -= fontSize * 0.15;
 
-        // Look up Hershey glyph by codepoint (glyphId == codepoint)
-        const HersheyGlyph *hGlyph = hFont->glyph(static_cast<char32_t>(g.glyphId));
-        if (!hGlyph) {
-            curX += g.xAdvance;
-            continue;
-        }
+        stream += "q\n";
+        stream += colorOperator(gbox.style.foreground, false); // stroke color
 
         if (gbox.font->hersheyItalic) {
-            // Italic synthesis: skew transform via cm operator
-            // tan(12 degrees) ~= 0.2126
-            stream += "q\n";
-            stream += "1 0 0.2126 1 " + pdfCoord(gx) + " " + pdfCoord(gy) + " cm\n";
-            for (const auto &stroke : hGlyph->strokes) {
-                if (stroke.size() < 2)
-                    continue;
-                qreal px = (stroke[0].x() - hGlyph->leftBound) * scale;
-                qreal py = stroke[0].y() * scale;
-                stream += pdfCoord(px) + " " + pdfCoord(py) + " m\n";
-                for (int si = 1; si < stroke.size(); ++si) {
-                    px = (stroke[si].x() - hGlyph->leftBound) * scale;
-                    py = stroke[si].y() * scale;
-                    stream += pdfCoord(px) + " " + pdfCoord(py) + " l\n";
-                }
-                stream += "S\n";
-            }
-            stream += "Q\n";
+            // Scale + italic skew + translate
+            // Matrix: [sx 0 sx*tan(12deg) sy tx ty]
+            stream += pdfCoord(scale) + " 0 "
+                    + pdfCoord(scale * 0.2126) + " " + pdfCoord(scale)
+                    + " " + pdfCoord(gx) + " " + pdfCoord(gy) + " cm\n";
         } else {
-            // Non-skewed: emit absolute coordinates
-            for (const auto &stroke : hGlyph->strokes) {
-                if (stroke.size() < 2)
-                    continue;
-                qreal px = (stroke[0].x() - hGlyph->leftBound) * scale;
-                qreal py = stroke[0].y() * scale;
-                stream += pdfCoord(gx + px) + " " + pdfCoord(gy + py) + " m\n";
-                for (int si = 1; si < stroke.size(); ++si) {
-                    px = (stroke[si].x() - hGlyph->leftBound) * scale;
-                    py = stroke[si].y() * scale;
-                    stream += pdfCoord(gx + px) + " " + pdfCoord(gy + py) + " l\n";
-                }
-                stream += "S\n";
-            }
+            // Scale + translate only
+            stream += pdfCoord(scale) + " 0 0 " + pdfCoord(scale)
+                    + " " + pdfCoord(gx) + " " + pdfCoord(gy) + " cm\n";
         }
+
+        stream += "/" + entry.pdfName + " Do\n";
+        stream += "Q\n";
 
         curX += g.xAdvance;
     }
-
-    stream += "Q\n";
 
     // Underline
     if (gbox.style.underline) {
