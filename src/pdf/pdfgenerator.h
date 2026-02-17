@@ -14,6 +14,7 @@
 #include <QByteArray>
 #include <QString>
 
+#include "hersheyfont.h"
 #include "layoutengine.h"
 #include "pagelayout.h"
 #include "pdfwriter.h"
@@ -52,13 +53,18 @@ private:
                                   qreal originX, qreal originY, qreal pageHeight);
     void renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
                         qreal x, qreal y);
+    void renderGlyphBoxAsPath(const Layout::GlyphBox &gbox, QByteArray &stream,
+                              qreal x, qreal y);
+    void renderHersheyGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
+                               qreal x, qreal y);
     void renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
                         qreal x, qreal y);
-    void renderHiddenText(const QString &text, FontFace *font, qreal fontSize,
-                          qreal x, qreal y, QByteArray &stream);
     void renderLineBox(const Layout::LineBox &line, QByteArray &stream,
                        qreal originX, qreal originY, qreal pageHeight,
                        qreal availWidth);
+
+    // Markdown copy mode: per-word ActualText encoding
+    static QByteArray toUtf16BeHex(const QString &text);
 
     // Link annotations: collected per-page during rendering
     struct LinkAnnotation {
@@ -131,6 +137,8 @@ private:
     QString m_title;
     qreal m_maxJustifyGap = 14.0;
     PdfExportOptions m_exportOptions;
+    bool m_codeBlockLines = false; // true while rendering code block lines
+    bool m_hersheyMode = false;
 };
 
 #endif // PRETTYREADER_PDFGENERATOR_H
