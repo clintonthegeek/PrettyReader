@@ -87,6 +87,13 @@ void PdfExportDialog::setupGeneralPage()
              "paragraphs without soft line breaks."));
     copyForm->addRow(m_unwrapParagraphsCheck);
 
+    m_xobjectGlyphsCheck = new QCheckBox(i18n("Render glyphs as vector art"), copyGroup);
+    m_xobjectGlyphsCheck->setToolTip(
+        i18n("Draws all font glyphs as reusable vector shapes instead of text operators. "
+             "Produces smaller files and prevents visible text from interfering with "
+             "markdown copy. Recommended when 'Embed markdown syntax' is enabled."));
+    copyForm->addRow(m_xobjectGlyphsCheck);
+
     layout->addWidget(copyGroup);
     layout->addStretch();
 
@@ -387,6 +394,7 @@ PdfExportOptions PdfExportDialog::options() const
     opts.keywords = m_keywordsEdit->text();
     opts.markdownCopy = m_markdownCopyCheck->isChecked();
     opts.unwrapParagraphs = m_unwrapParagraphsCheck->isChecked();
+    opts.xobjectGlyphs = m_xobjectGlyphsCheck->isChecked();
 
     // Content — excluded headings
     std::function<void(QTreeWidgetItem *)> collectExcluded =
@@ -429,6 +437,7 @@ void PdfExportDialog::setOptions(const PdfExportOptions &opts)
     m_keywordsEdit->setText(opts.keywords);
     m_markdownCopyCheck->setChecked(opts.markdownCopy);
     m_unwrapParagraphsCheck->setChecked(opts.unwrapParagraphs);
+    m_xobjectGlyphsCheck->setChecked(opts.xobjectGlyphs);
 
     // Content — page range
     m_pageRangeEdit->setText(opts.pageRangeExpr);

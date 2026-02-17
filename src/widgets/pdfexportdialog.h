@@ -52,6 +52,7 @@ private:
     QLineEdit *m_keywordsEdit = nullptr;
     QCheckBox *m_markdownCopyCheck = nullptr;
     QCheckBox *m_unwrapParagraphsCheck = nullptr;
+    QCheckBox *m_xobjectGlyphsCheck = nullptr;
 
     // Content page
     QTreeWidget *m_headingTree = nullptr;
