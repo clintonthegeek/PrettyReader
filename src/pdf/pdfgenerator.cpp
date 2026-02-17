@@ -830,7 +830,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         if (lastGbox.font) {
             if (lastGbox.font->isHershey && lastGbox.font->hersheyFont) {
                 HersheyFont *hFont = lastGbox.font->hersheyFont;
-                auto entry = ensureGlyphForm(hFont, uint(U'-'), lastGbox.font->hersheyBold);
+                auto entry = ensureGlyphForm(hFont, nullptr, uint(U'-'), lastGbox.font->hersheyBold);
                 if (entry.objId != 0) {
                     qreal scale = lastGbox.fontSize / hFont->unitsPerEm();
                     stream += "q\n";
@@ -1134,7 +1134,7 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
 
     qreal curX = x;
     for (const auto &g : gbox.glyphs) {
-        auto entry = ensureGlyphForm(hFont, g.glyphId, gbox.font->hersheyBold);
+        auto entry = ensureGlyphForm(hFont, nullptr, g.glyphId, gbox.font->hersheyBold);
         if (entry.objId == 0) {
             curX += g.xAdvance;
             continue;
@@ -1200,55 +1200,90 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
 }
 
 PdfGenerator::GlyphFormEntry PdfGenerator::ensureGlyphForm(
-    const HersheyFont *font, uint glyphId, bool bold)
+    const HersheyFont *hersheyFont, FontFace *ttfFace,
+    uint glyphId, bool bold)
 {
     // Preconditions: must be called during generate() with valid writer/resources
-    if (!font || !m_writer || !m_resources)
+    if ((!hersheyFont && !ttfFace) || !m_writer || !m_resources)
         return {};
 
-    GlyphFormKey key{font, glyphId, bold};
+    GlyphFormKey key{hersheyFont, ttfFace, glyphId, bold};
     auto it = m_glyphForms.find(key);
     if (it != m_glyphForms.end())
         return it.value();
 
-    const HersheyGlyph *hGlyph = font->glyph(static_cast<char32_t>(glyphId));
-    if (!hGlyph) {
-        GlyphFormEntry dummy;
-        return dummy;
-    }
-
-    // Build the Form stream in glyph-local coordinates.
-    // Origin: left baseline (x=0 at leftBound, y=0 at baseline).
-    // Coordinates are in Hershey font units (scaled at call site via cm).
     QByteArray formStream;
-    formStream += "1 J 1 j\n"; // round cap & join
+    qreal advW = 0;
+    qreal bboxBottom = 0;
+    qreal bboxTop = 0;
 
-    // Stroke width in glyph units. Call site scales by fontSize/unitsPerEm,
-    // so: strokeWidth_glyphUnits * (fontSize/upm) = 0.02 * fontSize
-    // Therefore: strokeWidth_glyphUnits = 0.02 * upm
-    qreal strokeWidth = 0.02 * font->unitsPerEm();
-    if (bold)
-        strokeWidth *= 1.8;
-    formStream += pdfCoord(strokeWidth) + " w\n";
-
-    for (const auto &stroke : hGlyph->strokes) {
-        if (stroke.size() < 2)
-            continue;
-        qreal px = stroke[0].x() - hGlyph->leftBound;
-        qreal py = stroke[0].y();
-        formStream += pdfCoord(px) + " " + pdfCoord(py) + " m\n";
-        for (int si = 1; si < stroke.size(); ++si) {
-            px = stroke[si].x() - hGlyph->leftBound;
-            py = stroke[si].y();
-            formStream += pdfCoord(px) + " " + pdfCoord(py) + " l\n";
+    if (hersheyFont) {
+        const HersheyGlyph *hGlyph = hersheyFont->glyph(static_cast<char32_t>(glyphId));
+        if (!hGlyph) {
+            GlyphFormEntry dummy;
+            return dummy;
         }
-        formStream += "S\n";
-    }
 
-    // BBox in glyph units
-    qreal advW = hGlyph->rightBound - hGlyph->leftBound;
-    qreal bboxBottom = -font->descent();
-    qreal bboxTop = font->ascent();
+        // Build the Form stream in glyph-local coordinates.
+        // Origin: left baseline (x=0 at leftBound, y=0 at baseline).
+        // Coordinates are in Hershey font units (scaled at call site via cm).
+        formStream += "1 J 1 j\n"; // round cap & join
+
+        // Stroke width in glyph units. Call site scales by fontSize/unitsPerEm,
+        // so: strokeWidth_glyphUnits * (fontSize/upm) = 0.02 * fontSize
+        // Therefore: strokeWidth_glyphUnits = 0.02 * upm
+        qreal strokeWidth = 0.02 * hersheyFont->unitsPerEm();
+        if (bold)
+            strokeWidth *= 1.8;
+        formStream += pdfCoord(strokeWidth) + " w\n";
+
+        for (const auto &stroke : hGlyph->strokes) {
+            if (stroke.size() < 2)
+                continue;
+            qreal px = stroke[0].x() - hGlyph->leftBound;
+            qreal py = stroke[0].y();
+            formStream += pdfCoord(px) + " " + pdfCoord(py) + " m\n";
+            for (int si = 1; si < stroke.size(); ++si) {
+                px = stroke[si].x() - hGlyph->leftBound;
+                py = stroke[si].y();
+                formStream += pdfCoord(px) + " " + pdfCoord(py) + " l\n";
+            }
+            formStream += "S\n";
+        }
+
+        advW = hGlyph->rightBound - hGlyph->leftBound;
+        bboxBottom = -hersheyFont->descent();
+        bboxTop = hersheyFont->ascent();
+
+    } else if (ttfFace && ttfFace->ftFace) {
+        FT_Face face = ttfFace->ftFace;
+        if (FT_Load_Glyph(face, glyphId, FT_LOAD_NO_SCALE) != 0
+            || face->glyph->format != FT_GLYPH_FORMAT_OUTLINE) {
+            return {};
+        }
+
+        FT_Outline_Funcs funcs = {};
+        funcs.move_to = outlineMoveTo;
+        funcs.line_to = outlineLineTo;
+        funcs.conic_to = outlineConicTo;
+        funcs.cubic_to = outlineCubicTo;
+
+        OutlineCtx ctx;
+        ctx.stream = &formStream;
+        ctx.scale = 1.0;  // font units, scaling at call site via cm
+        ctx.tx = 0;
+        ctx.ty = 0;
+        ctx.last = {0, 0};
+        FT_Outline_Decompose(&face->glyph->outline, &funcs, &ctx);
+        formStream += "f\n";
+
+        advW = face->glyph->metrics.horiAdvance;
+        bboxBottom = face->bbox.yMin;
+        bboxTop = face->bbox.yMax;
+
+    } else {
+        return {};
+    }
 
     // Write the Form XObject to PDF
     Pdf::ObjId objId = m_writer->startObj();
