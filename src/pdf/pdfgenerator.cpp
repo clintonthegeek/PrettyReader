@@ -588,35 +588,42 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     qreal baselineY = originY - line.baseline;
 
     // Full justification: distribute extra space between real word gaps.
-    // Skip sub-word boundaries (soft-hyphen splits) and intra-inline-code
-    // gaps (adjacent glyph boxes with the same background color).
-    // Cap maximum gap expansion to avoid rivers of whitespace.
-    const qreal maxJustifyGap = m_maxJustifyGap;
-
+    // When the layout engine has populated JustifyInfo (wordGapCount > 0),
+    // use the pre-computed per-gap and per-character spacing.  Otherwise
+    // fall back to the legacy inline gap-counting logic.
     bool doJustify = false;
     qreal extraPerGap = 0;
+    qreal extraPerChar = 0;
 
     if (line.alignment == Qt::AlignJustify && !line.isLastLine
         && line.glyphs.size() > 1 && line.width < availWidth) {
-        int gapCount = 0;
-        for (int i = 1; i < line.glyphs.size(); ++i) {
-            if (line.glyphs[i].startsAfterSoftHyphen)
-                continue;
-            // Don't justify between adjacent inline-code boxes (same background)
-            if (line.glyphs[i].style.background.isValid()
-                && line.glyphs[i - 1].style.background.isValid()
-                && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
-                continue;
-            // Don't justify the gap after a bullet/number prefix
-            if (line.glyphs[i - 1].isListMarker)
-                continue;
-            gapCount++;
-        }
-        if (gapCount > 0) {
-            qreal extraSpace = availWidth - line.width;
-            extraPerGap = extraSpace / gapCount;
-            if (extraPerGap <= maxJustifyGap)
-                doJustify = true;
+        if (line.justify.wordGapCount > 0) {
+            // New path: use pre-computed JustifyInfo
+            doJustify = true;
+            extraPerGap = line.justify.extraWordSpacing;
+            extraPerChar = line.justify.extraLetterSpacing;
+        } else {
+            // Legacy fallback: compute gaps inline (until layout engine populates JustifyInfo)
+            int gapCount = 0;
+            for (int i = 1; i < line.glyphs.size(); ++i) {
+                if (line.glyphs[i].startsAfterSoftHyphen)
+                    continue;
+                if (line.glyphs[i].style.background.isValid()
+                    && line.glyphs[i - 1].style.background.isValid()
+                    && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
+                    continue;
+                if (line.glyphs[i - 1].isListMarker)
+                    continue;
+                gapCount++;
+            }
+            if (gapCount > 0) {
+                qreal extraSpace = availWidth - line.width;
+                qreal epg = extraSpace / gapCount;
+                if (epg <= m_maxJustifyGap) {
+                    doJustify = true;
+                    extraPerGap = epg;
+                }
+            }
         }
     }
 
@@ -633,6 +640,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             for (int i = 0; i < line.glyphs.size(); ++i) {
                 glyphXPositions.append(cx);
                 cx += line.glyphs[i].width;
+                cx += extraPerChar * line.glyphs[i].glyphs.size();
                 if (i < line.glyphs.size() - 1) {
                     bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
                     if (line.glyphs[i + 1].style.background.isValid()
@@ -762,6 +770,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             else
                 renderGlyphBox(line.glyphs[i], stream, x, baselineY);
             x += line.glyphs[i].width;
+            x += extraPerChar * line.glyphs[i].glyphs.size();
             if (i < line.glyphs.size() - 1) {
                 bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
                 if (line.glyphs[i + 1].style.background.isValid()
