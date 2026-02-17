@@ -829,30 +829,21 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         const auto &lastGbox = line.glyphs.last();
         if (lastGbox.font) {
             if (lastGbox.font->isHershey && lastGbox.font->hersheyFont) {
-                // Hershey path: render hyphen as stroked polylines
                 HersheyFont *hFont = lastGbox.font->hersheyFont;
-                const HersheyGlyph *hGlyph = hFont->glyph(U'-');
-                if (hGlyph) {
+                auto entry = ensureGlyphForm(hFont, uint(U'-'), lastGbox.font->hersheyBold);
+                if (entry.objId != 0) {
                     qreal scale = lastGbox.fontSize / hFont->unitsPerEm();
-                    qreal baseWidth = 0.02 * lastGbox.fontSize;
-                    if (lastGbox.font->hersheyBold)
-                        baseWidth *= 1.8;
-                    stream += "q\n1 J\n1 j\n";
-                    stream += pdfCoord(baseWidth) + " w\n";
+                    stream += "q\n";
                     stream += colorOperator(lastGbox.style.foreground, false);
-                    for (const auto &stroke : hGlyph->strokes) {
-                        if (stroke.size() < 2)
-                            continue;
-                        qreal px = (stroke[0].x() - hGlyph->leftBound) * scale;
-                        qreal py = stroke[0].y() * scale;
-                        stream += pdfCoord(x + px) + " " + pdfCoord(baselineY + py) + " m\n";
-                        for (int si = 1; si < stroke.size(); ++si) {
-                            px = (stroke[si].x() - hGlyph->leftBound) * scale;
-                            py = stroke[si].y() * scale;
-                            stream += pdfCoord(x + px) + " " + pdfCoord(baselineY + py) + " l\n";
-                        }
-                        stream += "S\n";
+                    if (lastGbox.font->hersheyItalic) {
+                        stream += pdfCoord(scale) + " 0 "
+                                + pdfCoord(scale * 0.2126) + " " + pdfCoord(scale)
+                                + " " + pdfCoord(x) + " " + pdfCoord(baselineY) + " cm\n";
+                    } else {
+                        stream += pdfCoord(scale) + " 0 0 " + pdfCoord(scale)
+                                + " " + pdfCoord(x) + " " + pdfCoord(baselineY) + " cm\n";
                     }
+                    stream += "/" + entry.pdfName + " Do\n";
                     stream += "Q\n";
                 }
             } else if (lastGbox.font->ftFace) {
