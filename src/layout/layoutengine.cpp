@@ -341,6 +341,11 @@ static QList<LineBreaking::Item> buildKPItems(
 
         // After each word (except the last and before newlines):
         if (i + 1 < words.size() && !words[i + 1].isNewline) {
+            // If next box is attached (mid-word style change like "Office" + "."),
+            // emit no glue — consecutive boxes with no break opportunity.
+            if (words[i + 1].gbox.attachedToPrevious)
+                continue;
+
             // Soft hyphen break opportunity
             if (word.gbox.trailingSoftHyphen) {
                 // Hyphen width estimate: ~60% of space width
@@ -494,6 +499,21 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             words.append({currentWord, false});
     }
 
+    // Detect word boxes that are text-adjacent with no inter-word space
+    // (e.g. "Office" in italic + "." in normal from `*Office*.`).
+    // These must not have glue or justify gaps between them.
+    for (int wi = 1; wi < words.size(); ++wi) {
+        if (words[wi].isNewline || words[wi - 1].isNewline)
+            continue;
+        const auto &prev = words[wi - 1].gbox;
+        const auto &cur = words[wi].gbox;
+        // Check if text ranges are adjacent (no gap) and previous has no trailing space
+        if (prev.textStart + prev.textLength == cur.textStart
+            && trailingSpaceWidth(prev, collected.text) == 0) {
+            words[wi].gbox.attachedToPrevious = true;
+        }
+    }
+
     // Store original text content in each glyph box (for ActualText in PDF)
     if (m_markdownDecorations) {
         for (auto &w : words) {
@@ -548,13 +568,23 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
     // Convert word boxes to Knuth-Plass items
     auto kpItems = buildKPItems(words, collected.text, format, naturalSpaceWidth);
 
-    // Configure and run Knuth-Plass
+    // Configure and run Knuth-Plass (only for justified text — other alignments
+    // don't need optimal line breaking and KP fails with zero-stretch glue)
+    bool useKP = (format.alignment == Qt::AlignJustify);
     LineBreaking::Config kpConfig;
     kpConfig.enableHyphenation = m_hyphenateJustifiedText;
+    LineBreaking::BreakResult kpResult;
 
-    auto kpResult = LineBreaking::findBreaksTiered(kpItems, kpLineWidths, kpConfig);
+    if (useKP) {
+        kpResult = LineBreaking::findBreaksTiered(kpItems, kpLineWidths, kpConfig);
+        qDebug() << "[LAYOUT] KP result: optimal=" << kpResult.optimal
+                 << "breaks=" << kpResult.breaks.size()
+                 << "availWidth=" << availWidth << "firstLineWidth=" << firstLineWidth
+                 << "naturalSpaceWidth=" << naturalSpaceWidth
+                 << "words=" << words.size() << "kpItems=" << kpItems.size();
+    }
 
-    if (kpResult.optimal && !kpResult.breaks.isEmpty()) {
+    if (useKP && kpResult.optimal && !kpResult.breaks.isEmpty()) {
         // Build lines from Knuth-Plass breakpoints
         int wordStart = 0;
         for (int bi = 0; bi < kpResult.breaks.size(); ++bi) {
@@ -562,10 +592,12 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             LineBox line;
             line.alignment = format.alignment;
 
-            // Find the last word index for this line by scanning items before the break
-            // (bp.itemIndex can equal kpItems.size(), so start from itemIndex - 1)
+            // Find the last word index for this line by scanning items before the break.
+            // bp.itemIndex is one past the break item, so scan from bp.itemIndex - 1
+            // (the break item itself).  For a glue break, the glue is skipped and we
+            // find the last Box before it.  For a penalty break, same logic applies.
             int lastBoxWordIdx = -1;
-            for (int ii = qMin(bp.itemIndex, kpItems.size() - 1); ii >= 0; --ii) {
+            for (int ii = qMin(bp.itemIndex - 1, kpItems.size() - 1); ii >= 0; --ii) {
                 if (kpItems[ii].type == LineBreaking::Item::BoxType) {
                     lastBoxWordIdx = kpItems[ii].box.wordIndex;
                     break;
@@ -620,17 +652,11 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                 continue;
             }
 
-            // Compute blended spacing for justified lines
-            if (format.alignment == Qt::AlignJustify && !line.isLastLine && gapCount > 0) {
-                auto spacing = LineBreaking::computeBlendedSpacing(
-                    bp.adjustmentRatio, naturalSpaceWidth,
-                    gapCount, charCount, baseStyle.fontSize, kpConfig);
-                line.justify.adjustmentRatio = bp.adjustmentRatio;
-                line.justify.wordGapCount = gapCount;
-                line.justify.charCount = charCount;
-                line.justify.extraWordSpacing = spacing.extraWordSpacing;
-                line.justify.extraLetterSpacing = spacing.extraLetterSpacing;
-            }
+            // JustifyInfo is computed AFTER trimming (below), not here.
+            // The KP only decides WHERE to break; spacing comes from the actual shortfall.
+            qDebug() << "[LAYOUT] KP Line" << bi << ": words[" << wordStart << ".." << lastBoxWordIdx << "]"
+                     << "glyphBoxes=" << line.glyphs.size() << "isLast=" << line.isLastLine
+                     << "itemIdx=" << bp.itemIndex;
 
             lines.append(line);
             wordStart = lastBoxWordIdx + 1;
@@ -640,6 +666,7 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                 wordStart++;
         }
     } else {
+        qDebug() << "[LAYOUT] GREEDY FALLBACK — KP did not produce optimal breaks";
         // Greedy fallback (original algorithm)
         qreal lineWidth = availWidth - firstLineIndent;
         qreal currentX = 0;
@@ -755,6 +782,72 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
         }
         line.baseline = maxAscent;
         line.height = maxAscent + maxDescent;
+    }
+
+    // Compute JustifyInfo from actual shortfall (after trimming, so line.width
+    // is accurate).  This decouples spacing from the KP adjustment ratio, which
+    // doesn't account for glyph-box trailing-space mismatches.
+    if (format.alignment == Qt::AlignJustify) {
+        qreal maxLetterFrac = 0.03;
+        qreal minLetterFrac = -0.02;
+        for (auto &line : lines) {
+            if (line.isLastLine || line.glyphs.size() <= 1)
+                continue;
+            qreal shortfall = availWidth - line.width;
+            if (shortfall <= 0)
+                continue; // already full or overfull
+
+            // Count eligible gaps and characters
+            int gapCount = 0;
+            int charCount = 0;
+            for (int i = 0; i < line.glyphs.size(); ++i) {
+                charCount += line.glyphs[i].glyphs.size();
+                if (i > 0) {
+                    bool skipGap = line.glyphs[i].startsAfterSoftHyphen;
+                    if (!skipGap && line.glyphs[i].attachedToPrevious)
+                        skipGap = true;
+                    if (!skipGap && line.glyphs[i].style.background.isValid()
+                        && line.glyphs[i - 1].style.background.isValid()
+                        && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
+                        skipGap = true;
+                    if (!skipGap && line.glyphs[i - 1].isListMarker)
+                        skipGap = true;
+                    if (!skipGap)
+                        gapCount++;
+                }
+            }
+            if (gapCount <= 0)
+                continue;
+
+            // Letter spacing is applied between glyph boxes, so the last
+            // box's characters don't benefit (spacing after the last box
+            // would go past the right margin).  Exclude them.
+            int lastBoxChars = line.glyphs.last().glyphs.size();
+            int letterCharCount = charCount - lastBoxChars;
+
+            // Split shortfall: 2/3 word spacing, 1/3 letter spacing
+            qreal letterSlack = shortfall * (1.0 / 3.0);
+            qreal letterPerChar = (letterCharCount > 0) ? letterSlack / letterCharCount : 0;
+
+            // Clamp letter spacing
+            qreal maxLS = maxLetterFrac * baseStyle.fontSize;
+            qreal minLS = minLetterFrac * baseStyle.fontSize;
+            letterPerChar = qBound(minLS, letterPerChar, maxLS);
+
+            // Whatever letter spacing doesn't absorb goes to word spacing
+            qreal actualLetterSlack = letterPerChar * letterCharCount;
+            qreal wordSlack = shortfall - actualLetterSlack;
+
+            line.justify.wordGapCount = gapCount;
+            line.justify.charCount = charCount;
+            line.justify.extraWordSpacing = wordSlack / gapCount;
+            line.justify.extraLetterSpacing = letterPerChar;
+
+            qDebug() << "[JUSTIFY] shortfall=" << shortfall << "gaps=" << gapCount
+                     << "chars=" << charCount << "extraWord=" << line.justify.extraWordSpacing
+                     << "extraLetter=" << line.justify.extraLetterSpacing
+                     << "lineWidth=" << line.width << "avail=" << availWidth;
+        }
     }
 
     // Apply line height multiplier

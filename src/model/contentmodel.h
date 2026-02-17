@@ -129,6 +129,7 @@ struct CodeBlock {
     TextStyle style;
     QColor background = QColor(0xf6, 0xf8, 0xfa);
     qreal padding = 8.0;
+    bool isFenced = true; // false for 4-space indented code blocks
     SourceRange source;
 };
 

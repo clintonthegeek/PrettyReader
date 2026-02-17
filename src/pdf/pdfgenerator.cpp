@@ -602,6 +602,10 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             doJustify = true;
             extraPerGap = line.justify.extraWordSpacing;
             extraPerChar = line.justify.extraLetterSpacing;
+            qDebug() << "[PDF] justify NEW path: gapCount=" << line.justify.wordGapCount
+                     << "extraPerGap=" << extraPerGap << "extraPerChar=" << extraPerChar
+                     << "lineWidth=" << line.width << "availWidth=" << availWidth
+                     << "r=" << line.justify.adjustmentRatio;
         } else {
             // Legacy fallback: compute gaps inline (until layout engine populates JustifyInfo)
             int gapCount = 0;
@@ -627,6 +631,12 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         }
     }
 
+    if (!doJustify && line.alignment == Qt::AlignJustify && !line.isLastLine) {
+        qDebug() << "[PDF] justify SKIPPED: glyphs=" << line.glyphs.size()
+                 << "lineWidth=" << line.width << "availWidth=" << availWidth
+                 << "justifyGapCount=" << line.justify.wordGapCount;
+    }
+
     bool markdownMode = m_exportOptions.markdownCopy;
 
     // --- Phase 1: compute x-positions for each glyph box ---
@@ -640,14 +650,17 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             for (int i = 0; i < line.glyphs.size(); ++i) {
                 glyphXPositions.append(cx);
                 cx += line.glyphs[i].width;
-                cx += extraPerChar * line.glyphs[i].glyphs.size();
+                if (i < line.glyphs.size() - 1)
+                    cx += extraPerChar * line.glyphs[i].glyphs.size();
                 if (i < line.glyphs.size() - 1) {
                     bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
-                    if (line.glyphs[i + 1].style.background.isValid()
+                    if (!skipGap && line.glyphs[i + 1].attachedToPrevious)
+                        skipGap = true;
+                    if (!skipGap && line.glyphs[i + 1].style.background.isValid()
                         && line.glyphs[i].style.background.isValid()
                         && line.glyphs[i + 1].style.background == line.glyphs[i].style.background)
                         skipGap = true;
-                    if (line.glyphs[i].isListMarker)
+                    if (!skipGap && line.glyphs[i].isListMarker)
                         skipGap = true;
                     if (!skipGap)
                         cx += extraPerGap;
@@ -770,14 +783,17 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             else
                 renderGlyphBox(line.glyphs[i], stream, x, baselineY);
             x += line.glyphs[i].width;
-            x += extraPerChar * line.glyphs[i].glyphs.size();
+            if (i < line.glyphs.size() - 1)
+                x += extraPerChar * line.glyphs[i].glyphs.size();
             if (i < line.glyphs.size() - 1) {
                 bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
-                if (line.glyphs[i + 1].style.background.isValid()
+                if (!skipGap && line.glyphs[i + 1].attachedToPrevious)
+                    skipGap = true;
+                if (!skipGap && line.glyphs[i + 1].style.background.isValid()
                     && line.glyphs[i].style.background.isValid()
                     && line.glyphs[i + 1].style.background == line.glyphs[i].style.background)
                     skipGap = true;
-                if (line.glyphs[i].isListMarker)
+                if (!skipGap && line.glyphs[i].isListMarker)
                     skipGap = true;
                 if (!skipGap)
                     x += extraPerGap;

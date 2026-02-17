@@ -425,6 +425,7 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
     case MD_BLOCK_CODE: {
         auto *d = static_cast<MD_BLOCK_CODE_DETAIL *>(detail);
         m_codeLanguage = extractAttribute(d->lang);
+        m_codeFenced = (d->fence_char != 0);
         m_inCodeBlock = true;
         m_codeText.clear();
         break;
@@ -614,6 +615,7 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
         m_inCodeBlock = false;
         Content::CodeBlock cb;
         cb.language = m_codeLanguage;
+        cb.isFenced = m_codeFenced;
         cb.code = m_codeText;
         if (m_styleManager) {
             cb.style = resolveTextStyle(QStringLiteral("CodeBlock"));

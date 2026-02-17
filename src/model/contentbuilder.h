@@ -106,6 +106,7 @@ private:
     int m_blockQuoteLevel = 0;
     QStack<QList<Content::BlockNode>> m_blockQuoteStack;
     bool m_inCodeBlock = false;
+    bool m_codeFenced = true;
     QString m_codeLanguage;
     QString m_codeText;
 

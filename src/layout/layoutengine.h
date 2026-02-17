@@ -55,6 +55,7 @@ struct GlyphBox {
     bool rtl = false;
     bool trailingSoftHyphen = false; // word ended at a soft hyphen break point
     bool startsAfterSoftHyphen = false; // continues a soft-hyphenated word
+    bool attachedToPrevious = false;    // no space between this box and previous (mid-word style change)
     bool isListMarker = false; // bullet/number prefix — excluded from justify expansion
     // Markdown copy mode: prefix/suffix text and original word text
     QString mdPrefix;  // e.g. "**", "`", "[", "# "

@@ -76,6 +76,13 @@ bool HersheyFont::load(const QString &resourcePath)
         parseGlyphLine(accumulated, codepoint);
     }
 
+    // Alias non-breaking space (U+00A0) to regular space if not already present.
+    // ShortWords typography replaces spaces after short words (a, the, in, ...)
+    // with NBSP.  Without this alias the Hershey font reports hasGlyph = false
+    // for NBSP, causing font-coverage splits that strip inter-word spacing.
+    if (m_glyphs.contains(U' ') && !m_glyphs.contains(U'\u00A0'))
+        m_glyphs.insert(U'\u00A0', m_glyphs.value(U' '));
+
     computeMetrics();
     return !m_glyphs.isEmpty();
 }
@@ -183,6 +190,12 @@ void HersheyFont::computeMetrics()
     m_ascent = static_cast<int>(std::ceil(maxY));
     m_descent = static_cast<int>(std::ceil(-minY)); // minY is negative
     m_unitsPerEm = m_ascent + m_descent;
+
+    // Debug: print metrics and space advance
+    int spaceAdv = advanceWidth(U' ');
+    qDebug() << "[HERSHEY]" << m_name << "ascent=" << m_ascent << "descent=" << m_descent
+             << "upm=" << m_unitsPerEm << "spaceAdvRaw=" << spaceAdv
+             << "glyphs=" << m_glyphs.size();
 }
 
 // ===========================================================================

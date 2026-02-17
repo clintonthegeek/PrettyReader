@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <limits>
+#include <QDebug>
 
 namespace LineBreaking {
 
@@ -54,7 +55,13 @@ qreal computeAdjustmentRatio(const QList<Item> &items,
     if (first < end && items[first].type == Item::GlueType)
         ++first;
 
-    for (int i = first; i < end; ++i) {
+    // The break item is at end - 1.  For a glue break, the trailing glue is
+    // discarded (not part of the line).  For a penalty break, only its width
+    // (e.g. hyphen) is added — handled separately below.  So iterate up to
+    // but NOT including the break item.
+    int contentEnd = end - 1;
+
+    for (int i = first; i < contentEnd; ++i) {
         const auto &item = items[i];
         switch (item.type) {
         case Item::BoxType:
@@ -66,7 +73,6 @@ qreal computeAdjustmentRatio(const QList<Item> &items,
             totalShrink += item.glue.shrink;
             break;
         case Item::PenaltyType:
-            // Penalty width only counts if we break here (at position end-1)
             break;
         }
     }
@@ -261,15 +267,20 @@ BreakResult findBreaks(const QList<Item> &items,
                 continue;
             }
 
-            // Check tolerance
-            if (std::abs(r) > config.tolerance && r != -INF && r != INF) {
+            // Forced breaks (penalty <= -10000) must always be taken,
+            // regardless of adjustment ratio or tolerance.
+            bool forcedBreak = (item.type == Item::PenaltyType
+                                && item.penalty.penalty <= -10000);
+
+            // Check tolerance (skip for forced breaks)
+            if (!forcedBreak && std::abs(r) > config.tolerance && r != -INF && r != INF) {
                 // ratio too large — skip but don't deactivate
                 // (a future break might still work from this node)
                 continue;
             }
 
-            // If r is infinity, skip (can't form a line)
-            if (r == INF || r == -INF)
+            // If r is infinity, skip (can't form a line) — unless forced
+            if (!forcedBreak && (r == INF || r == -INF))
                 continue;
 
             // Compute demerits
@@ -373,19 +384,36 @@ BreakResult findBreaks(const QList<Item> &items,
         }
     }
 
-    // Find the active node with the lowest total demerits
+    // Find the active node with the lowest total demerits.
+    // IMPORTANT: only consider nodes at the final position (itemIndex == n).
+    // Stale intermediate nodes can remain active with lower demerits (they
+    // haven't accumulated the last line's cost yet), but their traceback
+    // would miss the final forced break, dropping the paragraph's last line.
     if (active.isEmpty()) {
         result.optimal = false;
         return result;
     }
 
-    int bestIdx = active[0];
-    qreal bestDem = nodes[active[0]].totalDemerits;
-    for (int i = 1; i < active.size(); ++i) {
-        if (nodes[active[i]].totalDemerits < bestDem) {
+    int bestIdx = -1;
+    qreal bestDem = INF;
+    for (int i = 0; i < active.size(); ++i) {
+        if (nodes[active[i]].itemIndex == n
+            && nodes[active[i]].totalDemerits < bestDem) {
             bestDem = nodes[active[i]].totalDemerits;
             bestIdx = active[i];
         }
+    }
+
+    // Fallback: if no node reached the final position (shouldn't happen
+    // with a forced break, but be safe), pick the best from any position
+    if (bestIdx < 0) {
+        for (int i = 0; i < active.size(); ++i) {
+            if (nodes[active[i]].totalDemerits < bestDem) {
+                bestDem = nodes[active[i]].totalDemerits;
+                bestIdx = active[i];
+            }
+        }
+        result.optimal = false;
     }
 
     // Trace back through prevNode chain to collect breakpoints
@@ -395,6 +423,7 @@ BreakResult findBreaks(const QList<Item> &items,
 
     // Build the breakpoint list (skip the seed node at index 0 since it
     // represents the start-of-paragraph, not an actual line break)
+    qDebug() << "[KP] === Breakpoint output ===" << breakNodeIndices.size() - 1 << "lines";
     for (int k = 1; k < breakNodeIndices.size(); ++k) {
         const Node &nd = nodes[breakNodeIndices[k]];
         const Node &prev = nodes[breakNodeIndices[k - 1]];
@@ -414,6 +443,16 @@ BreakResult findBreaks(const QList<Item> &items,
         bp.fitness = fitnessClassFromRatio(r);
         bp.totalDemerits = nd.totalDemerits;
         result.breaks.append(bp);
+
+        // Debug: dump line content
+        qreal contentW = 0, glueW = 0, stretchW = 0;
+        for (int ii = lineStart; ii < lineEnd; ++ii) {
+            if (items[ii].type == Item::BoxType) contentW += items[ii].box.width;
+            else if (items[ii].type == Item::GlueType) { glueW += items[ii].glue.width; stretchW += items[ii].glue.stretch; }
+        }
+        qDebug() << "[KP]   Line" << k << ": items[" << lineStart << ".." << lineEnd << ")"
+                 << "lineWidth=" << lw << "boxW=" << contentW << "glueW=" << glueW
+                 << "stretch=" << stretchW << "r=" << r << "fitness=" << bp.fitness;
     }
 
     return result;
@@ -432,13 +471,18 @@ BreakResult findBreaksTiered(const QList<Item> &items,
         return result;
     }
 
+    qDebug() << "[KP] findBreaksTiered:" << items.size() << "items, lineWidths=" << lineWidths;
+
     // Tier 1: strict tolerance
     {
         Config cfg = baseConfig;
         cfg.tolerance = 1.0;
         auto result = findBreaks(items, lineWidths, cfg);
-        if (result.optimal && !result.breaks.isEmpty())
+        if (result.optimal && !result.breaks.isEmpty()) {
+            qDebug() << "[KP] Tier 1 (tol=1.0) succeeded:" << result.breaks.size() << "breaks";
             return result;
+        }
+        qDebug() << "[KP] Tier 1 (tol=1.0) failed, trying tier 2";
     }
 
     // Tier 2: relaxed tolerance
@@ -446,8 +490,11 @@ BreakResult findBreaksTiered(const QList<Item> &items,
         Config cfg = baseConfig;
         cfg.tolerance = 2.0;
         auto result = findBreaks(items, lineWidths, cfg);
-        if (result.optimal && !result.breaks.isEmpty())
+        if (result.optimal && !result.breaks.isEmpty()) {
+            qDebug() << "[KP] Tier 2 (tol=2.0) succeeded:" << result.breaks.size() << "breaks";
             return result;
+        }
+        qDebug() << "[KP] Tier 2 (tol=2.0) failed, trying tier 3";
     }
 
     // Tier 3: emergency tolerance
@@ -455,11 +502,15 @@ BreakResult findBreaksTiered(const QList<Item> &items,
         Config cfg = baseConfig;
         cfg.tolerance = baseConfig.looseTolerance;
         auto result = findBreaks(items, lineWidths, cfg);
-        if (!result.breaks.isEmpty())
+        if (!result.breaks.isEmpty()) {
+            qDebug() << "[KP] Tier 3 (tol=" << baseConfig.looseTolerance << ") succeeded:" << result.breaks.size() << "breaks, optimal=" << result.optimal;
             return result;
+        }
+        qDebug() << "[KP] Tier 3 failed too";
     }
 
     // Tier 4: give up — return non-optimal empty result to trigger greedy fallback
+    qDebug() << "[KP] ALL TIERS FAILED — falling back to greedy";
     BreakResult result;
     result.optimal = false;
     return result;
@@ -513,6 +564,11 @@ BlendedSpacing computeBlendedSpacing(qreal adjustmentRatio,
 
     spacing.extraWordSpacing = totalWordSlack / wordGapCount;
     spacing.extraLetterSpacing = clampedLS;
+
+    qDebug() << "[KP] blendedSpacing: r=" << adjustmentRatio << "glueW=" << naturalWordGlueWidth
+             << "gaps=" << wordGapCount << "chars=" << charCount << "fontSize=" << fontSize
+             << "totalSlack=" << totalSlack << "extraWord=" << spacing.extraWordSpacing
+             << "extraLetter=" << spacing.extraLetterSpacing;
 
     return spacing;
 }

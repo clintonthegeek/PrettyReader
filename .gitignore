@@ -1,7 +1,12 @@
 build/
+.cache/
+compile_commands.json
 QOwnNotes
 refapp
 kdesrc
 scribus
 exportOfTest.pdf
 cl.sh
+consoledump.txt
+debugMarkdown*.txt
+justify_debug.txt
