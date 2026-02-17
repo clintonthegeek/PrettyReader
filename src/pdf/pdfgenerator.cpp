@@ -77,6 +77,8 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     m_embeddedImages.clear();
     m_imageIndex.clear();
     m_pageAnnotations.clear();
+    m_glyphForms.clear();
+    m_nextGlyphFormIdx = 0;
     if (m_title.isEmpty())
         m_title = title;
 
@@ -86,6 +88,7 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         return {};
 
     writer.writeHeader();
+    m_writer = &writer;
 
     int totalPages = layout.pages.size();
 
@@ -185,6 +188,7 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         writer.endObj(hvInvObj);
         resources.fonts["HvInv"] = hvInvObj;
     }
+    m_resources = &resources;
 
     // Initialize per-page annotation lists
     m_pageAnnotations.resize(layout.pages.size());
@@ -308,6 +312,8 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     writer.writeXrefAndTrailer();
     writer.close();
 
+    m_writer = nullptr;
+    m_resources = nullptr;
     return output;
 }
 
