@@ -10,3 +10,5 @@ cl.sh
 consoledump.txt
 debugMarkdown*.txt
 justify_debug.txt
+docs/PDF Reference*.txt
+docs/plans/*.pdf
