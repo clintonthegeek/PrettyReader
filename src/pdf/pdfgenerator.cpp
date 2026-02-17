@@ -167,22 +167,25 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         ensureFontRegistered(hfFont);
 
     // Embed fonts
-    embedFonts(writer);
+    if (!m_exportOptions.xobjectGlyphs)
+        embedFonts(writer);
 
     // Embed images
     embedImages(writer);
 
     // Build resource dictionary
     Pdf::ResourceDict resources;
-    for (auto &ef : m_embeddedFonts) {
-        if (ef.fontObjId)
-            resources.fonts[ef.pdfName] = ef.fontObjId;
+    if (!m_exportOptions.xobjectGlyphs) {
+        for (auto &ef : m_embeddedFonts) {
+            if (ef.fontObjId)
+                resources.fonts[ef.pdfName] = ef.fontObjId;
+        }
     }
     for (auto &ei : m_embeddedImages)
         resources.xObjects[ei.pdfName] = ei.objId;
 
     // Base 14 Helvetica for markdown invisible text in Hershey mode
-    if (m_hersheyMode && m_exportOptions.markdownCopy) {
+    if ((m_hersheyMode || m_exportOptions.xobjectGlyphs) && m_exportOptions.markdownCopy) {
         Pdf::ObjId hvInvObj = writer.startObj();
         writer.write("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
         writer.endObj(hvInvObj);
@@ -746,7 +749,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             if (gbox.glyphs.isEmpty() || !gbox.font)
                 continue;
             QByteArray fontName;
-            if (gbox.font && gbox.font->isHershey)
+            if (gbox.font->isHershey || xobjectGlyphs)
                 fontName = "HvInv";
             else
                 fontName = pdfFontName(gbox.font);
