@@ -1202,6 +1202,10 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
 PdfGenerator::GlyphFormEntry PdfGenerator::ensureGlyphForm(
     const HersheyFont *font, uint glyphId, bool bold)
 {
+    // Preconditions: must be called during generate() with valid writer/resources
+    if (!font || !m_writer || !m_resources)
+        return {};
+
     GlyphFormKey key{font, glyphId, bold};
     auto it = m_glyphForms.find(key);
     if (it != m_glyphForms.end())
