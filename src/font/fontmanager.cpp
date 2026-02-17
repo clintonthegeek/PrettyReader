@@ -4,6 +4,7 @@
  */
 
 #include "fontmanager.h"
+#include "hersheyfont.h"
 #include "sfnt.h"
 
 #include <QFile>
@@ -113,6 +114,23 @@ FontFace *FontManager::loadFont(const QString &family, int weight, bool italic)
     if (auto *existing = m_faces.value(key))
         return existing;
 
+    // Hershey font routing
+    if (family.startsWith(QLatin1String("Hershey "))) {
+        HersheyFontRegistry::instance().ensureLoaded();
+        HersheyFontResult hr = HersheyFontRegistry::instance().resolve(family, weight, italic);
+        if (hr.font) {
+            auto *face = new FontFace;
+            face->isHershey = true;
+            face->hersheyFont = hr.font;
+            face->hersheyBold = hr.synthesizeBold;
+            face->hersheyItalic = hr.synthesizeItalic;
+            m_faces.insert(key, face);
+            return face;
+        }
+        qWarning() << "FontManager: Could not resolve Hershey font:" << family << weight << italic;
+        return nullptr;
+    }
+
     QString path = resolveFontPath(family, weight, italic);
     if (path.isEmpty()) {
         qWarning() << "FontManager: Could not resolve font:" << family << weight << italic;
@@ -203,26 +221,45 @@ static qreal ftUnitsToPoints(FT_Face face, FT_Long units, qreal sizePoints)
 
 qreal FontManager::ascent(FontFace *face, qreal sizePoints) const
 {
-    if (!face || !face->ftFace) return sizePoints;
+    if (!face) return sizePoints;
+    if (face->isHershey && face->hersheyFont) {
+        qreal scale = sizePoints / face->hersheyFont->unitsPerEm();
+        return face->hersheyFont->ascent() * scale;
+    }
+    if (!face->ftFace) return sizePoints;
     return ftUnitsToPoints(face->ftFace, face->ftFace->ascender, sizePoints);
 }
 
 qreal FontManager::descent(FontFace *face, qreal sizePoints) const
 {
-    if (!face || !face->ftFace) return 0;
+    if (!face) return 0;
+    if (face->isHershey && face->hersheyFont) {
+        qreal scale = sizePoints / face->hersheyFont->unitsPerEm();
+        return face->hersheyFont->descent() * scale;
+    }
+    if (!face->ftFace) return 0;
     // FreeType descent is negative; return as positive
     return -ftUnitsToPoints(face->ftFace, face->ftFace->descender, sizePoints);
 }
 
 qreal FontManager::lineHeight(FontFace *face, qreal sizePoints) const
 {
-    if (!face || !face->ftFace) return sizePoints * 1.2;
+    if (!face) return sizePoints * 1.2;
+    if (face->isHershey && face->hersheyFont) {
+        return ascent(face, sizePoints) + descent(face, sizePoints);
+    }
+    if (!face->ftFace) return sizePoints * 1.2;
     return ftUnitsToPoints(face->ftFace, face->ftFace->height, sizePoints);
 }
 
 qreal FontManager::glyphWidth(FontFace *face, uint glyphId, qreal sizePoints) const
 {
-    if (!face || !face->ftFace) return 0;
+    if (!face) return 0;
+    if (face->isHershey && face->hersheyFont) {
+        qreal scale = sizePoints / face->hersheyFont->unitsPerEm();
+        return face->hersheyFont->advanceWidth(static_cast<char32_t>(glyphId)) * scale;
+    }
+    if (!face->ftFace) return 0;
     FT_Set_Char_Size(face->ftFace, static_cast<FT_F26Dot6>(sizePoints * 64), 0, 72, 0);
     FT_Error err = FT_Load_Glyph(face->ftFace, glyphId, FT_LOAD_NO_BITMAP);
     if (err) return 0;
