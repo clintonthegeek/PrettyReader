@@ -152,6 +152,9 @@ void StyleDockWidget::populateFromStyleManager(StyleManager *sm)
     delete m_editingStyles;
     m_editingStyles = sm->clone(const_cast<StyleDockWidget *>(this));
 
+    // Propagate Hershey mode to the properties editor
+    m_propsEditor->setHersheyMode(m_editingStyles->hersheyMode());
+
     // Update tree model
     m_treeModel->setStyleManager(m_editingStyles);
     m_styleTree->expandAll();

@@ -40,6 +40,9 @@ public:
 
     void clear();
 
+    // Switch between system fonts and Hershey font families
+    void setHersheyMode(bool enabled);
+
 signals:
     void propertyChanged();
 
@@ -48,6 +51,7 @@ private:
     void blockAllSignals(bool block);
     void updatePropertyIndicators();
     void repopulateFontStyleCombo(const QString &family);
+    QString currentFontFamily() const;
     QToolButton *createResetButton();
 
     // Label + reset button pair for each property
@@ -62,6 +66,7 @@ private:
 
     // Character section
     QFontComboBox *m_fontCombo = nullptr;
+    QComboBox *m_hersheyFontCombo = nullptr;
     QComboBox *m_fontStyleCombo = nullptr;
     QDoubleSpinBox *m_sizeSpin = nullptr;
     // TODO: implement underline and strikethrough functionality
@@ -111,6 +116,7 @@ private:
     PropIndicator m_letterSpacingInd;
 
     bool m_isParagraphMode = true;
+    bool m_hersheyMode = false;
 
     // Track which properties are explicitly set on the loaded style
     struct ExplicitFlags {
