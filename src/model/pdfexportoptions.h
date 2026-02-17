@@ -19,6 +19,7 @@ struct PdfExportOptions {
     // General — text copy behavior (independent flags, can be combined)
     bool markdownCopy = false;      // embed hidden markdown syntax in PDF
     bool unwrapParagraphs = false;  // embed unwrapped paragraph text in PDF
+    bool xobjectGlyphs = false;     // render all glyphs as Form XObjects (no text operators)
 
     // Content — section selection
     QSet<int> excludedHeadingIndices;   // indices into doc.blocks of unchecked headings
