@@ -5,6 +5,7 @@
 
 #include "layoutengine.h"
 #include "fontmanager.h"
+#include "linebreaker.h"
 #include "textshaper.h"
 
 #include <QDebug>
@@ -194,8 +195,10 @@ CollectedText collectInlines(const QList<Content::InlineNode> &inlines,
                 result.text.append(clean);
                 if (markdownMode) {
                     QString prefix, suffix;
-                    bool bold = (n.style.fontWeight >= 700);
-                    bool italic = n.style.italic;
+                    // Only mark bold/italic if it differs from the base style
+                    // (headings are inherently bold — no redundant ** needed)
+                    bool bold = (n.style.fontWeight >= 700) && !(baseStyle.fontWeight >= 700);
+                    bool italic = n.style.italic && !baseStyle.italic;
                     bool strike = n.style.strikethrough;
                     if (bold && italic) { prefix += QStringLiteral("***"); suffix.prepend(QStringLiteral("***")); }
                     else if (bold)      { prefix += QStringLiteral("**");  suffix.prepend(QStringLiteral("**")); }
@@ -293,6 +296,77 @@ Content::TextStyle resolveStyleAt(int charPos, const CollectedText &collected,
     return baseStyle;
 }
 
+// Measure the trailing space width of a word box by checking its last glyph
+static qreal trailingSpaceWidth(const GlyphBox &gbox, const QString &text)
+{
+    if (gbox.glyphs.isEmpty())
+        return 0;
+    int cluster = gbox.glyphs.last().cluster;
+    if (cluster < text.size() && text[cluster].isSpace())
+        return gbox.glyphs.last().xAdvance;
+    return 0;
+}
+
+// Forward declaration of WordBox (defined inside breakIntoLines)
+struct WordBox {
+    GlyphBox gbox;
+    bool isNewline = false;
+};
+
+// Convert word boxes into Knuth-Plass items (boxes, glue, penalties)
+static QList<LineBreaking::Item> buildKPItems(
+    const QList<WordBox> &words,
+    const QString &text,
+    const Content::ParagraphFormat &format,
+    qreal defaultSpaceWidth)
+{
+    QList<LineBreaking::Item> items;
+    items.reserve(words.size() * 3);
+
+    for (int i = 0; i < words.size(); ++i) {
+        const auto &word = words[i];
+
+        if (word.isNewline) {
+            // Forced break: penalty of -infinity
+            items.append(LineBreaking::Item::makePenalty(0, -1e7));
+            continue;
+        }
+
+        // Measure trailing space in this word (will become glue)
+        qreal spaceW = trailingSpaceWidth(word.gbox, text);
+        qreal contentWidth = word.gbox.width - spaceW;
+
+        // Box: the word content (without trailing space)
+        items.append(LineBreaking::Item::makeBox(contentWidth, i));
+
+        // After each word (except the last and before newlines):
+        if (i + 1 < words.size() && !words[i + 1].isNewline) {
+            // Soft hyphen break opportunity
+            if (word.gbox.trailingSoftHyphen) {
+                // Hyphen width estimate: ~60% of space width
+                qreal hyphenW = (spaceW > 0 ? spaceW : defaultSpaceWidth) * 0.6;
+                items.append(LineBreaking::Item::makePenalty(hyphenW, 50.0, true));
+            }
+
+            // Inter-word glue
+            qreal glueWidth = (spaceW > 0) ? spaceW : defaultSpaceWidth;
+            if (format.alignment == Qt::AlignJustify) {
+                items.append(LineBreaking::Item::makeGlue(
+                    glueWidth,
+                    glueWidth * 0.5,   // 50% stretch
+                    glueWidth * 0.33)); // 33% shrink
+            } else {
+                items.append(LineBreaking::Item::makeGlue(glueWidth, 0, 0));
+            }
+        }
+    }
+
+    // Forced final break
+    items.append(LineBreaking::Item::makePenalty(0, -1e7));
+
+    return items;
+}
+
 } // anonymous namespace
 
 // --- Line breaking ---
@@ -300,10 +374,15 @@ Content::TextStyle resolveStyleAt(int charPos, const CollectedText &collected,
 QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                                        const Content::TextStyle &baseStyle,
                                        const Content::ParagraphFormat &format,
-                                       qreal availWidth)
+                                       qreal availWidth,
+                                       bool markdownRanges)
 {
     QList<LineBox> lines;
-    auto collected = collectInlines(inlines, baseStyle, m_markdownDecorations);
+    // For code blocks: still set glyph text fields (m_markdownDecorations)
+    // but suppress markdown range creation (bold/italic from syntax highlighting
+    // should not produce ** markers in the ActualText).
+    auto collected = collectInlines(inlines, baseStyle,
+                                    m_markdownDecorations && markdownRanges);
     if (collected.text.isEmpty())
         return lines;
 
@@ -341,10 +420,6 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
     // Build word-level glyph boxes by splitting shaped runs at break points.
     // Each shaped run may span multiple words. Using HarfBuzz cluster info
     // (character index per glyph), we split at ICU break positions and newlines.
-    struct WordBox {
-        GlyphBox gbox;
-        bool isNewline = false;
-    };
     QList<WordBox> words;
 
     for (const auto &run : shapedRuns) {
@@ -419,6 +494,14 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             words.append({currentWord, false});
     }
 
+    // Store original text content in each glyph box (for ActualText in PDF)
+    if (m_markdownDecorations) {
+        for (auto &w : words) {
+            if (w.isNewline) continue;
+            w.gbox.text = collected.text.mid(w.gbox.textStart, w.gbox.textLength);
+        }
+    }
+
     // Apply markdown decorations to glyph boxes
     if (m_markdownDecorations && !collected.markdownRanges.isEmpty()) {
         for (const auto &range : collected.markdownRanges) {
@@ -439,85 +522,187 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
         }
     }
 
-    // Greedy line breaking on word boxes
+    // --- Line breaking ---
     qreal firstLineIndent = format.firstLineIndent;
-    qreal lineWidth = availWidth - firstLineIndent;
-    qreal currentX = 0;
-    LineBox currentLine;
-    currentLine.alignment = format.alignment;
-    bool isFirstLine = true;
+    qreal firstLineWidth = availWidth - firstLineIndent;
 
-    for (int i = 0; i < words.size(); ++i) {
-        const auto &word = words[i];
-
-        // Newline: force line break
-        if (word.isNewline) {
-            currentLine.isLastLine = true; // don't justify newline-terminated lines
-            lines.append(currentLine);
-            currentLine = LineBox{};
-            currentLine.alignment = format.alignment;
-            currentX = 0;
-            if (isFirstLine) {
-                isFirstLine = false;
-                lineWidth = availWidth;
-            }
-            continue;
-        }
-
-        // Check for line overflow (only break if there's content on this line)
-        if (currentX + word.gbox.width > lineWidth && !currentLine.glyphs.isEmpty()) {
-            // Show trailing hyphen if the last word on this line ends at a soft hyphen
-            if (!currentLine.glyphs.isEmpty() && currentLine.glyphs.last().trailingSoftHyphen)
-                currentLine.showTrailingHyphen = true;
-            lines.append(currentLine);
-            currentLine = LineBox{};
-            currentLine.alignment = format.alignment;
-            currentX = 0;
-            if (isFirstLine) {
-                isFirstLine = false;
-                lineWidth = availWidth;
+    // Measure natural inter-word space width from shaped text
+    qreal naturalSpaceWidth = baseStyle.fontSize * 0.25; // fallback
+    for (const auto &run : shapedRuns) {
+        for (const auto &g : run.glyphs) {
+            if (g.cluster < collected.text.size()
+                && collected.text[g.cluster] == QLatin1Char(' ')
+                && g.xAdvance > 0) {
+                naturalSpaceWidth = g.xAdvance;
+                goto foundSpace;
             }
         }
-
-        // Force character-level breaks for words wider than line width
-        // (e.g. long identifiers in table cells with no break opportunities)
-        if (word.gbox.width > lineWidth && currentLine.glyphs.isEmpty()) {
-            GlyphBox part = word.gbox;
-            part.glyphs.clear();
-            part.width = 0;
-            part.textLength = 0;
-            for (const auto &glyph : word.gbox.glyphs) {
-                if (part.width + glyph.xAdvance > lineWidth && !part.glyphs.isEmpty()) {
-                    currentLine.glyphs.append(part);
-                    lines.append(currentLine);
-                    currentLine = LineBox{};
-                    currentLine.alignment = format.alignment;
-                    part.glyphs.clear();
-                    part.width = 0;
-                    part.textLength = 0;
-                }
-                part.glyphs.append(glyph);
-                part.width += glyph.xAdvance;
-                part.textLength++;
-            }
-            if (!part.glyphs.isEmpty()) {
-                currentLine.glyphs.append(part);
-                currentX = part.width;
-            }
-            continue;
-        }
-
-        currentLine.glyphs.append(word.gbox);
-        currentX += word.gbox.width;
     }
+    foundSpace:
 
-    // Don't forget the last line
-    if (!currentLine.glyphs.isEmpty())
-        lines.append(currentLine);
+    // Build line widths (first line may be narrower due to indent)
+    QList<qreal> kpLineWidths;
+    kpLineWidths.append(firstLineWidth);
+    kpLineWidths.append(availWidth);
 
-    // Mark the last line (don't justify it)
-    if (!lines.isEmpty())
-        lines.last().isLastLine = true;
+    // Convert word boxes to Knuth-Plass items
+    auto kpItems = buildKPItems(words, collected.text, format, naturalSpaceWidth);
+
+    // Configure and run Knuth-Plass
+    LineBreaking::Config kpConfig;
+    kpConfig.enableHyphenation = m_hyphenateJustifiedText;
+
+    auto kpResult = LineBreaking::findBreaksTiered(kpItems, kpLineWidths, kpConfig);
+
+    if (kpResult.optimal && !kpResult.breaks.isEmpty()) {
+        // Build lines from Knuth-Plass breakpoints
+        int wordStart = 0;
+        for (int bi = 0; bi < kpResult.breaks.size(); ++bi) {
+            const auto &bp = kpResult.breaks[bi];
+            LineBox line;
+            line.alignment = format.alignment;
+
+            // Find the last word index for this line by scanning items up to the break
+            int lastBoxWordIdx = -1;
+            for (int ii = bp.itemIndex; ii >= 0; --ii) {
+                if (kpItems[ii].type == LineBreaking::Item::BoxType) {
+                    lastBoxWordIdx = kpItems[ii].box.wordIndex;
+                    break;
+                }
+            }
+            if (lastBoxWordIdx < 0)
+                lastBoxWordIdx = wordStart; // safety
+
+            // Collect word boxes for this line
+            int charCount = 0;
+            int gapCount = 0;
+            for (int wi = wordStart; wi < words.size() && wi <= lastBoxWordIdx; ++wi) {
+                if (words[wi].isNewline) continue;
+                if (!line.glyphs.isEmpty()) {
+                    // Count eligible justify gaps (same rules as before)
+                    bool skipGap = words[wi].gbox.startsAfterSoftHyphen;
+                    if (!skipGap && words[wi].gbox.style.background.isValid()
+                        && line.glyphs.last().style.background.isValid()
+                        && words[wi].gbox.style.background == line.glyphs.last().style.background)
+                        skipGap = true;
+                    if (!skipGap && line.glyphs.last().isListMarker)
+                        skipGap = true;
+                    if (!skipGap)
+                        gapCount++;
+                }
+                line.glyphs.append(words[wi].gbox);
+                charCount += words[wi].gbox.glyphs.size();
+            }
+
+            // Check if break is at a flagged penalty (soft-hyphen)
+            if (bp.itemIndex < kpItems.size()
+                && kpItems[bp.itemIndex].type == LineBreaking::Item::PenaltyType
+                && kpItems[bp.itemIndex].penalty.flagged) {
+                line.showTrailingHyphen = true;
+            }
+
+            // Mark last line
+            if (bi == kpResult.breaks.size() - 1)
+                line.isLastLine = true;
+
+            // Forced newline breaks also mark last-of-paragraph-segment
+            if (bp.itemIndex < kpItems.size()
+                && kpItems[bp.itemIndex].type == LineBreaking::Item::PenaltyType
+                && kpItems[bp.itemIndex].penalty.penalty <= -1e6)
+                line.isLastLine = true;
+
+            // Compute blended spacing for justified lines
+            if (format.alignment == Qt::AlignJustify && !line.isLastLine && gapCount > 0) {
+                auto spacing = LineBreaking::computeBlendedSpacing(
+                    bp.adjustmentRatio, naturalSpaceWidth,
+                    gapCount, charCount, baseStyle.fontSize, kpConfig);
+                line.justify.adjustmentRatio = bp.adjustmentRatio;
+                line.justify.wordGapCount = gapCount;
+                line.justify.charCount = charCount;
+                line.justify.extraWordSpacing = spacing.extraWordSpacing;
+                line.justify.extraLetterSpacing = spacing.extraLetterSpacing;
+            }
+
+            lines.append(line);
+            wordStart = lastBoxWordIdx + 1;
+
+            // Skip past any newline words
+            while (wordStart < words.size() && words[wordStart].isNewline)
+                wordStart++;
+        }
+    } else {
+        // Greedy fallback (original algorithm)
+        qreal lineWidth = availWidth - firstLineIndent;
+        qreal currentX = 0;
+        LineBox currentLine;
+        currentLine.alignment = format.alignment;
+        bool isFirstLine = true;
+
+        for (int i = 0; i < words.size(); ++i) {
+            const auto &word = words[i];
+
+            if (word.isNewline) {
+                currentLine.isLastLine = true;
+                lines.append(currentLine);
+                currentLine = LineBox{};
+                currentLine.alignment = format.alignment;
+                currentX = 0;
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    lineWidth = availWidth;
+                }
+                continue;
+            }
+
+            if (currentX + word.gbox.width > lineWidth && !currentLine.glyphs.isEmpty()) {
+                if (!currentLine.glyphs.isEmpty() && currentLine.glyphs.last().trailingSoftHyphen)
+                    currentLine.showTrailingHyphen = true;
+                lines.append(currentLine);
+                currentLine = LineBox{};
+                currentLine.alignment = format.alignment;
+                currentX = 0;
+                if (isFirstLine) {
+                    isFirstLine = false;
+                    lineWidth = availWidth;
+                }
+            }
+
+            if (word.gbox.width > lineWidth && currentLine.glyphs.isEmpty()) {
+                GlyphBox part = word.gbox;
+                part.glyphs.clear();
+                part.width = 0;
+                part.textLength = 0;
+                for (const auto &glyph : word.gbox.glyphs) {
+                    if (part.width + glyph.xAdvance > lineWidth && !part.glyphs.isEmpty()) {
+                        currentLine.glyphs.append(part);
+                        lines.append(currentLine);
+                        currentLine = LineBox{};
+                        currentLine.alignment = format.alignment;
+                        part.glyphs.clear();
+                        part.width = 0;
+                        part.textLength = 0;
+                    }
+                    part.glyphs.append(glyph);
+                    part.width += glyph.xAdvance;
+                    part.textLength++;
+                }
+                if (!part.glyphs.isEmpty()) {
+                    currentLine.glyphs.append(part);
+                    currentX = part.width;
+                }
+                continue;
+            }
+
+            currentLine.glyphs.append(word.gbox);
+            currentX += word.gbox.width;
+        }
+
+        if (!currentLine.glyphs.isEmpty())
+            lines.append(currentLine);
+
+        if (!lines.isEmpty())
+            lines.last().isLastLine = true;
+    }
 
     // Trim trailing whitespace glyphs from non-last lines.
     // ICU break positions place spaces at the end of the preceding word.
@@ -593,6 +778,16 @@ BlockBox Engine::layoutParagraph(const Content::Paragraph &para, qreal availWidt
                 baseStyle = n.style;
             }
         }, para.inlines.first());
+    }
+
+    // For markdown decoration, the base style must be the paragraph's "normal"
+    // style (not bold/italic) so that inline bold/italic inlines get ** / *
+    // markers even if the paragraph happens to start with formatted text.
+    // (Headings handle this differently — layoutHeading passes the heading's
+    // inherently bold base style so heading-level bold is correctly suppressed.)
+    if (m_markdownDecorations) {
+        baseStyle.fontWeight = 400;
+        baseStyle.italic = false;
     }
 
     qreal effectiveWidth = availWidth - para.format.leftMargin - para.format.rightMargin;
@@ -746,6 +941,7 @@ BlockBox Engine::layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth)
     box.borderColor = QColor(0xe1, 0xe4, 0xe8);
     box.borderWidth = 0.5;
     box.codeLanguage = cb.language;
+    box.codeFenced = cb.isFenced;
     box.spaceBefore = 6.0;
     box.spaceAfter = 10.0;
 
@@ -806,7 +1002,9 @@ BlockBox Engine::layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth)
     Content::ParagraphFormat fmt;
     fmt.lineHeightPercent = 130; // more spacing for code
     qreal innerWidth = availWidth - cb.padding * 2 - 24.0; // margins
-    box.lines = breakIntoLines(inlines, cb.style, fmt, innerWidth);
+    box.lines = breakIntoLines(inlines, cb.style, fmt, innerWidth,
+                               false /* no markdown ranges for code */);
+
 
     qreal h = cb.padding * 2;
     for (const auto &line : box.lines)
@@ -1112,6 +1310,7 @@ QList<PageElement> Engine::layoutList(const Content::List &list, qreal availWidt
                     }
 
                     auto box = layoutParagraph(para, availWidth);
+                    box.isListItem = true;
 
                     // Mark bullet/number glyph boxes so justify skips them
                     if (prefixLen > 0 && !box.lines.isEmpty()) {
