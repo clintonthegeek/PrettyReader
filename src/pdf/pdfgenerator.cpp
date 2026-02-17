@@ -644,6 +644,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     }
 
     bool markdownMode = m_exportOptions.markdownCopy;
+    bool xobjectGlyphs = m_exportOptions.xobjectGlyphs;
 
     // --- Phase 1: compute x-positions for each glyph box ---
     // Needed so we can emit the per-line ActualText span + invisible overlay
@@ -771,6 +772,8 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         for (int i = 0; i < line.glyphs.size(); ++i) {
             if (line.glyphs[i].font && line.glyphs[i].font->isHershey)
                 renderHersheyGlyphBox(line.glyphs[i], stream, glyphXPositions[i], baselineY);
+            else if (xobjectGlyphs)
+                renderTtfGlyphBoxAsXObject(line.glyphs[i], stream, glyphXPositions[i], baselineY);
             else
                 renderGlyphBoxAsPath(line.glyphs[i], stream, glyphXPositions[i], baselineY);
         }
@@ -784,6 +787,8 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         for (int i = 0; i < line.glyphs.size(); ++i) {
             if (line.glyphs[i].font && line.glyphs[i].font->isHershey)
                 renderHersheyGlyphBox(line.glyphs[i], stream, x, baselineY);
+            else if (xobjectGlyphs)
+                renderTtfGlyphBoxAsXObject(line.glyphs[i], stream, x, baselineY);
             else if (m_hersheyMode)
                 renderGlyphBoxAsPath(line.glyphs[i], stream, x, baselineY);
             else
@@ -816,6 +821,8 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         for (const auto &gbox : line.glyphs) {
             if (gbox.font && gbox.font->isHershey)
                 renderHersheyGlyphBox(gbox, stream, x, baselineY);
+            else if (xobjectGlyphs)
+                renderTtfGlyphBoxAsXObject(gbox, stream, x, baselineY);
             else if (m_hersheyMode)
                 renderGlyphBoxAsPath(gbox, stream, x, baselineY);
             else
@@ -848,7 +855,18 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
                 }
             } else if (lastGbox.font->ftFace) {
                 FT_UInt hyphenGid = FT_Get_Char_Index(lastGbox.font->ftFace, '-');
-                if (markdownMode) {
+                if (xobjectGlyphs) {
+                    auto entry = ensureGlyphForm(nullptr, lastGbox.font, hyphenGid, false);
+                    if (entry.objId != 0) {
+                        qreal scale = lastGbox.fontSize / lastGbox.font->ftFace->units_per_EM;
+                        stream += "q\n";
+                        stream += colorOperator(lastGbox.style.foreground, true);
+                        stream += pdfCoord(scale) + " 0 0 " + pdfCoord(scale)
+                                + " " + pdfCoord(x) + " " + pdfCoord(baselineY) + " cm\n";
+                        stream += "/" + entry.pdfName + " Do\n";
+                        stream += "Q\n";
+                    }
+                } else if (markdownMode) {
                     FT_Face face = lastGbox.font->ftFace;
                     if (FT_Load_Glyph(face, hyphenGid, FT_LOAD_NO_SCALE) == 0
                         && face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
