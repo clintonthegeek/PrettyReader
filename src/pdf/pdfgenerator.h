@@ -57,6 +57,8 @@ private:
                               qreal x, qreal y);
     void renderHersheyGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
                                qreal x, qreal y);
+    void renderTtfGlyphBoxAsXObject(const Layout::GlyphBox &gbox, QByteArray &stream,
+                                     qreal x, qreal y);
     void renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
                         qreal x, qreal y);
     void renderLineBox(const Layout::LineBox &line, QByteArray &stream,
@@ -108,16 +110,19 @@ private:
     };
     // Glyph Form XObjects (reusable vector glyph drawings)
     struct GlyphFormKey {
-        const HersheyFont *font = nullptr;
+        const HersheyFont *hersheyFont = nullptr;
+        FontFace *ttfFace = nullptr;
         uint glyphId = 0;
         bool bold = false;
 
         bool operator==(const GlyphFormKey &o) const {
-            return font == o.font && glyphId == o.glyphId && bold == o.bold;
+            return hersheyFont == o.hersheyFont && ttfFace == o.ttfFace
+                   && glyphId == o.glyphId && bold == o.bold;
         }
     };
     friend size_t qHash(const PdfGenerator::GlyphFormKey &k, size_t seed = 0) {
-        return qHashMulti(seed, quintptr(k.font), k.glyphId, k.bold);
+        return qHashMulti(seed, quintptr(k.hersheyFont), quintptr(k.ttfFace),
+                          k.glyphId, k.bold);
     }
 
     struct GlyphFormEntry {
@@ -128,7 +133,8 @@ private:
 
     QHash<GlyphFormKey, GlyphFormEntry> m_glyphForms;
     int m_nextGlyphFormIdx = 0;
-    GlyphFormEntry ensureGlyphForm(const HersheyFont *font, uint glyphId, bool bold);
+    GlyphFormEntry ensureGlyphForm(const HersheyFont *hersheyFont, FontFace *ttfFace,
+                                   uint glyphId, bool bold);
 
     QList<EmbeddedImage> m_embeddedImages;
     QHash<QString, int> m_imageIndex; // imageId → index in m_embeddedImages
