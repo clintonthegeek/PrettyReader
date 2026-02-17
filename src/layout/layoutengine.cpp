@@ -562,9 +562,10 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             LineBox line;
             line.alignment = format.alignment;
 
-            // Find the last word index for this line by scanning items up to the break
+            // Find the last word index for this line by scanning items before the break
+            // (bp.itemIndex can equal kpItems.size(), so start from itemIndex - 1)
             int lastBoxWordIdx = -1;
-            for (int ii = bp.itemIndex; ii >= 0; --ii) {
+            for (int ii = qMin(bp.itemIndex, kpItems.size() - 1); ii >= 0; --ii) {
                 if (kpItems[ii].type == LineBreaking::Item::BoxType) {
                     lastBoxWordIdx = kpItems[ii].box.wordIndex;
                     break;
@@ -610,6 +611,14 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                 && kpItems[bp.itemIndex].type == LineBreaking::Item::PenaltyType
                 && kpItems[bp.itemIndex].penalty.penalty <= -1e6)
                 line.isLastLine = true;
+
+            // Skip empty lines (can happen if all words in range are newlines)
+            if (line.glyphs.isEmpty()) {
+                wordStart = lastBoxWordIdx + 1;
+                while (wordStart < words.size() && words[wordStart].isNewline)
+                    wordStart++;
+                continue;
+            }
 
             // Compute blended spacing for justified lines
             if (format.alignment == Qt::AlignJustify && !line.isLastLine && gapCount > 0) {
