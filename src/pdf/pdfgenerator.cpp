@@ -797,37 +797,66 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     if (line.showTrailingHyphen && !line.glyphs.isEmpty()) {
         const auto &lastGbox = line.glyphs.last();
         if (lastGbox.font) {
-            FT_UInt hyphenGid = FT_Get_Char_Index(lastGbox.font->ftFace, '-');
-            if (markdownMode) {
-                FT_Face face = lastGbox.font->ftFace;
-                if (FT_Load_Glyph(face, hyphenGid, FT_LOAD_NO_SCALE) == 0
-                    && face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
-                    qreal scale = lastGbox.fontSize / face->units_per_EM;
-                    FT_Outline_Funcs funcs = {};
-                    funcs.move_to = outlineMoveTo;
-                    funcs.line_to = outlineLineTo;
-                    funcs.conic_to = outlineConicTo;
-                    funcs.cubic_to = outlineCubicTo;
-                    OutlineCtx ctx;
-                    ctx.stream = &stream;
-                    ctx.scale = scale;
-                    ctx.tx = x;
-                    ctx.ty = baselineY;
-                    ctx.last = {0, 0};
-                    stream += "q\n";
-                    stream += colorOperator(lastGbox.style.foreground, true);
-                    FT_Outline_Decompose(&face->glyph->outline, &funcs, &ctx);
-                    stream += "f\nQ\n";
+            if (lastGbox.font->isHershey && lastGbox.font->hersheyFont) {
+                // Hershey path: render hyphen as stroked polylines
+                HersheyFont *hFont = lastGbox.font->hersheyFont;
+                const HersheyGlyph *hGlyph = hFont->glyph(U'-');
+                if (hGlyph) {
+                    qreal scale = lastGbox.fontSize / hFont->unitsPerEm();
+                    qreal baseWidth = 0.02 * lastGbox.fontSize;
+                    if (lastGbox.font->hersheyBold)
+                        baseWidth *= 1.8;
+                    stream += "q\n1 J\n1 j\n";
+                    stream += pdfCoord(baseWidth) + " w\n";
+                    stream += colorOperator(lastGbox.style.foreground, false);
+                    for (const auto &stroke : hGlyph->strokes) {
+                        if (stroke.size() < 2)
+                            continue;
+                        qreal px = (stroke[0].x() - hGlyph->leftBound) * scale;
+                        qreal py = stroke[0].y() * scale;
+                        stream += pdfCoord(x + px) + " " + pdfCoord(baselineY + py) + " m\n";
+                        for (int si = 1; si < stroke.size(); ++si) {
+                            px = (stroke[si].x() - hGlyph->leftBound) * scale;
+                            py = stroke[si].y() * scale;
+                            stream += pdfCoord(x + px) + " " + pdfCoord(baselineY + py) + " l\n";
+                        }
+                        stream += "S\n";
+                    }
+                    stream += "Q\n";
                 }
-            } else {
-                m_fontManager->markGlyphUsed(lastGbox.font, hyphenGid);
-                QByteArray fontName = pdfFontName(lastGbox.font);
-                stream += "BT\n";
-                stream += "/" + fontName + " " + pdfCoord(lastGbox.fontSize) + " Tf\n";
-                stream += colorOperator(lastGbox.style.foreground, true);
-                stream += "1 0 0 1 " + pdfCoord(x) + " " + pdfCoord(baselineY) + " Tm\n";
-                stream += Pdf::toHexString16(static_cast<quint16>(hyphenGid)) + " Tj\n";
-                stream += "ET\n";
+            } else if (lastGbox.font->ftFace) {
+                FT_UInt hyphenGid = FT_Get_Char_Index(lastGbox.font->ftFace, '-');
+                if (markdownMode) {
+                    FT_Face face = lastGbox.font->ftFace;
+                    if (FT_Load_Glyph(face, hyphenGid, FT_LOAD_NO_SCALE) == 0
+                        && face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+                        qreal scale = lastGbox.fontSize / face->units_per_EM;
+                        FT_Outline_Funcs funcs = {};
+                        funcs.move_to = outlineMoveTo;
+                        funcs.line_to = outlineLineTo;
+                        funcs.conic_to = outlineConicTo;
+                        funcs.cubic_to = outlineCubicTo;
+                        OutlineCtx ctx;
+                        ctx.stream = &stream;
+                        ctx.scale = scale;
+                        ctx.tx = x;
+                        ctx.ty = baselineY;
+                        ctx.last = {0, 0};
+                        stream += "q\n";
+                        stream += colorOperator(lastGbox.style.foreground, true);
+                        FT_Outline_Decompose(&face->glyph->outline, &funcs, &ctx);
+                        stream += "f\nQ\n";
+                    }
+                } else {
+                    m_fontManager->markGlyphUsed(lastGbox.font, hyphenGid);
+                    QByteArray fontName = pdfFontName(lastGbox.font);
+                    stream += "BT\n";
+                    stream += "/" + fontName + " " + pdfCoord(lastGbox.fontSize) + " Tf\n";
+                    stream += colorOperator(lastGbox.style.foreground, true);
+                    stream += "1 0 0 1 " + pdfCoord(x) + " " + pdfCoord(baselineY) + " Tm\n";
+                    stream += Pdf::toHexString16(static_cast<quint16>(hyphenGid)) + " Tj\n";
+                    stream += "ET\n";
+                }
             }
         }
     }
@@ -1337,7 +1366,7 @@ void PdfGenerator::renderHeaderFooter(QByteArray &stream, const PageLayout &page
     auto drawFields = [&](const QString &left, const QString &center, const QString &right,
                           qreal rectY, qreal rectHeight) {
         FontFace *font = m_fontManager->loadFont(QStringLiteral("Noto Sans"), 400, false);
-        if (!font) return;
+        if (!font || !font->ftFace) return;
 
         QByteArray fname = pdfFontName(font);
         qreal fontSize = 9.0;
