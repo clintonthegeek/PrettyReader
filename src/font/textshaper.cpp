@@ -7,6 +7,7 @@
 
 #include "textshaper.h"
 #include "fontmanager.h"
+#include "hersheyfont.h"
 
 #include <hb.h>
 #include <hb-ft.h>
@@ -160,7 +161,50 @@ QList<TextShaper::InternalRun> TextShaper::itemizeFontCoverage(
 
         FontFace *primary = m_fontManager->loadFont(
             style.fontFamily, style.fontWeight, style.fontItalic);
-        if (!primary || !primary->ftFace) {
+        if (!primary) {
+            result.append(run);
+            continue;
+        }
+
+        // Hershey font coverage check
+        if (primary->isHershey && primary->hersheyFont) {
+            int pos = run.start;
+            int end = run.start + run.length;
+            while (pos < end) {
+                char32_t cp = text.at(pos).unicode();
+                bool primaryHas = primary->hersheyFont->hasGlyph(cp);
+                bool useFallback = !primaryHas
+                    && m_fallbackFont && m_fallbackFont->ftFace
+                    && FT_Get_Char_Index(m_fallbackFont->ftFace, cp) != 0;
+
+                int segStart = pos;
+                pos++;
+
+                // Consume consecutive chars with same font choice
+                while (pos < end) {
+                    char32_t cp2 = text.at(pos).unicode();
+                    bool p2 = primary->hersheyFont->hasGlyph(cp2);
+                    bool f2 = !p2 && m_fallbackFont && m_fallbackFont->ftFace
+                        && FT_Get_Char_Index(m_fallbackFont->ftFace, cp2) != 0;
+                    if (f2 != useFallback)
+                        break;
+                    pos++;
+                }
+
+                InternalRun sub;
+                sub.start = segStart;
+                sub.length = pos - segStart;
+                sub.dir = run.dir;
+                sub.script = run.script;
+                sub.styleIndex = run.styleIndex;
+                sub.useFallbackFont = useFallback;
+                result.append(sub);
+            }
+            continue; // skip FreeType coverage path
+        }
+
+        // Existing FreeType coverage path continues...
+        if (!primary->ftFace) {
             result.append(run);
             continue;
         }
@@ -249,7 +293,45 @@ QList<ShapedRun> TextShaper::shape(const QString &text, const QList<StyleRun> &s
             face = m_fontManager->loadFont(
                 style.fontFamily, style.fontWeight, style.fontItalic);
         }
-        if (!face || !face->hbFont)
+        if (!face)
+            continue;
+
+        // Hershey font: simple 1:1 character→glyph mapping, bypass HarfBuzz
+        if (face->isHershey && face->hersheyFont) {
+            ShapedRun shaped;
+            shaped.font = face;
+            shaped.fontSize = style.fontSize;
+            shaped.textStart = run.start;
+            shaped.textLength = run.length;
+            shaped.rtl = false; // Hershey fonts are LTR only
+
+            qreal scale = style.fontSize / face->hersheyFont->unitsPerEm();
+
+            for (int ci = run.start; ci < run.start + run.length; ++ci) {
+                char32_t cp = text.at(ci).unicode();
+                // Handle surrogate pairs
+                if (ci + 1 < run.start + run.length
+                    && QChar::isHighSurrogate(text.at(ci).unicode())
+                    && QChar::isLowSurrogate(text.at(ci + 1).unicode())) {
+                    cp = QChar::surrogateToUcs4(text.at(ci), text.at(ci + 1));
+                }
+
+                ShapedGlyph g;
+                g.glyphId = static_cast<uint>(cp); // glyphId == codepoint for Hershey
+                g.xAdvance = face->hersheyFont->advanceWidth(cp) * scale;
+                g.yAdvance = 0;
+                g.xOffset = 0;
+                g.yOffset = 0;
+                g.cluster = ci;
+                shaped.glyphs.append(g);
+            }
+
+            result.append(shaped);
+            continue; // skip HarfBuzz path below
+        }
+
+        // Existing HarfBuzz path continues here...
+        if (!face->hbFont)
             continue;
 
         // Configure HarfBuzz font size
