@@ -68,6 +68,8 @@ add_library(PrettyReaderCore STATIC
     font/textshaper.h
     font/sfnt.cpp
     font/sfnt.h
+    font/hersheyfont.cpp
+    font/hersheyfont.h
     layout/layoutengine.cpp
     layout/layoutengine.h
     pdf/pdfwriter.cpp
