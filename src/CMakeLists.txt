@@ -72,6 +72,8 @@ add_library(PrettyReaderCore STATIC
     font/hersheyfont.h
     layout/layoutengine.cpp
     layout/layoutengine.h
+    layout/linebreaker.cpp
+    layout/linebreaker.h
     pdf/pdfwriter.cpp
     pdf/pdfwriter.h
     pdf/pdfgenerator.cpp
