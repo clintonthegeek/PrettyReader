@@ -167,6 +167,45 @@ qt_add_resources(PrettyReaderCore "glyphs"
         glyphs/checkbox-checked.svg
 )
 
+# Bundle Hershey vector font data as Qt resources
+qt_add_resources(PrettyReaderCore "hershey"
+    PREFIX "/hershey"
+    BASE hershey
+    FILES
+        hershey/astrology.jhf
+        hershey/cursive.jhf
+        hershey/cyrilc_1.jhf
+        hershey/cyrillic.jhf
+        hershey/futural.jhf
+        hershey/futuram.jhf
+        hershey/gothgbt.jhf
+        hershey/gothgrt.jhf
+        hershey/gothiceng.jhf
+        hershey/gothicger.jhf
+        hershey/gothicita.jhf
+        hershey/gothitt.jhf
+        hershey/greek.jhf
+        hershey/greekc.jhf
+        hershey/greeks.jhf
+        hershey/japanese.jhf
+        hershey/markers.jhf
+        hershey/mathlow.jhf
+        hershey/mathupp.jhf
+        hershey/meteorology.jhf
+        hershey/music.jhf
+        hershey/rowmand.jhf
+        hershey/rowmans.jhf
+        hershey/rowmant.jhf
+        hershey/scriptc.jhf
+        hershey/scripts.jhf
+        hershey/symbolic.jhf
+        hershey/timesg.jhf
+        hershey/timesi.jhf
+        hershey/timesib.jhf
+        hershey/timesr.jhf
+        hershey/timesrb.jhf
+)
+
 target_include_directories(PrettyReaderCore
     PRIVATE
         ${MD4C_INCLUDE_DIR}
