@@ -1111,6 +1111,81 @@ void PdfGenerator::renderGlyphBoxAsPath(const Layout::GlyphBox &gbox,
     }
 }
 
+void PdfGenerator::renderTtfGlyphBoxAsXObject(const Layout::GlyphBox &gbox,
+                                                QByteArray &stream,
+                                                qreal x, qreal y)
+{
+    if (gbox.glyphs.isEmpty() || !gbox.font || !gbox.font->ftFace)
+        return;
+
+    FT_Face face = gbox.font->ftFace;
+    qreal scale = gbox.fontSize / face->units_per_EM;
+
+    // Background (inline code highlight)
+    if (gbox.style.background.isValid()) {
+        stream += "q\n";
+        stream += colorOperator(gbox.style.background, true);
+        stream += pdfCoord(x - 1) + " " + pdfCoord(y - gbox.descent - 1) + " "
+                + pdfCoord(gbox.width + 2) + " " + pdfCoord(gbox.ascent + gbox.descent + 2)
+                + " re f\n";
+        stream += "Q\n";
+    }
+
+    qreal curX = x;
+    for (const auto &g : gbox.glyphs) {
+        auto entry = ensureGlyphForm(nullptr, gbox.font, g.glyphId, false);
+        if (entry.objId == 0) {
+            curX += g.xAdvance;
+            continue;
+        }
+
+        qreal gx = curX + g.xOffset;
+        qreal gy = y - g.yOffset;
+
+        if (gbox.style.superscript)
+            gy += gbox.fontSize * 0.35;
+        else if (gbox.style.subscript)
+            gy -= gbox.fontSize * 0.15;
+
+        stream += "q\n";
+        stream += colorOperator(gbox.style.foreground, true); // fill color (rg)
+        stream += pdfCoord(scale) + " 0 0 " + pdfCoord(scale)
+                + " " + pdfCoord(gx) + " " + pdfCoord(gy) + " cm\n";
+        stream += "/" + entry.pdfName + " Do\n";
+        stream += "Q\n";
+
+        curX += g.xAdvance;
+    }
+
+    // Underline
+    if (gbox.style.underline) {
+        stream += "q\n";
+        stream += colorOperator(gbox.style.foreground, false);
+        stream += "0.5 w\n";
+        qreal uy = y - gbox.descent * 0.3;
+        stream += pdfCoord(x) + " " + pdfCoord(uy) + " m "
+                + pdfCoord(curX) + " " + pdfCoord(uy) + " l S\n";
+        stream += "Q\n";
+    }
+
+    // Strikethrough
+    if (gbox.style.strikethrough) {
+        stream += "q\n";
+        stream += colorOperator(gbox.style.foreground, false);
+        stream += "0.5 w\n";
+        qreal sy = y + gbox.ascent * 0.3;
+        stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
+                + pdfCoord(curX) + " " + pdfCoord(sy) + " l S\n";
+        stream += "Q\n";
+    }
+
+    // Collect link annotation rect
+    if (!gbox.style.linkHref.isEmpty()) {
+        collectLinkRect(x, y, curX - x, gbox.ascent, gbox.descent,
+                        gbox.style.linkHref);
+    }
+}
+
 void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
                                            QByteArray &stream,
                                            qreal x, qreal y)
