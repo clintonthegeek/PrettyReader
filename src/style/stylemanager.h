@@ -48,6 +48,10 @@ public:
     FootnoteStyle footnoteStyle() const { return m_footnoteStyle; }
     void setFootnoteStyle(const FootnoteStyle &style) { m_footnoteStyle = style; }
 
+    // Hershey stroke font mode
+    bool hersheyMode() const { return m_hersheyMode; }
+    void setHersheyMode(bool enabled) { m_hersheyMode = enabled; }
+
     // Deep-copy this style manager
     StyleManager *clone(QObject *parent = nullptr) const;
 
@@ -59,6 +63,7 @@ private:
     QHash<QString, CharacterStyle> m_charStyles;
     QHash<QString, TableStyle> m_tableStyles;
     FootnoteStyle m_footnoteStyle;
+    bool m_hersheyMode = false;
 };
 
 #endif // PRETTYREADER_STYLEMANAGER_H

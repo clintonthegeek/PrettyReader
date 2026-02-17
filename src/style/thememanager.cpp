@@ -140,6 +140,9 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
 
     QJsonObject root = doc.object();
 
+    // Hershey stroke font mode
+    sm->setHersheyMode(root.value(QLatin1String("hersheyMode")).toBool(false));
+
     // Paragraph styles
     QJsonObject paraStyles = root.value(QLatin1String("paragraphStyles")).toObject();
     for (auto it = paraStyles.begin(); it != paraStyles.end(); ++it) {
@@ -1043,6 +1046,9 @@ QJsonDocument ThemeManager::serializeTheme(const QString &name, StyleManager *sm
     QJsonObject root;
     root[QLatin1String("name")] = name;
     root[QLatin1String("version")] = 1;
+
+    if (sm->hersheyMode())
+        root[QLatin1String("hersheyMode")] = true;
 
     // Paragraph styles
     QJsonObject paraObj;
