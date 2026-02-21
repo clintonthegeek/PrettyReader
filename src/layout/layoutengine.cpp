@@ -1682,8 +1682,10 @@ void Engine::assignToPages(const QList<PageElement> &elements,
     currentPage.pageNumber = 0;
     qreal y = 0;
 
-    for (int idx = 0; idx < elements.size(); ++idx) {
-        const auto &element = elements[idx];
+    QList<PageElement> queue = elements;
+
+    for (int idx = 0; idx < queue.size(); ++idx) {
+        const auto &element = queue[idx];
 
         // Handle tables separately for page-splitting
         if (auto *tablePtr = std::get_if<TableBox>(&element)) {
@@ -1741,7 +1743,7 @@ void Engine::assignToPages(const QList<PageElement> &elements,
 
         // Keep-with-next: if this is a heading (or element with keepWithNext),
         // peek at the next element. If both won't fit, break before this one.
-        if (keepWithNext && !needsPageBreak && idx + 1 < elements.size()
+        if (keepWithNext && !needsPageBreak && idx + 1 < queue.size()
             && !currentPage.elements.isEmpty()) {
             qreal nextHeight = 0;
             std::visit([&](const auto &ne) {
@@ -1760,39 +1762,87 @@ void Engine::assignToPages(const QList<PageElement> &elements,
                 } else if constexpr (std::is_same_v<T, FootnoteSectionBox>) {
                     nextHeight = 20.0 + ne.height;
                 }
-            }, elements[idx + 1]);
+            }, queue[idx + 1]);
 
             if (y + totalHeight + nextHeight > pageHeight)
                 needsPageBreak = true;
         }
 
-        // Orphan protection: if a multi-line paragraph would have fewer than
-        // 2 lines on the current page, push the whole paragraph to the next page.
-        if (!needsPageBreak && lineCount > 2 && !currentPage.elements.isEmpty()) {
-            // Calculate how many lines fit
-            qreal remaining = pageHeight - y - spaceBefore;
-            int linesFitting = 0;
-            qreal accum = 0;
-            // Access lines via the block box
+        // --- Block splitting logic ---
+        // Try to split the block if it doesn't fit, rather than always
+        // pushing the whole block to the next page.
+        if (needsPageBreak) {
+            // Before breaking to a new page, try splitting at the break point
+            qreal remaining = pageHeight - y;
+            bool didSplit = false;
+
             if (auto *bb = std::get_if<BlockBox>(&element)) {
-                for (const auto &line : bb->lines) {
-                    accum += line.height;
-                    if (accum <= remaining)
-                        linesFitting++;
-                    else
-                        break;
+                auto split = splitBlockBox(*bb, remaining);
+                if (split) {
+                    // Place fragment 1 on current page
+                    auto &[f1, f2] = *split;
+                    y += f1.spaceBefore;
+                    f1.y = y;
+                    currentPage.elements.append(f1);
+                    y += f1.height + f1.spaceAfter;
+                    // Push fragment 2 back into queue
+                    queue.insert(idx + 1, f2);
+                    didSplit = true;
+                }
+            } else if (auto *fs = std::get_if<FootnoteSectionBox>(&element)) {
+                auto split = splitFootnoteSection(*fs, remaining);
+                if (split) {
+                    auto &[f1, f2] = *split;
+                    y += 20.0; // spaceBefore for footnote sections
+                    f1.y = y;
+                    currentPage.elements.append(f1);
+                    y += f1.height;
+                    queue.insert(idx + 1, f2);
+                    didSplit = true;
                 }
             }
-            if (linesFitting > 0 && linesFitting < 2)
-                needsPageBreak = true;
-        }
 
-        if (needsPageBreak) {
+            if (didSplit) {
+                // Fragment 1 placed; fragment 2 will be processed next iteration
+                continue;
+            }
+
+            // Split failed — break to new page (existing behavior)
             currentPage.contentHeight = y;
             result.pages.append(currentPage);
             currentPage = Page{};
             currentPage.pageNumber = result.pages.size();
             y = 0;
+        }
+
+        // Handle blocks that don't fit even on a fresh empty page
+        if (currentPage.elements.isEmpty() && y + totalHeight > pageHeight) {
+            bool didSplit = false;
+
+            if (auto *bb = std::get_if<BlockBox>(&element)) {
+                auto split = splitBlockBox(*bb, pageHeight);
+                if (split) {
+                    auto &[f1, f2] = *split;
+                    y += f1.spaceBefore;
+                    f1.y = y;
+                    currentPage.elements.append(f1);
+                    y += f1.height + f1.spaceAfter;
+                    queue.insert(idx + 1, f2);
+                    continue;
+                }
+            } else if (auto *fs = std::get_if<FootnoteSectionBox>(&element)) {
+                auto split = splitFootnoteSection(*fs, pageHeight);
+                if (split) {
+                    auto &[f1, f2] = *split;
+                    y += 20.0;
+                    f1.y = y;
+                    currentPage.elements.append(f1);
+                    y += f1.height;
+                    queue.insert(idx + 1, f2);
+                    continue;
+                }
+            }
+            // If split failed, fall through to place-and-overflow (existing behavior)
         }
 
         y += spaceBefore;
