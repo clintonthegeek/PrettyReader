@@ -140,6 +140,10 @@ struct BlockBox {
     // List item (for markdown copy: \n separator instead of \n\n)
     bool isListItem = false;
 
+    // Fragment flags for blocks split across pages
+    bool isFragmentStart = true;   // first or only fragment (emit opening fence)
+    bool isFragmentEnd = true;     // last or only fragment (emit closing fence/separator)
+
     // Source breadcrumb
     Content::SourceRange source;
 };
