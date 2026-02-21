@@ -8,7 +8,7 @@
 #include "linebreaker.h"
 #include "textshaper.h"
 
-#include <QDebug>
+
 #include <QMarginsF>
 #include <QtMath>
 
@@ -577,11 +577,6 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
 
     if (useKP) {
         kpResult = LineBreaking::findBreaksTiered(kpItems, kpLineWidths, kpConfig);
-        qDebug() << "[LAYOUT] KP result: optimal=" << kpResult.optimal
-                 << "breaks=" << kpResult.breaks.size()
-                 << "availWidth=" << availWidth << "firstLineWidth=" << firstLineWidth
-                 << "naturalSpaceWidth=" << naturalSpaceWidth
-                 << "words=" << words.size() << "kpItems=" << kpItems.size();
     }
 
     if (useKP && kpResult.optimal && !kpResult.breaks.isEmpty()) {
@@ -652,12 +647,6 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                 continue;
             }
 
-            // JustifyInfo is computed AFTER trimming (below), not here.
-            // The KP only decides WHERE to break; spacing comes from the actual shortfall.
-            qDebug() << "[LAYOUT] KP Line" << bi << ": words[" << wordStart << ".." << lastBoxWordIdx << "]"
-                     << "glyphBoxes=" << line.glyphs.size() << "isLast=" << line.isLastLine
-                     << "itemIdx=" << bp.itemIndex;
-
             lines.append(line);
             wordStart = lastBoxWordIdx + 1;
 
@@ -666,7 +655,6 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
                 wordStart++;
         }
     } else {
-        qDebug() << "[LAYOUT] GREEDY FALLBACK — KP did not produce optimal breaks";
         // Greedy fallback (original algorithm)
         qreal lineWidth = availWidth - firstLineIndent;
         qreal currentX = 0;
@@ -843,10 +831,6 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             line.justify.extraWordSpacing = wordSlack / gapCount;
             line.justify.extraLetterSpacing = letterPerChar;
 
-            qDebug() << "[JUSTIFY] shortfall=" << shortfall << "gaps=" << gapCount
-                     << "chars=" << charCount << "extraWord=" << line.justify.extraWordSpacing
-                     << "extraLetter=" << line.justify.extraLetterSpacing
-                     << "lineWidth=" << line.width << "avail=" << availWidth;
         }
     }
 
@@ -1569,6 +1553,73 @@ QList<TableBox> Engine::splitTable(const TableBox &table, qreal availHeight, qre
     }
 
     return slices;
+}
+
+// --- Block splitting ---
+
+std::optional<std::pair<BlockBox, BlockBox>>
+splitBlockBox(const BlockBox &block, qreal availableHeight, int minLines)
+{
+    // Can't split blocks without lines (images, hrules)
+    if (block.lines.isEmpty())
+        return std::nullopt;
+
+    int totalLines = block.lines.size();
+
+    // Need at least minLines*2 to satisfy orphan+widow
+    if (totalLines < minLines * 2)
+        return std::nullopt;
+
+    // Walk lines to find split point.
+    // For code blocks (and blocks with padding), the available height for lines
+    // is reduced by padding on top and bottom of each fragment.
+    qreal paddingOverhead = (block.type == BlockBox::CodeBlockType) ? block.padding * 2 : 0;
+    qreal availForLines = availableHeight - block.spaceBefore - paddingOverhead;
+    if (availForLines <= 0)
+        return std::nullopt;
+
+    int splitAfter = 0; // number of lines in fragment 1
+    qreal accum = 0;
+    for (int i = 0; i < totalLines; ++i) {
+        accum += block.lines[i].height;
+        if (accum <= availForLines)
+            splitAfter = i + 1;
+        else
+            break;
+    }
+
+    // Enforce orphan minimum (fragment 1 must have >= minLines)
+    if (splitAfter < minLines)
+        return std::nullopt;
+
+    // Enforce widow minimum (fragment 2 must have >= minLines)
+    if (totalLines - splitAfter < minLines)
+        return std::nullopt;
+
+    // Build fragment 1: lines [0..splitAfter)
+    BlockBox frag1 = block;
+    frag1.lines = block.lines.mid(0, splitAfter);
+    frag1.isFragmentEnd = false;
+    frag1.spaceAfter = 0;
+    // Recompute height from lines
+    qreal h1 = 0;
+    for (int i = 0; i < splitAfter; ++i)
+        h1 += block.lines[i].height;
+    frag1.height = h1 + paddingOverhead;
+
+    // Build fragment 2: lines [splitAfter..end)
+    BlockBox frag2 = block;
+    frag2.lines = block.lines.mid(splitAfter);
+    frag2.isFragmentStart = false;
+    frag2.spaceBefore = 0;
+    frag2.firstLineIndent = 0; // continuation has no indent
+    // Recompute height from lines
+    qreal h2 = 0;
+    for (int i = splitAfter; i < totalLines; ++i)
+        h2 += block.lines[i].height;
+    frag2.height = h2 + paddingOverhead;
+
+    return std::make_pair(frag1, frag2);
 }
 
 // --- Page assignment ---

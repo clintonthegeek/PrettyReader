@@ -18,6 +18,8 @@
 #include <QSizeF>
 #include <QString>
 
+#include <optional>
+
 #include "contentmodel.h"
 #include "pagelayout.h"
 
@@ -206,6 +208,12 @@ struct FootnoteSectionBox {
     qreal width = 0;
     qreal height = 0;
 };
+
+// Split a block at a line boundary to fit within availableHeight.
+// Returns nullopt if the block can't be split (too few lines, or it fits already).
+// minLines: minimum lines per fragment (orphan/widow protection).
+std::optional<std::pair<BlockBox, BlockBox>>
+splitBlockBox(const BlockBox &block, qreal availableHeight, int minLines = 2);
 
 // A page element can be any of the above
 using PageElement = std::variant<BlockBox, TableBox, FootnoteSectionBox>;
