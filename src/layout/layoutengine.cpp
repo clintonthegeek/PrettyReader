@@ -1622,6 +1622,53 @@ splitBlockBox(const BlockBox &block, qreal availableHeight, int minLines)
     return std::make_pair(frag1, frag2);
 }
 
+std::optional<std::pair<FootnoteSectionBox, FootnoteSectionBox>>
+splitFootnoteSection(const FootnoteSectionBox &box, qreal availableHeight)
+{
+    if (box.footnotes.size() < 2)
+        return std::nullopt;
+
+    // Account for separator height (~10pt) and spacing
+    qreal separatorHeight = box.showSeparator ? 10.0 : 0;
+    qreal availForFootnotes = availableHeight - separatorHeight;
+    if (availForFootnotes <= 0)
+        return std::nullopt;
+
+    int splitAfter = 0;
+    qreal accum = 0;
+    for (int i = 0; i < box.footnotes.size(); ++i) {
+        accum += box.footnotes[i].height;
+        if (accum <= availForFootnotes)
+            splitAfter = i + 1;
+        else
+            break;
+    }
+
+    if (splitAfter == 0 || splitAfter == box.footnotes.size())
+        return std::nullopt;
+
+    FootnoteSectionBox frag1 = box;
+    frag1.footnotes = box.footnotes.mid(0, splitAfter);
+    qreal h1 = separatorHeight;
+    for (int i = 0; i < splitAfter; ++i)
+        h1 += box.footnotes[i].height;
+    frag1.height = h1;
+
+    FootnoteSectionBox frag2;
+    frag2.footnotes = box.footnotes.mid(splitAfter);
+    frag2.showSeparator = false;
+    frag2.width = box.width;
+    // Rebase footnote y-positions
+    qreal yOff = 0;
+    for (auto &fn : frag2.footnotes) {
+        fn.y = yOff;
+        yOff += fn.height;
+    }
+    frag2.height = yOff;
+
+    return std::make_pair(frag1, frag2);
+}
+
 // --- Page assignment ---
 
 void Engine::assignToPages(const QList<PageElement> &elements,

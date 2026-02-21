@@ -215,6 +215,11 @@ struct FootnoteSectionBox {
 std::optional<std::pair<BlockBox, BlockBox>>
 splitBlockBox(const BlockBox &block, qreal availableHeight, int minLines = 2);
 
+// Split a footnote section at a footnote boundary to fit within availableHeight.
+// Returns nullopt if fewer than 2 footnotes or can't split meaningfully.
+std::optional<std::pair<FootnoteSectionBox, FootnoteSectionBox>>
+splitFootnoteSection(const FootnoteSectionBox &box, qreal availableHeight);
+
 // A page element can be any of the above
 using PageElement = std::variant<BlockBox, TableBox, FootnoteSectionBox>;
 
