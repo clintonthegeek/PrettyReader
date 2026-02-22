@@ -25,6 +25,8 @@ add_library(PrettyReaderCore STATIC
     canvas/rendercache.h
     canvas/webviewrenderer.cpp
     canvas/webviewrenderer.h
+    canvas/webviewitem.cpp
+    canvas/webviewitem.h
     print/headerfooterrenderer.cpp
     print/headerfooterrenderer.h
     print/printcontroller.cpp
