@@ -10,8 +10,6 @@
 
 #include <QColor>
 #include <QDateTime>
-#include <QDebug>
-
 #include <zlib.h>
 #include FT_OUTLINE_H
 
@@ -93,7 +91,7 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
     int totalPages = layout.pages.size();
 
     // Detect Hershey mode
-    m_hersheyMode = false;
+    m_hasHersheyGlyphs = false;
     for (const auto &page : layout.pages) {
         for (const auto &elem : page.elements) {
             std::visit([&](const auto &e) {
@@ -102,25 +100,25 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
                     for (const auto &line : e.lines)
                         for (const auto &gbox : line.glyphs)
                             if (gbox.font && gbox.font->isHershey)
-                                m_hersheyMode = true;
+                                m_hasHersheyGlyphs = true;
                 } else if constexpr (std::is_same_v<T, Layout::TableBox>) {
                     for (const auto &row : e.rows)
                         for (const auto &cell : row.cells)
                             for (const auto &line : cell.lines)
                                 for (const auto &gbox : line.glyphs)
                                     if (gbox.font && gbox.font->isHershey)
-                                        m_hersheyMode = true;
+                                        m_hasHersheyGlyphs = true;
                 } else if constexpr (std::is_same_v<T, Layout::FootnoteSectionBox>) {
                     for (const auto &fn : e.footnotes)
                         for (const auto &line : fn.lines)
                             for (const auto &gbox : line.glyphs)
                                 if (gbox.font && gbox.font->isHershey)
-                                    m_hersheyMode = true;
+                                    m_hasHersheyGlyphs = true;
                 }
             }, elem);
-            if (m_hersheyMode) break;
+            if (m_hasHersheyGlyphs) break;
         }
-        if (m_hersheyMode) break;
+        if (m_hasHersheyGlyphs) break;
     }
 
     // First pass: register fonts by scanning all glyph boxes
@@ -185,7 +183,7 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         resources.xObjects[ei.pdfName] = ei.objId;
 
     // Base 14 Helvetica for markdown invisible text in Hershey mode
-    if ((m_hersheyMode || m_exportOptions.xobjectGlyphs) && m_exportOptions.markdownCopy) {
+    if ((m_hasHersheyGlyphs || m_exportOptions.xobjectGlyphs) && m_exportOptions.markdownCopy) {
         Pdf::ObjId hvInvObj = writer.startObj();
         writer.write("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
         writer.endObj(hvInvObj);
@@ -465,8 +463,9 @@ void PdfGenerator::renderBlockBox(const Layout::BlockBox &box, QByteArray &strea
     // fenced because Poppler can't map ActualText leading spaces to selectable
     // regions (no invisible text glyphs at those positions).
     bool isCodeBlock = (box.type == Layout::BlockBox::CodeBlockType);
-    if (m_exportOptions.markdownCopy && isCodeBlock) {
+    if (m_exportOptions.markdownCopy && isCodeBlock)
         m_codeBlockLines = true;
+    if (m_exportOptions.markdownCopy && isCodeBlock && box.isFragmentStart) {
         QString fence = QStringLiteral("```");
         if (!box.codeLanguage.isEmpty())
             fence += box.codeLanguage;
@@ -506,7 +505,7 @@ void PdfGenerator::renderBlockBox(const Layout::BlockBox &box, QByteArray &strea
     // (Poppler ignores ActualText spans without text-showing operators).
     // Regular separators work without anchors (Poppler infers paragraph
     // breaks from the Y-position gap).
-    if (m_exportOptions.markdownCopy) {
+    if (m_exportOptions.markdownCopy && box.isFragmentEnd) {
         QString sep;
         if (isCodeBlock)
             sep = QStringLiteral("```\n\n");
@@ -587,6 +586,48 @@ int outlineCubicTo(const FT_Vector *c1, const FT_Vector *c2, const FT_Vector *to
 
 } // anonymous namespace
 
+void PdfGenerator::dispatchGlyphRendering(const Layout::GlyphBox &gbox,
+                                            QByteArray &stream,
+                                            qreal x, qreal y)
+{
+    if (gbox.font && gbox.font->isHershey)
+        renderHersheyGlyphBox(gbox, stream, x, y);
+    else if (m_exportOptions.xobjectGlyphs)
+        renderTtfGlyphBoxAsXObject(gbox, stream, x, y);
+    else if (m_exportOptions.markdownCopy || m_hasHersheyGlyphs)
+        renderGlyphBoxAsPath(gbox, stream, x, y);
+    else
+        renderGlyphBox(gbox, stream, x, y);
+}
+
+void PdfGenerator::renderGlyphDecorations(const Layout::GlyphBox &gbox,
+                                            QByteArray &stream,
+                                            qreal x, qreal y, qreal endX)
+{
+    if (gbox.style.underline) {
+        stream += "q\n";
+        stream += colorOperator(gbox.style.foreground, false);
+        stream += "0.5 w\n";
+        qreal uy = y - gbox.descent * 0.3;
+        stream += pdfCoord(x) + " " + pdfCoord(uy) + " m "
+                + pdfCoord(endX) + " " + pdfCoord(uy) + " l S\n";
+        stream += "Q\n";
+    }
+
+    if (gbox.style.strikethrough) {
+        stream += "q\n";
+        stream += colorOperator(gbox.style.foreground, false);
+        stream += "0.5 w\n";
+        qreal sy = y + gbox.ascent * 0.3;
+        stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
+                + pdfCoord(endX) + " " + pdfCoord(sy) + " l S\n";
+        stream += "Q\n";
+    }
+
+    if (!gbox.style.linkHref.isEmpty())
+        collectLinkRect(x, y, endX - x, gbox.ascent, gbox.descent, gbox.style.linkHref);
+}
+
 void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream,
                                   qreal originX, qreal originY, qreal pageHeight,
                                   qreal availWidth)
@@ -611,10 +652,6 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
             doJustify = true;
             extraPerGap = line.justify.extraWordSpacing;
             extraPerChar = line.justify.extraLetterSpacing;
-            qDebug() << "[PDF] justify NEW path: gapCount=" << line.justify.wordGapCount
-                     << "extraPerGap=" << extraPerGap << "extraPerChar=" << extraPerChar
-                     << "lineWidth=" << line.width << "availWidth=" << availWidth
-                     << "r=" << line.justify.adjustmentRatio;
         } else {
             // Legacy fallback: compute gaps inline (until layout engine populates JustifyInfo)
             int gapCount = 0;
@@ -638,12 +675,6 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
                 }
             }
         }
-    }
-
-    if (!doJustify && line.alignment == Qt::AlignJustify && !line.isLastLine) {
-        qDebug() << "[PDF] justify SKIPPED: glyphs=" << line.glyphs.size()
-                 << "lineWidth=" << line.width << "availWidth=" << availWidth
-                 << "justifyGapCount=" << line.justify.wordGapCount;
     }
 
     bool markdownMode = m_exportOptions.markdownCopy;
@@ -772,14 +803,8 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
         stream += "EMC\n";
 
         // Path rendering for visible text
-        for (int i = 0; i < line.glyphs.size(); ++i) {
-            if (line.glyphs[i].font && line.glyphs[i].font->isHershey)
-                renderHersheyGlyphBox(line.glyphs[i], stream, glyphXPositions[i], baselineY);
-            else if (xobjectGlyphs)
-                renderTtfGlyphBoxAsXObject(line.glyphs[i], stream, glyphXPositions[i], baselineY);
-            else
-                renderGlyphBoxAsPath(line.glyphs[i], stream, glyphXPositions[i], baselineY);
-        }
+        for (int i = 0; i < line.glyphs.size(); ++i)
+            dispatchGlyphRendering(line.glyphs[i], stream, glyphXPositions[i], baselineY);
 
         x = glyphXPositions.isEmpty() ? originX
             : glyphXPositions.last() + line.glyphs.last().width;
@@ -788,14 +813,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
     else if (doJustify) {
         x = originX;
         for (int i = 0; i < line.glyphs.size(); ++i) {
-            if (line.glyphs[i].font && line.glyphs[i].font->isHershey)
-                renderHersheyGlyphBox(line.glyphs[i], stream, x, baselineY);
-            else if (xobjectGlyphs)
-                renderTtfGlyphBoxAsXObject(line.glyphs[i], stream, x, baselineY);
-            else if (m_hersheyMode)
-                renderGlyphBoxAsPath(line.glyphs[i], stream, x, baselineY);
-            else
-                renderGlyphBox(line.glyphs[i], stream, x, baselineY);
+            dispatchGlyphRendering(line.glyphs[i], stream, x, baselineY);
             x += line.glyphs[i].width;
             if (i < line.glyphs.size() - 1)
                 x += extraPerChar * line.glyphs[i].glyphs.size();
@@ -822,14 +840,7 @@ void PdfGenerator::renderLineBox(const Layout::LineBox &line, QByteArray &stream
 
         x = originX + xOffset;
         for (const auto &gbox : line.glyphs) {
-            if (gbox.font && gbox.font->isHershey)
-                renderHersheyGlyphBox(gbox, stream, x, baselineY);
-            else if (xobjectGlyphs)
-                renderTtfGlyphBoxAsXObject(gbox, stream, x, baselineY);
-            else if (m_hersheyMode)
-                renderGlyphBoxAsPath(gbox, stream, x, baselineY);
-            else
-                renderGlyphBox(gbox, stream, x, baselineY);
+            dispatchGlyphRendering(gbox, stream, x, baselineY);
             x += gbox.width;
         }
     }
@@ -1019,33 +1030,7 @@ void PdfGenerator::renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stre
 
     stream += "ET\n";
 
-    // Underline
-    if (gbox.style.underline) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal uy = y - gbox.descent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(uy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(uy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Strikethrough
-    if (gbox.style.strikethrough) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal sy = y + gbox.ascent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(sy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Collect link annotation rect
-    if (!gbox.style.linkHref.isEmpty()) {
-        collectLinkRect(x, y, curX - x, gbox.ascent, gbox.descent,
-                        gbox.style.linkHref);
-    }
+    renderGlyphDecorations(gbox, stream, x, y, curX);
 }
 
 void PdfGenerator::renderGlyphBoxAsPath(const Layout::GlyphBox &gbox,
@@ -1103,33 +1088,7 @@ void PdfGenerator::renderGlyphBoxAsPath(const Layout::GlyphBox &gbox,
     stream += "f\n";
     stream += "Q\n";
 
-    // Underline
-    if (gbox.style.underline) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal uy = y - gbox.descent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(uy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(uy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Strikethrough
-    if (gbox.style.strikethrough) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal sy = y + gbox.ascent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(sy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Collect link annotation rect
-    if (!gbox.style.linkHref.isEmpty()) {
-        collectLinkRect(x, y, curX - x, gbox.ascent, gbox.descent,
-                        gbox.style.linkHref);
-    }
+    renderGlyphDecorations(gbox, stream, x, y, curX);
 }
 
 void PdfGenerator::renderTtfGlyphBoxAsXObject(const Layout::GlyphBox &gbox,
@@ -1178,33 +1137,7 @@ void PdfGenerator::renderTtfGlyphBoxAsXObject(const Layout::GlyphBox &gbox,
         curX += g.xAdvance;
     }
 
-    // Underline
-    if (gbox.style.underline) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal uy = y - gbox.descent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(uy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(uy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Strikethrough
-    if (gbox.style.strikethrough) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal sy = y + gbox.ascent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(sy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Collect link annotation rect
-    if (!gbox.style.linkHref.isEmpty()) {
-        collectLinkRect(x, y, curX - x, gbox.ascent, gbox.descent,
-                        gbox.style.linkHref);
-    }
+    renderGlyphDecorations(gbox, stream, x, y, curX);
 }
 
 void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
@@ -1266,33 +1199,7 @@ void PdfGenerator::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
         curX += g.xAdvance;
     }
 
-    // Underline
-    if (gbox.style.underline) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal uy = y - gbox.descent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(uy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(uy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Strikethrough
-    if (gbox.style.strikethrough) {
-        stream += "q\n";
-        stream += colorOperator(gbox.style.foreground, false);
-        stream += "0.5 w\n";
-        qreal sy = y + gbox.ascent * 0.3;
-        stream += pdfCoord(x) + " " + pdfCoord(sy) + " m "
-                + pdfCoord(curX) + " " + pdfCoord(sy) + " l S\n";
-        stream += "Q\n";
-    }
-
-    // Collect link annotation rect
-    if (!gbox.style.linkHref.isEmpty()) {
-        collectLinkRect(x, y, curX - x, gbox.ascent, gbox.descent,
-                        gbox.style.linkHref);
-    }
+    renderGlyphDecorations(gbox, stream, x, y, curX);
 }
 
 PdfGenerator::GlyphFormEntry PdfGenerator::ensureGlyphForm(
@@ -1374,8 +1281,8 @@ PdfGenerator::GlyphFormEntry PdfGenerator::ensureGlyphForm(
         formStream += "f\n";
 
         advW = face->glyph->metrics.horiAdvance;
-        bboxBottom = face->bbox.yMin;
-        bboxTop = face->bbox.yMax;
+        bboxBottom = face->glyph->metrics.horiBearingY - face->glyph->metrics.height;
+        bboxTop = face->glyph->metrics.horiBearingY;
 
     } else {
         return {};
@@ -1405,7 +1312,7 @@ QByteArray PdfGenerator::toUtf16BeHex(const QString &text)
     QByteArray hex;
     hex += "FEFF";
     for (QChar ch : text)
-        hex += QString::asprintf("%04X", ch.unicode()).toLatin1();
+        hex += QByteArray::number(ch.unicode(), 16).toUpper().rightJustified(4, '0');
     return hex;
 }
 
@@ -1886,7 +1793,7 @@ Pdf::ObjId PdfGenerator::writeOutlines(Pdf::Writer &writer,
 void PdfGenerator::embedFonts(Pdf::Writer &writer)
 {
     for (auto &ef : m_embeddedFonts) {
-        if (m_hersheyMode)
+        if (m_hasHersheyGlyphs)
             continue;
         ef.fontObjId = writeCidFont(writer, ef.face, ef.pdfName);
     }
@@ -2001,8 +1908,8 @@ QByteArray PdfGenerator::buildToUnicodeCMap(FontFace *face)
         cmap += Pdf::toPdf(batchSize) + " beginbfchar\n";
         for (int i = 0; i < batchSize; ++i) {
             auto [gid, unicode] = mappings[pos + i];
-            cmap += "<" + QString::asprintf("%04X", gid).toLatin1() + "> "
-                  + "<" + QString::asprintf("%04X", unicode).toLatin1() + ">\n";
+            cmap += "<" + QByteArray::number(gid, 16).toUpper().rightJustified(4, '0') + "> "
+                  + "<" + QByteArray::number(unicode, 16).toUpper().rightJustified(4, '0') + ">\n";
         }
         cmap += "endbfchar\n";
         pos += batchSize;
