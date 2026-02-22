@@ -25,6 +25,7 @@ TocWidget::TocWidget(QWidget *parent)
 void TocWidget::buildFromDocument(QTextDocument *document)
 {
     m_treeWidget->clear();
+    m_flatHeadingItems.clear();
     if (!document)
         return;
 
@@ -74,6 +75,7 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
                                        const QList<Layout::SourceMapEntry> &sourceMap)
 {
     m_treeWidget->clear();
+    m_flatHeadingItems.clear();
 
     QTreeWidgetItem *parents[7] = {};
 
@@ -139,6 +141,7 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
         }
 
         parents[level] = item;
+        m_flatHeadingItems.append(item);
         for (int i = level + 1; i <= 6; ++i)
             parents[i] = nullptr;
     }
@@ -149,6 +152,7 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
 void TocWidget::clear()
 {
     m_treeWidget->clear();
+    m_flatHeadingItems.clear();
 }
 
 void TocWidget::onItemClicked(QTreeWidgetItem *item, int column)
@@ -169,4 +173,17 @@ void TocWidget::onItemClicked(QTreeWidgetItem *item, int column)
     int blockNumber = item->data(0, Qt::UserRole).toInt(&ok);
     if (ok)
         Q_EMIT headingClicked(blockNumber);
+}
+
+void TocWidget::highlightHeading(int index)
+{
+    if (index < 0 || index >= m_flatHeadingItems.size()) {
+        m_treeWidget->setCurrentItem(nullptr);
+        return;
+    }
+    // Block signals to prevent onItemClicked → headingNavigate feedback loop
+    m_treeWidget->blockSignals(true);
+    m_treeWidget->setCurrentItem(m_flatHeadingItems[index]);
+    m_treeWidget->scrollToItem(m_flatHeadingItems[index]);
+    m_treeWidget->blockSignals(false);
 }

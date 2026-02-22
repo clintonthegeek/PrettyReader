@@ -21,6 +21,7 @@ public:
     void buildFromContentModel(const Content::Document &doc,
                                const QList<Layout::SourceMapEntry> &sourceMap);
     void clear();
+    void highlightHeading(int index);
 
 Q_SIGNALS:
     void headingClicked(int blockNumber);
@@ -31,6 +32,7 @@ private Q_SLOTS:
 
 private:
     QTreeWidget *m_treeWidget = nullptr;
+    QList<QTreeWidgetItem *> m_flatHeadingItems;
 };
 
 #endif // PRETTYREADER_TOCWIDGET_H
