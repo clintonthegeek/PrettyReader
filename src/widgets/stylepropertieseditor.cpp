@@ -1,5 +1,4 @@
 #include "stylepropertieseditor.h"
-#include "hersheyfont.h"
 
 #include <KColorButton>
 #include <QAbstractItemView>
@@ -84,22 +83,13 @@ void StylePropertiesEditor::repopulateFontStyleCombo(const QString &family)
 {
     const QSignalBlocker blocker(m_fontStyleCombo);
     m_fontStyleCombo->clear();
-    if (m_hersheyMode) {
-        m_fontStyleCombo->addItem(QStringLiteral("Regular"));
-        m_fontStyleCombo->addItem(QStringLiteral("Bold"));
-        m_fontStyleCombo->addItem(QStringLiteral("Italic"));
-        m_fontStyleCombo->addItem(QStringLiteral("Bold Italic"));
-    } else {
-        const QStringList styles = QFontDatabase::styles(family);
-        for (const QString &s : styles)
-            m_fontStyleCombo->addItem(s);
-    }
+    const QStringList styles = QFontDatabase::styles(family);
+    for (const QString &s : styles)
+        m_fontStyleCombo->addItem(s);
 }
 
 QString StylePropertiesEditor::currentFontFamily() const
 {
-    if (m_hersheyMode)
-        return m_hersheyFontCombo->currentText();
     return m_fontCombo->currentFont().family();
 }
 
@@ -137,11 +127,8 @@ void StylePropertiesEditor::buildUI()
     m_fontInd.resetBtn = createResetButton();
     m_fontCombo = new QFontComboBox;
     m_fontInd.control = m_fontCombo;
-    m_hersheyFontCombo = new QComboBox;
-    m_hersheyFontCombo->setVisible(false);
     fontRow->addWidget(m_fontInd.label);
     fontRow->addWidget(m_fontCombo, 1);
-    fontRow->addWidget(m_hersheyFontCombo, 1);
     fontRow->addWidget(m_fontInd.resetBtn);
     charLayout->addLayout(fontRow);
 
@@ -160,10 +147,6 @@ void StylePropertiesEditor::buildUI()
     connect(m_fontCombo, &QFontComboBox::currentFontChanged,
             this, [this](const QFont &font) {
         repopulateFontStyleCombo(font.family());
-    });
-    connect(m_hersheyFontCombo, &QComboBox::currentTextChanged,
-            this, [this](const QString &) {
-        repopulateFontStyleCombo(QString());
     });
 
     // Size row with disabled U/S buttons
@@ -231,12 +214,6 @@ void StylePropertiesEditor::buildUI()
         updatePropertyIndicators();
         Q_EMIT propertyChanged();
     });
-    connect(m_hersheyFontCombo, &QComboBox::currentTextChanged,
-            this, [this]() {
-        m_explicit.fontFamily = true;
-        updatePropertyIndicators();
-        Q_EMIT propertyChanged();
-    });
     connect(m_fontStyleCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, [this]() {
         m_explicit.fontWeight = true;
@@ -269,30 +246,13 @@ void StylePropertiesEditor::buildUI()
         blockAllSignals(true);
         const QString family = m_isParagraphMode
             ? m_resolvedPara.fontFamily() : m_resolvedChar.fontFamily();
-        if (m_hersheyMode) {
-            int idx = m_hersheyFontCombo->findText(family);
-            if (idx >= 0) m_hersheyFontCombo->setCurrentIndex(idx);
-        } else {
-            m_fontCombo->setCurrentFont(QFont(family));
-        }
+        m_fontCombo->setCurrentFont(QFont(family));
         repopulateFontStyleCombo(family);
         if (!m_explicit.fontWeight && !m_explicit.fontItalic) {
             auto w = m_isParagraphMode ? m_resolvedPara.fontWeight() : m_resolvedChar.fontWeight();
             bool it = m_isParagraphMode ? m_resolvedPara.fontItalic() : m_resolvedChar.fontItalic();
-            if (m_hersheyMode) {
-                bool bold = w >= QFont::Bold;
-                if (bold && it)
-                    m_fontStyleCombo->setCurrentIndex(3);
-                else if (it)
-                    m_fontStyleCombo->setCurrentIndex(2);
-                else if (bold)
-                    m_fontStyleCombo->setCurrentIndex(1);
-                else
-                    m_fontStyleCombo->setCurrentIndex(0);
-            } else {
-                m_fontStyleCombo->setCurrentIndex(
-                    findBestStyleIndex(m_fontStyleCombo, family, w, it));
-            }
+            m_fontStyleCombo->setCurrentIndex(
+                findBestStyleIndex(m_fontStyleCombo, family, w, it));
         }
         blockAllSignals(false);
         updatePropertyIndicators();
@@ -306,20 +266,8 @@ void StylePropertiesEditor::buildUI()
         const QString family = currentFontFamily();
         auto w = m_isParagraphMode ? m_resolvedPara.fontWeight() : m_resolvedChar.fontWeight();
         bool it = m_isParagraphMode ? m_resolvedPara.fontItalic() : m_resolvedChar.fontItalic();
-        if (m_hersheyMode) {
-            bool bold = w >= QFont::Bold;
-            if (bold && it)
-                m_fontStyleCombo->setCurrentIndex(3);
-            else if (it)
-                m_fontStyleCombo->setCurrentIndex(2);
-            else if (bold)
-                m_fontStyleCombo->setCurrentIndex(1);
-            else
-                m_fontStyleCombo->setCurrentIndex(0);
-        } else {
-            m_fontStyleCombo->setCurrentIndex(
-                findBestStyleIndex(m_fontStyleCombo, family, w, it));
-        }
+        m_fontStyleCombo->setCurrentIndex(
+            findBestStyleIndex(m_fontStyleCombo, family, w, it));
         blockAllSignals(false);
         updatePropertyIndicators();
         Q_EMIT propertyChanged();
@@ -720,7 +668,6 @@ void StylePropertiesEditor::blockAllSignals(bool block)
 {
     m_parentCombo->blockSignals(block);
     m_fontCombo->blockSignals(block);
-    m_hersheyFontCombo->blockSignals(block);
     m_fontStyleCombo->blockSignals(block);
     m_sizeSpin->blockSignals(block);
     m_underlineBtn->blockSignals(block);
@@ -828,31 +775,13 @@ void StylePropertiesEditor::loadParagraphStyle(const ParagraphStyle &style,
     m_parentCombo->setCurrentIndex(parentIdx >= 0 ? parentIdx : 0);
 
     // Show resolved values in all controls so the user sees effective values
-    if (m_hersheyMode) {
-        int idx = m_hersheyFontCombo->findText(resolved.fontFamily());
-        if (idx >= 0) m_hersheyFontCombo->setCurrentIndex(idx);
-    } else {
-        m_fontCombo->setCurrentFont(QFont(resolved.fontFamily()));
-    }
+    m_fontCombo->setCurrentFont(QFont(resolved.fontFamily()));
     // Populate style combo for this font family
     repopulateFontStyleCombo(resolved.fontFamily());
     // Select the best matching style
-    if (m_hersheyMode) {
-        bool bold = resolved.fontWeight() >= QFont::Bold;
-        bool ital = resolved.fontItalic();
-        if (bold && ital)
-            m_fontStyleCombo->setCurrentIndex(3);
-        else if (ital)
-            m_fontStyleCombo->setCurrentIndex(2);
-        else if (bold)
-            m_fontStyleCombo->setCurrentIndex(1);
-        else
-            m_fontStyleCombo->setCurrentIndex(0);
-    } else {
-        m_fontStyleCombo->setCurrentIndex(
-            findBestStyleIndex(m_fontStyleCombo, resolved.fontFamily(),
-                               resolved.fontWeight(), resolved.fontItalic()));
-    }
+    m_fontStyleCombo->setCurrentIndex(
+        findBestStyleIndex(m_fontStyleCombo, resolved.fontFamily(),
+                           resolved.fontWeight(), resolved.fontItalic()));
 
     m_sizeSpin->setValue(resolved.fontSize());
     m_underlineBtn->setChecked(false);
@@ -924,29 +853,11 @@ void StylePropertiesEditor::loadCharacterStyle(const CharacterStyle &style,
     m_parentCombo->setCurrentIndex(parentIdx >= 0 ? parentIdx : 0);
 
     // Show resolved values
-    if (m_hersheyMode) {
-        int idx = m_hersheyFontCombo->findText(resolved.fontFamily());
-        if (idx >= 0) m_hersheyFontCombo->setCurrentIndex(idx);
-    } else {
-        m_fontCombo->setCurrentFont(QFont(resolved.fontFamily()));
-    }
+    m_fontCombo->setCurrentFont(QFont(resolved.fontFamily()));
     repopulateFontStyleCombo(resolved.fontFamily());
-    if (m_hersheyMode) {
-        bool bold = resolved.fontWeight() >= QFont::Bold;
-        bool ital = resolved.fontItalic();
-        if (bold && ital)
-            m_fontStyleCombo->setCurrentIndex(3);
-        else if (ital)
-            m_fontStyleCombo->setCurrentIndex(2);
-        else if (bold)
-            m_fontStyleCombo->setCurrentIndex(1);
-        else
-            m_fontStyleCombo->setCurrentIndex(0);
-    } else {
-        m_fontStyleCombo->setCurrentIndex(
-            findBestStyleIndex(m_fontStyleCombo, resolved.fontFamily(),
-                               resolved.fontWeight(), resolved.fontItalic()));
-    }
+    m_fontStyleCombo->setCurrentIndex(
+        findBestStyleIndex(m_fontStyleCombo, resolved.fontFamily(),
+                           resolved.fontWeight(), resolved.fontItalic()));
 
     m_sizeSpin->setValue(resolved.fontSize());
     m_underlineBtn->setChecked(resolved.fontUnderline());
@@ -980,27 +891,16 @@ void StylePropertiesEditor::applyToParagraphStyle(ParagraphStyle &style) const
     if (m_explicit.fontSize)
         style.setFontSize(m_sizeSpin->value());
     if (m_explicit.fontWeight) {
-        if (m_hersheyMode) {
-            QString styleName = m_fontStyleCombo->currentText();
-            bool bold = styleName.contains(QLatin1String("Bold"));
-            style.setFontWeight(bold ? QFont::Bold : QFont::Normal);
-        } else {
-            QString family = m_fontCombo->currentFont().family();
-            QString styleName = m_fontStyleCombo->currentText();
-            QFont f = QFontDatabase::font(family, styleName, 12);
-            style.setFontWeight(static_cast<QFont::Weight>(f.weight()));
-        }
+        QString family = m_fontCombo->currentFont().family();
+        QString styleName = m_fontStyleCombo->currentText();
+        QFont f = QFontDatabase::font(family, styleName, 12);
+        style.setFontWeight(static_cast<QFont::Weight>(f.weight()));
     }
     if (m_explicit.fontItalic) {
-        if (m_hersheyMode) {
-            QString styleName = m_fontStyleCombo->currentText();
-            style.setFontItalic(styleName.contains(QLatin1String("Italic")));
-        } else {
-            QString family = m_fontCombo->currentFont().family();
-            QString styleName = m_fontStyleCombo->currentText();
-            QFont f = QFontDatabase::font(family, styleName, 12);
-            style.setFontItalic(f.italic());
-        }
+        QString family = m_fontCombo->currentFont().family();
+        QString styleName = m_fontStyleCombo->currentText();
+        QFont f = QFontDatabase::font(family, styleName, 12);
+        style.setFontItalic(f.italic());
     }
     if (m_explicit.foreground)
         style.setForeground(m_fgColorBtn->color());
@@ -1056,27 +956,16 @@ void StylePropertiesEditor::applyToCharacterStyle(CharacterStyle &style) const
     if (m_explicit.fontSize)
         style.setFontSize(m_sizeSpin->value());
     if (m_explicit.fontWeight) {
-        if (m_hersheyMode) {
-            QString styleName = m_fontStyleCombo->currentText();
-            bool bold = styleName.contains(QLatin1String("Bold"));
-            style.setFontWeight(bold ? QFont::Bold : QFont::Normal);
-        } else {
-            QString family = m_fontCombo->currentFont().family();
-            QString styleName = m_fontStyleCombo->currentText();
-            QFont f = QFontDatabase::font(family, styleName, 12);
-            style.setFontWeight(static_cast<QFont::Weight>(f.weight()));
-        }
+        QString family = m_fontCombo->currentFont().family();
+        QString styleName = m_fontStyleCombo->currentText();
+        QFont f = QFontDatabase::font(family, styleName, 12);
+        style.setFontWeight(static_cast<QFont::Weight>(f.weight()));
     }
     if (m_explicit.fontItalic) {
-        if (m_hersheyMode) {
-            QString styleName = m_fontStyleCombo->currentText();
-            style.setFontItalic(styleName.contains(QLatin1String("Italic")));
-        } else {
-            QString family = m_fontCombo->currentFont().family();
-            QString styleName = m_fontStyleCombo->currentText();
-            QFont f = QFontDatabase::font(family, styleName, 12);
-            style.setFontItalic(f.italic());
-        }
+        QString family = m_fontCombo->currentFont().family();
+        QString styleName = m_fontStyleCombo->currentText();
+        QFont f = QFontDatabase::font(family, styleName, 12);
+        style.setFontItalic(f.italic());
     }
     if (m_explicit.fontUnderline)
         style.setFontUnderline(m_underlineBtn->isChecked());
@@ -1098,26 +987,6 @@ void StylePropertiesEditor::applyToCharacterStyle(CharacterStyle &style) const
         if (m_contextAltsCheck->isChecked()) ff |= FontFeatures::ContextAlts;
         style.setFontFeatures(ff);
     }
-}
-
-void StylePropertiesEditor::setHersheyMode(bool enabled)
-{
-    if (m_hersheyMode == enabled)
-        return;
-
-    m_hersheyMode = enabled;
-    m_fontCombo->setVisible(!enabled);
-    m_hersheyFontCombo->setVisible(enabled);
-
-    if (enabled) {
-        m_hersheyFontCombo->clear();
-        HersheyFontRegistry::instance().ensureLoaded();
-        for (const QString &name : HersheyFontRegistry::instance().familyNames())
-            m_hersheyFontCombo->addItem(name);
-    }
-
-    // Hide OpenType features group in Hershey mode (not applicable)
-    m_fontFeaturesGroup->setVisible(!enabled);
 }
 
 void StylePropertiesEditor::clear()
