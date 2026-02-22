@@ -4,9 +4,7 @@
 #include "typographythemeeditordialog.h"
 #include "typographythemepickerwidget.h"
 #include "colorpalette.h"
-#include "pagelayout.h"
 #include "palettemanager.h"
-#include "stylemanager.h"
 #include "themecomposer.h"
 #include "thememanager.h"
 #include "typographytheme.h"
@@ -55,16 +53,6 @@ void ThemePickerDock::buildUI()
     layout->addStretch();
 }
 
-void ThemePickerDock::setStyleManagerProvider(std::function<StyleManager *()> provider)
-{
-    m_styleManagerProvider = std::move(provider);
-}
-
-void ThemePickerDock::setPageLayoutProvider(std::function<PageLayout()> provider)
-{
-    m_pageLayoutProvider = std::move(provider);
-}
-
 void ThemePickerDock::syncPickersFromComposer()
 {
     if (m_palettePicker && !m_themeComposer->currentPalette().id.isEmpty())
@@ -101,10 +89,8 @@ void ThemePickerDock::setCurrentColorSchemeId(const QString &id)
 
 void ThemePickerDock::composeAndNotify()
 {
-    StyleManager *sm = m_styleManagerProvider ? m_styleManagerProvider() : nullptr;
-    if (!sm || !m_themeComposer)
+    if (!m_themeComposer)
         return;
-    m_themeComposer->compose(sm);
     Q_EMIT compositionApplied();
 }
 

@@ -314,14 +314,6 @@ void MainWindow::setupSidebars()
     m_pageLayoutTabId = m_rightSidebar->addPanel(
         pageView, QIcon::fromTheme(QStringLiteral("document-properties")), i18n("Page"));
 
-    // Wire providers from other docks to the theme picker
-    m_themePickerDock->setStyleManagerProvider([this]() {
-        return m_styleDockWidget->currentStyleManager();
-    });
-    m_themePickerDock->setPageLayoutProvider([this]() {
-        return m_pageLayoutWidget->currentPageLayout();
-    });
-
     // Wire signals
     connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
             this, &MainWindow::onCompositionApplied);

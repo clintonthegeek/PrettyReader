@@ -2,16 +2,13 @@
 #define PRETTYREADER_THEMEPICKERDOCK_H
 
 #include <QWidget>
-#include <functional>
 
 class PaletteManager;
 class PalettePickerWidget;
-class StyleManager;
 class ThemeComposer;
 class ThemeManager;
 class TypographyThemeManager;
 class TypographyThemePickerWidget;
-struct PageLayout;
 
 class ThemePickerDock : public QWidget
 {
@@ -23,10 +20,6 @@ public:
                              TypographyThemeManager *typographyThemeManager,
                              ThemeComposer *themeComposer,
                              QWidget *parent = nullptr);
-
-    // Provider callbacks for data this dock doesn't own
-    void setStyleManagerProvider(std::function<StyleManager *()> provider);
-    void setPageLayoutProvider(std::function<PageLayout()> provider);
 
     // Sync picker highlights from composer state
     void syncPickersFromComposer();
@@ -54,9 +47,6 @@ private:
     PaletteManager *m_paletteManager;
     TypographyThemeManager *m_typographyThemeManager;
     ThemeComposer *m_themeComposer;
-    std::function<StyleManager *()> m_styleManagerProvider;
-    std::function<PageLayout()> m_pageLayoutProvider;
-
     // Pickers
     TypographyThemePickerWidget *m_typographyPicker = nullptr;
     PalettePickerWidget *m_palettePicker = nullptr;
