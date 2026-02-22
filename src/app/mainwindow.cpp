@@ -26,6 +26,9 @@
 #include "printcontroller.h"
 #include "stylemanager.h"
 #include "styledockwidget.h"
+#include "fontpairingmanager.h"
+#include "palettemanager.h"
+#include "themecomposer.h"
 #include "thememanager.h"
 #include "footnotestyle.h"
 #include "preferencesdialog.h"
@@ -106,6 +109,9 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     m_themeManager = new ThemeManager(this);
+    m_paletteManager = new PaletteManager(this);
+    m_pairingManager = new FontPairingManager(this);
+    m_themeComposer = new ThemeComposer(m_themeManager, this);
     m_metadataStore = new MetadataStore(this);
 
     // Typography engines
@@ -275,7 +281,8 @@ void MainWindow::setupSidebars()
     // Right sidebar: Style panel + Page Layout panel
     m_rightSidebar = new Sidebar(Sidebar::Right, this);
 
-    m_styleDockWidget = new StyleDockWidget(m_themeManager, this);
+    m_styleDockWidget = new StyleDockWidget(m_themeManager, m_paletteManager,
+                                               m_pairingManager, m_themeComposer, this);
     auto *styleView = new ToolView(i18n("Style"), m_styleDockWidget);
     m_styleTabId = m_rightSidebar->addPanel(
         styleView, QIcon::fromTheme(QStringLiteral("preferences-desktop-font")), i18n("Style"));

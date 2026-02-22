@@ -9,11 +9,16 @@ class QComboBox;
 class QPushButton;
 class QStackedWidget;
 class QTreeView;
+class FontPairingManager;
+class FontPairingPickerWidget;
 class FootnoteConfigWidget;
+class PaletteManager;
+class PalettePickerWidget;
 class StyleManager;
 class StylePropertiesEditor;
 class StyleTreeModel;
 class TableStylePropertiesEditor;
+class ThemeComposer;
 class ThemeManager;
 struct PageLayout;
 
@@ -23,6 +28,9 @@ class StyleDockWidget : public QWidget
 
 public:
     explicit StyleDockWidget(ThemeManager *themeManager,
+                             PaletteManager *paletteManager,
+                             FontPairingManager *pairingManager,
+                             ThemeComposer *themeComposer,
                              QWidget *parent = nullptr);
 
     QString currentThemeId() const;
@@ -58,6 +66,9 @@ private:
     void loadSelectedTableStyle();
 
     ThemeManager *m_themeManager;
+    PaletteManager *m_paletteManager;
+    FontPairingManager *m_pairingManager;
+    ThemeComposer *m_themeComposer;
     StyleManager *m_editingStyles = nullptr;
     std::function<PageLayout()> m_pageLayoutProvider;
 
@@ -66,6 +77,10 @@ private:
     QPushButton *m_newBtn = nullptr;
     QPushButton *m_saveBtn = nullptr;
     QPushButton *m_deleteBtn = nullptr;
+
+    // Palette & font pairing pickers
+    PalettePickerWidget *m_palettePicker = nullptr;
+    FontPairingPickerWidget *m_pairingPicker = nullptr;
 
     // Style tree + editor
     QCheckBox *m_showPreviewsCheck = nullptr;

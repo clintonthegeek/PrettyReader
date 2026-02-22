@@ -1,13 +1,20 @@
 #include "styledockwidget.h"
+#include "fontpairingpickerwidget.h"
 #include "footnoteconfigwidget.h"
+#include "palettepickerwidget.h"
 #include "stylepropertieseditor.h"
 #include "tablestylepropertieseditor.h"
 #include "styletreemodel.h"
 #include "characterstyle.h"
+#include "colorpalette.h"
+#include "fontpairing.h"
+#include "fontpairingmanager.h"
 #include "pagelayout.h"
+#include "palettemanager.h"
 #include "paragraphstyle.h"
 #include "stylemanager.h"
 #include "tablestyle.h"
+#include "themecomposer.h"
 #include "thememanager.h"
 
 #include <QCheckBox>
@@ -24,9 +31,16 @@
 #include <QTreeView>
 #include <QVBoxLayout>
 
-StyleDockWidget::StyleDockWidget(ThemeManager *themeManager, QWidget *parent)
+StyleDockWidget::StyleDockWidget(ThemeManager *themeManager,
+                                 PaletteManager *paletteManager,
+                                 FontPairingManager *pairingManager,
+                                 ThemeComposer *themeComposer,
+                                 QWidget *parent)
     : QWidget(parent)
     , m_themeManager(themeManager)
+    , m_paletteManager(paletteManager)
+    , m_pairingManager(pairingManager)
+    , m_themeComposer(themeComposer)
 {
     buildUI();
 
@@ -72,6 +86,40 @@ void StyleDockWidget::buildUI()
     connect(m_newBtn, &QPushButton::clicked, this, &StyleDockWidget::onNewTheme);
     connect(m_saveBtn, &QPushButton::clicked, this, &StyleDockWidget::onSaveTheme);
     connect(m_deleteBtn, &QPushButton::clicked, this, &StyleDockWidget::onDeleteTheme);
+
+    // --- Color Palette Picker ---
+    m_palettePicker = new PalettePickerWidget(m_paletteManager, this);
+    layout->addWidget(m_palettePicker);
+
+    connect(m_palettePicker, &PalettePickerWidget::paletteSelected,
+            this, [this](const QString &id) {
+        if (!m_paletteManager || !m_themeComposer || !m_editingStyles)
+            return;
+        ColorPalette palette = m_paletteManager->palette(id);
+        m_themeComposer->setColorPalette(palette);
+        m_themeComposer->compose(m_editingStyles);
+        m_treeModel->setStyleManager(m_editingStyles);
+        if (m_showPreviewsCheck->isChecked())
+            m_treeModel->refresh();
+        Q_EMIT styleOverrideChanged();
+    });
+
+    // --- Font Pairing Picker ---
+    m_pairingPicker = new FontPairingPickerWidget(m_pairingManager, this);
+    layout->addWidget(m_pairingPicker);
+
+    connect(m_pairingPicker, &FontPairingPickerWidget::pairingSelected,
+            this, [this](const QString &id) {
+        if (!m_pairingManager || !m_themeComposer || !m_editingStyles)
+            return;
+        FontPairing pairing = m_pairingManager->pairing(id);
+        m_themeComposer->setFontPairing(pairing);
+        m_themeComposer->compose(m_editingStyles);
+        m_treeModel->setStyleManager(m_editingStyles);
+        if (m_showPreviewsCheck->isChecked())
+            m_treeModel->refresh();
+        Q_EMIT styleOverrideChanged();
+    });
 
     // --- Style Tree (stretches to fill available space) ---
     m_showPreviewsCheck = new QCheckBox(tr("Show previews"));
@@ -166,6 +214,17 @@ void StyleDockWidget::populateFromStyleManager(StyleManager *sm)
 
     // Pre-load footnote style so it's ready when selected
     m_footnoteConfig->loadFootnoteStyle(m_editingStyles->footnoteStyle());
+
+    // Update picker highlights from the current composer state
+    if (m_themeComposer) {
+        const ColorPalette &palette = m_themeComposer->currentPalette();
+        if (!palette.id.isEmpty() && m_palettePicker)
+            m_palettePicker->setCurrentPaletteId(palette.id);
+
+        const FontPairing &pairing = m_themeComposer->currentPairing();
+        if (!pairing.id.isEmpty() && m_pairingPicker)
+            m_pairingPicker->setCurrentPairingId(pairing.id);
+    }
 
     // Update delete button state
     m_deleteBtn->setEnabled(!m_themeManager->isBuiltinTheme(currentThemeId()));
