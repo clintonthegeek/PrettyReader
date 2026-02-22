@@ -926,8 +926,11 @@ void MainWindow::onFileClose()
 
 void MainWindow::onCompositionApplied()
 {
-    // ThemePickerDock already called compose() on the editing styles
-    m_styleDockWidget->refreshTreeModel();
+    // Compose a fresh StyleManager and seed the style dock with it
+    auto *sm = new StyleManager(this);
+    m_themeComposer->compose(sm);
+    m_styleDockWidget->populateFromStyleManager(sm);
+    delete sm;
 
     // Pick up page layout from theme manager (applyStyleOverrides may have set it)
     PageLayout pl = m_themeManager->themePageLayout();
