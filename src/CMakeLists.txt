@@ -84,6 +84,8 @@ add_library(PrettyReaderCore STATIC
     pdf/pdfwriter.h
     pdf/pdfgenerator.cpp
     pdf/pdfgenerator.h
+    pdf/pdfboxrenderer.cpp
+    pdf/pdfboxrenderer.h
     # Rendering base class
     render/boxtreerenderer.cpp
     render/boxtreerenderer.h
