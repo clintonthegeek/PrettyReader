@@ -525,6 +525,13 @@ void DocumentView::setPageLayout(const PageLayout &layout)
     m_pageSize = layout.pageSizePoints();
     m_marginsPoints = layout.marginsPoints();
 
+    // Update web view backgrounds when palette changes
+    if (m_renderMode == WebMode) {
+        setBackgroundBrush(QBrush(m_pageLayout.pageBackground));
+        if (m_webViewItem)
+            m_webViewItem->setPageBackground(m_pageLayout.pageBackground);
+    }
+
     if (m_pdfMode) {
         layoutPages();
     } else if (m_document) {
