@@ -993,38 +993,52 @@ void DocumentView::applyLanguageOverrides(Content::Document &doc) const
 
 int DocumentView::codeBlockIndexAtScenePos(const QPointF &scenePos) const
 {
-    if (!m_pdfMode || m_codeBlockRegions.isEmpty() || m_contentDoc.blocks.isEmpty())
+    if (m_codeBlockRegions.isEmpty() || m_contentDoc.blocks.isEmpty())
         return -1;
 
-    // Find which page/local-coords the click is on
-    for (auto *pageItem : m_pdfPageItems) {
-        QRectF itemRect = QRectF(0, 0, pageItem->pageSize().width(),
-                                  pageItem->pageSize().height())
-                              .translated(pageItem->pos());
-        if (!itemRect.contains(scenePos))
+    // Determine local coordinates depending on render mode
+    QPointF localPos;
+    int pageNum = 0;
+
+    if (m_pdfMode) {
+        // Print view: find which page was clicked
+        bool found = false;
+        for (auto *pageItem : m_pdfPageItems) {
+            QRectF itemRect = QRectF(0, 0, pageItem->pageSize().width(),
+                                      pageItem->pageSize().height())
+                                  .translated(pageItem->pos());
+            if (itemRect.contains(scenePos)) {
+                pageNum = pageItem->pageNumber();
+                localPos = scenePos - pageItem->pos();
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return -1;
+    } else if (m_webViewItem) {
+        // Web view: single continuous item, page 0
+        localPos = scenePos - m_webViewItem->pos();
+    } else {
+        return -1;
+    }
+
+    // Check code block hit regions (provided by layout engine)
+    for (const auto &region : m_codeBlockRegions) {
+        if (region.pageNumber != pageNum)
+            continue;
+        if (!region.rect.contains(localPos))
             continue;
 
-        int pageNum = pageItem->pageNumber();
-        QPointF localPos = scenePos - pageItem->pos();
-
-        // Check code block hit regions (provided by layout engine)
-        for (const auto &region : m_codeBlockRegions) {
-            if (region.pageNumber != pageNum)
-                continue;
-            if (!region.rect.contains(localPos))
-                continue;
-
-            // Find matching CodeBlock in content doc by source line range
-            for (int i = 0; i < m_contentDoc.blocks.size(); ++i) {
-                if (auto *cb = std::get_if<Content::CodeBlock>(&m_contentDoc.blocks[i])) {
-                    if (cb->source.startLine == region.startLine
-                        && cb->source.endLine == region.endLine) {
-                        return i;
-                    }
+        // Find matching CodeBlock in content doc by source line range
+        for (int i = 0; i < m_contentDoc.blocks.size(); ++i) {
+            if (auto *cb = std::get_if<Content::CodeBlock>(&m_contentDoc.blocks[i])) {
+                if (cb->source.startLine == region.startLine
+                    && cb->source.endLine == region.endLine) {
+                    return i;
                 }
             }
         }
-        break;
     }
     return -1;
 }

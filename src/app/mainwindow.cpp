@@ -1171,6 +1171,8 @@ void MainWindow::rebuildCurrentDocument()
 
             view->setWebFontManager(m_fontManager);
             view->setHeadingPositions(headingPositions);
+            view->setSourceData(contentBuilder.processedMarkdown(), webResult.sourceMap,
+                                contentDoc, webResult.codeBlockRegions);
             view->setWebContent(std::move(webResult));
             view->setRenderMode(DocumentView::WebMode);
             view->restoreViewState(state);
