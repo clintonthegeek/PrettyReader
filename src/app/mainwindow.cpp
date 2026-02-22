@@ -5,6 +5,7 @@
 #include <KLocalizedString>
 #include <KRecentFilesAction>
 #include <KStandardAction>
+#include <KToolBar>
 #include <KConfigGroup>
 #include <KSharedConfig>
 
@@ -305,7 +306,7 @@ void MainWindow::setupActions()
 
     // File > Open
     auto *openAction = KStandardAction::open(this, &MainWindow::onFileOpen, ac);
-    Q_UNUSED(openAction);
+    openAction->setPriority(QAction::LowPriority);
 
     // File > Open Recent
     m_recentFilesAction = KStandardAction::openRecent(
@@ -328,15 +329,17 @@ void MainWindow::setupActions()
 
     // File > Print
     auto *printAction = KStandardAction::print(this, &MainWindow::onFilePrint, ac);
-    Q_UNUSED(printAction);
+    printAction->setPriority(QAction::LowPriority);
 
     // File > Close
     auto *closeAction = KStandardAction::close(this, &MainWindow::onFileClose, ac);
     Q_UNUSED(closeAction);
 
     // View > Zoom
-    KStandardAction::zoomIn(this, &MainWindow::onZoomIn, ac);
-    KStandardAction::zoomOut(this, &MainWindow::onZoomOut, ac);
+    auto *zoomInAction = KStandardAction::zoomIn(this, &MainWindow::onZoomIn, ac);
+    zoomInAction->setPriority(QAction::LowPriority);
+    auto *zoomOutAction = KStandardAction::zoomOut(this, &MainWindow::onZoomOut, ac);
+    zoomOutAction->setPriority(QAction::LowPriority);
 
     auto *fitWidth = ac->addAction(QStringLiteral("view_zoom_fit_width"));
     fitWidth->setText(i18n("Fit &Width"));
@@ -382,6 +385,7 @@ void MainWindow::setupActions()
 
     auto *continuous = ac->addAction(QStringLiteral("view_continuous"));
     continuous->setText(i18n("&Continuous Scroll"));
+    continuous->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-continuous")));
     continuous->setCheckable(true);
     continuous->setChecked(true);
     continuous->setActionGroup(viewModeGroup);
@@ -393,6 +397,7 @@ void MainWindow::setupActions()
 
     auto *singlePage = ac->addAction(QStringLiteral("view_single_page"));
     singlePage->setText(i18n("&Single Page"));
+    singlePage->setIcon(QIcon::fromTheme(QStringLiteral("view-paged-symbolic")));
     singlePage->setCheckable(true);
     singlePage->setActionGroup(viewModeGroup);
     connect(singlePage, &QAction::triggered, this, [this]() {
@@ -403,6 +408,7 @@ void MainWindow::setupActions()
 
     auto *facingPages = ac->addAction(QStringLiteral("view_facing_pages"));
     facingPages->setText(i18n("&Facing Pages"));
+    facingPages->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing")));
     facingPages->setCheckable(true);
     facingPages->setActionGroup(viewModeGroup);
     connect(facingPages, &QAction::triggered, this, [this]() {
@@ -413,6 +419,7 @@ void MainWindow::setupActions()
 
     auto *facingFirstAlone = ac->addAction(QStringLiteral("view_facing_first_alone"));
     facingFirstAlone->setText(i18n("Facing Pages (First &Alone)"));
+    facingFirstAlone->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing-first-centered")));
     facingFirstAlone->setCheckable(true);
     facingFirstAlone->setActionGroup(viewModeGroup);
     connect(facingFirstAlone, &QAction::triggered, this, [this]() {
@@ -423,6 +430,7 @@ void MainWindow::setupActions()
 
     auto *continuousFacing = ac->addAction(QStringLiteral("view_continuous_facing"));
     continuousFacing->setText(i18n("Continuous F&acing"));
+    continuousFacing->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing-symbolic")));
     continuousFacing->setCheckable(true);
     continuousFacing->setActionGroup(viewModeGroup);
     connect(continuousFacing, &QAction::triggered, this, [this]() {
@@ -433,6 +441,7 @@ void MainWindow::setupActions()
 
     auto *continuousFacingFirstAlone = ac->addAction(QStringLiteral("view_continuous_facing_first_alone"));
     continuousFacingFirstAlone->setText(i18n("Continuous Facing (First A&lone)"));
+    continuousFacingFirstAlone->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing-first-centered")));
     continuousFacingFirstAlone->setCheckable(true);
     continuousFacingFirstAlone->setActionGroup(viewModeGroup);
     connect(continuousFacingFirstAlone, &QAction::triggered, this, [this]() {
@@ -458,6 +467,7 @@ void MainWindow::setupActions()
     auto *prevPage = ac->addAction(QStringLiteral("go_previous_page"));
     prevPage->setText(i18n("&Previous Page"));
     prevPage->setIcon(QIcon::fromTheme(QStringLiteral("go-previous")));
+    prevPage->setPriority(QAction::LowPriority);
     ac->setDefaultShortcut(prevPage, QKeySequence(Qt::Key_PageUp));
     connect(prevPage, &QAction::triggered, this, [this]() {
         auto *view = currentDocumentView();
@@ -468,6 +478,7 @@ void MainWindow::setupActions()
     auto *nextPage = ac->addAction(QStringLiteral("go_next_page"));
     nextPage->setText(i18n("&Next Page"));
     nextPage->setIcon(QIcon::fromTheme(QStringLiteral("go-next")));
+    nextPage->setPriority(QAction::LowPriority);
     ac->setDefaultShortcut(nextPage, QKeySequence(Qt::Key_PageDown));
     connect(nextPage, &QAction::triggered, this, [this]() {
         auto *view = currentDocumentView();
@@ -597,6 +608,9 @@ void MainWindow::setupActions()
     });
 
     setupGUI(Default, QStringLiteral("prettyreaderui.rc"));
+
+    // Show text labels by default; LowPriority actions get icon-only
+    toolBar()->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 }
 
 void MainWindow::onFileOpen()

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="prettyreader" version="9">
+<gui name="prettyreader" version="10">
 
   <MenuBar>
     <Menu name="file">
@@ -87,8 +87,8 @@
     <Action name="tool_hand"/>
     <Action name="tool_selection"/>
     <Separator/>
-    <Action name="file_export_pdf"/>
     <Action name="file_print"/>
+    <Action name="file_export_pdf"/>
   </ToolBar>
 
 </gui>
