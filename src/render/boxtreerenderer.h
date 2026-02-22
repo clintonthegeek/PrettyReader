@@ -46,7 +46,7 @@ class BoxTreeRenderer
 public:
     virtual ~BoxTreeRenderer();
 
-    // --- Traversal (populated in Task 2) ---
+    // --- Traversal (shared box tree walk calling virtual primitives) ---
 
     virtual void renderElement(const Layout::PageElement &element);
     virtual void renderBlockBox(const Layout::BlockBox &box);
