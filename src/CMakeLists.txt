@@ -46,6 +46,12 @@ add_library(PrettyReaderCore STATIC
     style/stylemanager.h
     style/styletreemodel.cpp
     style/styletreemodel.h
+    style/colorpalette.cpp
+    style/colorpalette.h
+    style/fontpairing.cpp
+    style/fontpairing.h
+    style/fontdegradationmap.cpp
+    style/fontdegradationmap.h
     style/thememanager.cpp
     style/thememanager.h
     typography/hyphenator.cpp
