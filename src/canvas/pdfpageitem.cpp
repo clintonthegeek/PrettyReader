@@ -40,14 +40,14 @@ void PdfPageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     painter->setBrush(QColor(0, 0, 0, 50));
     painter->drawRect(pageRect.translated(4, 4));
 
-    // White page background
-    painter->setBrush(Qt::white);
+    // Page background
+    painter->setBrush(m_pageBackground);
     painter->setPen(QPen(QColor(0xcc, 0xcc, 0xcc), 0.5));
     painter->drawRect(pageRect);
 
     // Render from cache
-    int renderWidth = static_cast<int>(m_pageSize.width() * m_zoom);
-    int renderHeight = static_cast<int>(m_pageSize.height() * m_zoom);
+    int renderWidth = qRound(m_pageSize.width() * m_zoom);
+    int renderHeight = qRound(m_pageSize.height() * m_zoom);
 
     QImage img = m_cache->cachedPixmap(m_pageNumber, renderWidth, renderHeight);
     if (!img.isNull()) {

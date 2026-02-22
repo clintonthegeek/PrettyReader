@@ -1,0 +1,22 @@
+{
+    "id": "dracula",
+    "name": "Dracula",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Popular dark theme by Zeno Rocha",
+    "colors": {
+        "text": "#f8f8f2",
+        "headingText": "#bd93f9",
+        "blockquoteText": "#6272a4",
+        "linkText": "#8be9fd",
+        "codeText": "#ff79c6",
+        "surfaceCode": "#44475a",
+        "surfaceInlineCode": "#44475a",
+        "surfaceTableHeader": "#44475a",
+        "surfaceTableAlt": "#383a4a",
+        "pageBackground": "#282a36",
+        "borderOuter": "#6272a4",
+        "borderInner": "#44475a",
+        "borderHeaderBottom": "#6272a4"
+    }
+}

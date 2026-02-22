@@ -4,34 +4,23 @@
 #include "tablestylepropertieseditor.h"
 #include "styletreemodel.h"
 #include "characterstyle.h"
-#include "pagelayout.h"
 #include "paragraphstyle.h"
 #include "stylemanager.h"
 #include "tablestyle.h"
-#include "thememanager.h"
 
 #include <QCheckBox>
-#include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QInputDialog>
 #include <QLabel>
-#include <QMessageBox>
-#include <QPushButton>
 #include <QScrollArea>
 #include <QStackedWidget>
-#include <QTimer>
 #include <QTreeView>
 #include <QVBoxLayout>
 
-StyleDockWidget::StyleDockWidget(ThemeManager *themeManager, QWidget *parent)
+StyleDockWidget::StyleDockWidget(QWidget *parent)
     : QWidget(parent)
-    , m_themeManager(themeManager)
 {
     buildUI();
-
-    connect(m_themeManager, &ThemeManager::themesChanged,
-            this, &StyleDockWidget::onThemesChanged);
 }
 
 void StyleDockWidget::buildUI()
@@ -39,39 +28,6 @@ void StyleDockWidget::buildUI()
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
-
-    // --- Theme section ---
-    auto *themeLabel = new QLabel(tr("Theme"));
-    themeLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
-    layout->addWidget(themeLabel);
-
-    auto *themeRow = new QHBoxLayout;
-    m_themeCombo = new QComboBox;
-    const QStringList themes = m_themeManager->availableThemes();
-    for (const QString &id : themes) {
-        m_themeCombo->addItem(m_themeManager->themeName(id), id);
-    }
-    themeRow->addWidget(m_themeCombo, 1);
-
-    m_newBtn = new QPushButton(tr("New"));
-    m_newBtn->setFixedWidth(50);
-    themeRow->addWidget(m_newBtn);
-
-    m_saveBtn = new QPushButton(tr("Save"));
-    m_saveBtn->setFixedWidth(50);
-    themeRow->addWidget(m_saveBtn);
-
-    m_deleteBtn = new QPushButton(tr("Del"));
-    m_deleteBtn->setFixedWidth(40);
-    themeRow->addWidget(m_deleteBtn);
-
-    layout->addLayout(themeRow);
-
-    connect(m_themeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &StyleDockWidget::onThemeComboChanged);
-    connect(m_newBtn, &QPushButton::clicked, this, &StyleDockWidget::onNewTheme);
-    connect(m_saveBtn, &QPushButton::clicked, this, &StyleDockWidget::onSaveTheme);
-    connect(m_deleteBtn, &QPushButton::clicked, this, &StyleDockWidget::onDeleteTheme);
 
     // --- Style Tree (stretches to fill available space) ---
     m_showPreviewsCheck = new QCheckBox(tr("Show previews"));
@@ -121,29 +77,9 @@ void StyleDockWidget::buildUI()
             this, &StyleDockWidget::onFootnoteStyleChanged);
 }
 
-QString StyleDockWidget::currentThemeId() const
-{
-    return m_themeCombo->currentData().toString();
-}
-
-void StyleDockWidget::setCurrentThemeId(const QString &id)
-{
-    for (int i = 0; i < m_themeCombo->count(); ++i) {
-        if (m_themeCombo->itemData(i).toString() == id) {
-            m_themeCombo->setCurrentIndex(i);
-            return;
-        }
-    }
-}
-
 StyleManager *StyleDockWidget::currentStyleManager() const
 {
     return m_editingStyles;
-}
-
-void StyleDockWidget::setPageLayoutProvider(std::function<PageLayout()> provider)
-{
-    m_pageLayoutProvider = std::move(provider);
 }
 
 void StyleDockWidget::populateFromStyleManager(StyleManager *sm)
@@ -166,15 +102,15 @@ void StyleDockWidget::populateFromStyleManager(StyleManager *sm)
 
     // Pre-load footnote style so it's ready when selected
     m_footnoteConfig->loadFootnoteStyle(m_editingStyles->footnoteStyle());
-
-    // Update delete button state
-    m_deleteBtn->setEnabled(!m_themeManager->isBuiltinTheme(currentThemeId()));
 }
 
-void StyleDockWidget::onThemeComboChanged(int index)
+void StyleDockWidget::refreshTreeModel()
 {
-    Q_UNUSED(index);
-    Q_EMIT themeChanged(currentThemeId());
+    if (!m_editingStyles)
+        return;
+    m_treeModel->setStyleManager(m_editingStyles);
+    if (m_showPreviewsCheck->isChecked())
+        m_treeModel->refresh();
 }
 
 void StyleDockWidget::onTreeSelectionChanged()
@@ -259,87 +195,6 @@ void StyleDockWidget::onStylePropertyChanged()
         m_treeModel->refresh();
 
     Q_EMIT styleOverrideChanged();
-}
-
-void StyleDockWidget::onNewTheme()
-{
-    bool ok;
-    QString name = QInputDialog::getText(this, tr("New Theme"),
-                                          tr("Theme name:"), QLineEdit::Normal,
-                                          QString(), &ok);
-    if (!ok || name.isEmpty())
-        return;
-
-    if (!m_editingStyles)
-        return;
-
-    PageLayout pl = m_pageLayoutProvider ? m_pageLayoutProvider() : PageLayout{};
-    QString id = m_themeManager->saveTheme(name, m_editingStyles, pl);
-    if (!id.isEmpty()) {
-        QTimer::singleShot(0, this, [this, id]() {
-            setCurrentThemeId(id);
-        });
-    }
-}
-
-void StyleDockWidget::onSaveTheme()
-{
-    if (!m_editingStyles)
-        return;
-
-    QString themeId = currentThemeId();
-    PageLayout pl = m_pageLayoutProvider ? m_pageLayoutProvider() : PageLayout{};
-    if (m_themeManager->isBuiltinTheme(themeId)) {
-        bool ok;
-        QString name = QInputDialog::getText(this, tr("Save Theme As"),
-                                              tr("New theme name:"), QLineEdit::Normal,
-                                              m_themeManager->themeName(themeId) + tr(" (copy)"),
-                                              &ok);
-        if (!ok || name.isEmpty())
-            return;
-        QString id = m_themeManager->saveTheme(name, m_editingStyles, pl);
-        if (!id.isEmpty()) {
-            QTimer::singleShot(0, this, [this, id]() {
-                setCurrentThemeId(id);
-            });
-        }
-    } else {
-        m_themeManager->saveThemeAs(themeId, m_editingStyles, pl);
-    }
-}
-
-void StyleDockWidget::onDeleteTheme()
-{
-    QString themeId = currentThemeId();
-    if (m_themeManager->isBuiltinTheme(themeId))
-        return;
-
-    int ret = QMessageBox::question(this, tr("Delete Theme"),
-                                     tr("Delete theme \"%1\"?")
-                                         .arg(m_themeManager->themeName(themeId)));
-    if (ret == QMessageBox::Yes) {
-        m_themeManager->deleteTheme(themeId);
-    }
-}
-
-void StyleDockWidget::onThemesChanged()
-{
-    // Refresh theme combo
-    const QSignalBlocker blocker(m_themeCombo);
-    QString currentId = currentThemeId();
-    m_themeCombo->clear();
-
-    const QStringList themes = m_themeManager->availableThemes();
-    for (const QString &id : themes) {
-        m_themeCombo->addItem(m_themeManager->themeName(id), id);
-    }
-
-    // Restore selection
-    setCurrentThemeId(currentId);
-    if (m_themeCombo->currentIndex() < 0 && m_themeCombo->count() > 0)
-        m_themeCombo->setCurrentIndex(0);
-
-    m_deleteBtn->setEnabled(!m_themeManager->isBuiltinTheme(currentThemeId()));
 }
 
 void StyleDockWidget::loadSelectedTableStyle()

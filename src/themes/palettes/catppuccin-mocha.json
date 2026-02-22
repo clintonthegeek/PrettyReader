@@ -1,0 +1,22 @@
+{
+    "id": "catppuccin-mocha",
+    "name": "Catppuccin Mocha",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Soothing pastel dark theme for the high-spirited",
+    "colors": {
+        "text": "#CDD6F4",
+        "headingText": "#CBA6F7",
+        "blockquoteText": "#A6E3A1",
+        "linkText": "#89B4FA",
+        "codeText": "#94E2D5",
+        "surfaceCode": "#313244",
+        "surfaceInlineCode": "#45475A",
+        "surfaceTableHeader": "#585B70",
+        "surfaceTableAlt": "#26263D",
+        "pageBackground": "#1E1E2E",
+        "borderOuter": "#6C7086",
+        "borderInner": "#45475A",
+        "borderHeaderBottom": "#CBA6F7"
+    }
+}

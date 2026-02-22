@@ -23,12 +23,21 @@ add_library(PrettyReaderCore STATIC
     canvas/pdfpageitem.h
     canvas/rendercache.cpp
     canvas/rendercache.h
+    canvas/qtboxrenderer.cpp
+    canvas/qtboxrenderer.h
+    canvas/webviewitem.cpp
+    canvas/webviewitem.h
     print/headerfooterrenderer.cpp
     print/headerfooterrenderer.h
     print/printcontroller.cpp
     print/printcontroller.h
+    style/pagelayout.cpp
     style/pagelayout.h
     style/masterpage.h
+    style/pagetemplate.cpp
+    style/pagetemplate.h
+    style/pagetemplatemanager.cpp
+    style/pagetemplatemanager.h
     style/fontfeatures.h
     style/paragraphstyle.cpp
     style/paragraphstyle.h
@@ -42,8 +51,20 @@ add_library(PrettyReaderCore STATIC
     style/stylemanager.h
     style/styletreemodel.cpp
     style/styletreemodel.h
+    style/colorpalette.cpp
+    style/colorpalette.h
+    style/fontdegradationmap.cpp
+    style/fontdegradationmap.h
     style/thememanager.cpp
     style/thememanager.h
+    style/themecomposer.cpp
+    style/themecomposer.h
+    style/palettemanager.cpp
+    style/palettemanager.h
+    style/typeset.cpp
+    style/typeset.h
+    style/typesetmanager.cpp
+    style/typesetmanager.h
     typography/hyphenator.cpp
     typography/hyphenator.h
     typography/shortwords.cpp
@@ -57,18 +78,32 @@ add_library(PrettyReaderCore STATIC
     model/contentbuilder.cpp
     model/contentbuilder.h
     model/contentmodel.h
+    model/pdfexportoptions.h
+    model/pagerangeparser.cpp
+    model/pagerangeparser.h
+    model/contentfilter.cpp
+    model/contentfilter.h
     font/fontmanager.cpp
     font/fontmanager.h
     font/textshaper.cpp
     font/textshaper.h
     font/sfnt.cpp
     font/sfnt.h
+    font/hersheyfont.cpp
+    font/hersheyfont.h
     layout/layoutengine.cpp
     layout/layoutengine.h
+    layout/linebreaker.cpp
+    layout/linebreaker.h
     pdf/pdfwriter.cpp
     pdf/pdfwriter.h
     pdf/pdfgenerator.cpp
     pdf/pdfgenerator.h
+    pdf/pdfboxrenderer.cpp
+    pdf/pdfboxrenderer.h
+    # Rendering base class
+    render/boxtreerenderer.cpp
+    render/boxtreerenderer.h
     # Widgets
     widgets/pagelayoutwidget.cpp
     widgets/pagelayoutwidget.h
@@ -94,8 +129,22 @@ add_library(PrettyReaderCore STATIC
     widgets/filebrowserdock.h
     widgets/tocwidget.cpp
     widgets/tocwidget.h
+    widgets/pdfexportdialog.cpp
+    widgets/pdfexportdialog.h
     widgets/documenttab.cpp
     widgets/documenttab.h
+    widgets/palettepickerwidget.cpp
+    widgets/palettepickerwidget.h
+    widgets/paletteeditordialog.cpp
+    widgets/paletteeditordialog.h
+    widgets/pagetemplatepickerwidget.cpp
+    widgets/pagetemplatepickerwidget.h
+    widgets/typesetpickerwidget.cpp
+    widgets/typesetpickerwidget.h
+    widgets/typeseteditordialog.cpp
+    widgets/typeseteditordialog.h
+    widgets/themepickerdock.cpp
+    widgets/themepickerdock.h
 )
 
 target_include_directories(PrettyReaderCore
@@ -114,6 +163,7 @@ target_include_directories(PrettyReaderCore
         ${CMAKE_CURRENT_SOURCE_DIR}/font
         ${CMAKE_CURRENT_SOURCE_DIR}/layout
         ${CMAKE_CURRENT_SOURCE_DIR}/pdf
+        ${CMAKE_CURRENT_SOURCE_DIR}/render
         ${CMAKE_CURRENT_BINARY_DIR}
 )
 
@@ -132,6 +182,67 @@ qt_add_resources(PrettyReaderCore "themes"
     FILES
         themes/default.json
         themes/academic.json
+        themes/hershey.json
+)
+
+# Bundle color palette JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "palettes"
+    PREFIX "/palettes"
+    BASE themes/palettes
+    FILES
+        themes/palettes/default-light.json
+        themes/palettes/academic-light.json
+        themes/palettes/hershey-ink.json
+        themes/palettes/solarized-light.json
+        themes/palettes/solarized-dark.json
+        themes/palettes/dracula.json
+        themes/palettes/nord.json
+        themes/palettes/catppuccin-mocha.json
+        themes/palettes/catppuccin-latte.json
+        themes/palettes/gruvbox-dark.json
+        themes/palettes/gruvbox-light.json
+        themes/palettes/tokyo-night.json
+        themes/palettes/rose-pine.json
+        themes/palettes/rose-pine-dawn.json
+        themes/palettes/one-dark.json
+        themes/palettes/one-light.json
+        themes/palettes/everforest-dark.json
+        themes/palettes/everforest-light.json
+        themes/palettes/flexoki-dark.json
+        themes/palettes/flexoki-light.json
+        themes/palettes/github-light.json
+)
+
+# Bundle page template JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "templates"
+    PREFIX "/templates"
+    BASE themes/templates
+    FILES
+        themes/templates/default.json
+        themes/templates/academic.json
+        themes/templates/minimal.json
+)
+
+# Bundle type set JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "typesets"
+    PREFIX "/typesets"
+    BASE themes/typesets
+    FILES
+        themes/typesets/default.json
+        themes/typesets/academic.json
+        themes/typesets/hershey.json
+        themes/typesets/georgia-trebuchet-courier.json
+        themes/typesets/georgia-inter-jetbrains.json
+        themes/typesets/noto-source-family.json
+        themes/typesets/ubuntu-family.json
+        themes/typesets/fira-family.json
+        themes/typesets/liberation-serif-sans-mono.json
+        themes/typesets/dejavu-family.json
+        themes/typesets/typewriter.json
+        themes/typesets/sans-forward.json
+        themes/typesets/serif-scholar.json
+        themes/typesets/inverted-contrast.json
+        themes/typesets/libertine-biolinum-hack.json
 )
 
 # Bundle hyphenation dictionaries as Qt resources
@@ -141,6 +252,62 @@ qt_add_resources(PrettyReaderCore "dicts"
     FILES
         dicts/hyph_en_US.dic
         dicts/hyph_en_GB.dic
+)
+
+# Bundle fallback symbol font as Qt resource
+qt_add_resources(PrettyReaderCore "fonts"
+    PREFIX "/fonts"
+    BASE dicts
+    FILES
+        dicts/PrettySymbolsFallback.ttf
+)
+
+# Bundle glyph artwork (checkbox SVGs) as Qt resources
+qt_add_resources(PrettyReaderCore "glyphs"
+    PREFIX "/glyphs"
+    BASE glyphs
+    FILES
+        glyphs/checkbox-unchecked.svg
+        glyphs/checkbox-checked.svg
+)
+
+# Bundle Hershey vector font data as Qt resources
+qt_add_resources(PrettyReaderCore "hershey"
+    PREFIX "/hershey"
+    BASE hershey
+    FILES
+        hershey/astrology.jhf
+        hershey/cursive.jhf
+        hershey/cyrilc_1.jhf
+        hershey/cyrillic.jhf
+        hershey/futural.jhf
+        hershey/futuram.jhf
+        hershey/gothgbt.jhf
+        hershey/gothgrt.jhf
+        hershey/gothiceng.jhf
+        hershey/gothicger.jhf
+        hershey/gothicita.jhf
+        hershey/gothitt.jhf
+        hershey/greek.jhf
+        hershey/greekc.jhf
+        hershey/greeks.jhf
+        hershey/japanese.jhf
+        hershey/markers.jhf
+        hershey/mathlow.jhf
+        hershey/mathupp.jhf
+        hershey/meteorology.jhf
+        hershey/music.jhf
+        hershey/rowmand.jhf
+        hershey/rowmans.jhf
+        hershey/rowmant.jhf
+        hershey/scriptc.jhf
+        hershey/scripts.jhf
+        hershey/symbolic.jhf
+        hershey/timesg.jhf
+        hershey/timesi.jhf
+        hershey/timesib.jhf
+        hershey/timesr.jhf
+        hershey/timesrb.jhf
 )
 
 target_include_directories(PrettyReaderCore

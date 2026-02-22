@@ -6,10 +6,6 @@
   <kcfgfile name="prettyreaderrc"/>
 
   <group name="General">
-    <entry name="DefaultTheme" type="String">
-      <label>Default display theme for new documents.</label>
-      <default>default</default>
-    </entry>
     <entry name="RememberPerFileSettings" type="Bool">
       <default>true</default>
     </entry>
@@ -61,6 +57,10 @@
       <label>Use custom PDF rendering pipeline (HarfBuzz + Poppler) instead of QTextDocument.</label>
       <default>true</default>
     </entry>
+    <entry name="UseWebView" type="Bool">
+      <label>Use continuous web view instead of paginated print view.</label>
+      <default>true</default>
+    </entry>
   </group>
 
   <group name="Typography">
@@ -77,6 +77,16 @@
       <default>5</default>
       <min>3</min>
       <max>20</max>
+    </entry>
+    <entry name="HyphenateJustifiedText" type="Bool">
+      <label>Use hyphenation to improve word spacing in justified text.</label>
+      <default>true</default>
+    </entry>
+    <entry name="MaxJustifyGap" type="Double">
+      <label>Maximum inter-word gap (in points) before justification is abandoned for a line.</label>
+      <default>14.0</default>
+      <min>4.0</min>
+      <max>40.0</max>
     </entry>
     <entry name="ShortWordsEnabled" type="Bool">
       <label>Insert non-breaking spaces after short prepositions and articles.</label>
@@ -115,6 +125,43 @@
     </entry>
     <entry name="CopyIncludeSourceFormatting" type="Bool">
       <default>true</default>
+    </entry>
+  </group>
+
+  <group name="PdfExport">
+    <entry name="PdfAuthor" type="String">
+      <label>Default author for PDF metadata.</label>
+      <default></default>
+    </entry>
+    <entry name="PdfMarkdownCopy" type="Bool">
+      <label>Embed hidden markdown syntax in exported PDFs.</label>
+      <default>false</default>
+    </entry>
+    <entry name="PdfUnwrapParagraphs" type="Bool">
+      <label>Embed unwrapped paragraph text in exported PDFs.</label>
+      <default>false</default>
+    </entry>
+    <entry name="PdfIncludeBookmarks" type="Bool">
+      <label>Include PDF bookmarks/outlines.</label>
+      <default>true</default>
+    </entry>
+    <entry name="PdfBookmarkMaxDepth" type="Int">
+      <label>Maximum heading depth for bookmarks (1-6).</label>
+      <default>6</default>
+      <min>1</min>
+      <max>6</max>
+    </entry>
+    <entry name="PdfInitialView" type="Int">
+      <label>PDF initial view: 0=ViewerDefault, 1=ShowBookmarks, 2=ShowThumbnails.</label>
+      <default>1</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
+    <entry name="PdfPageLayout" type="Int">
+      <label>PDF page layout: 0=SinglePage, 1=Continuous, 2=FacingPages, 3=FacingPagesFirstAlone.</label>
+      <default>1</default>
+      <min>0</min>
+      <max>3</max>
     </entry>
   </group>
 </kcfg>

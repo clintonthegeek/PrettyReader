@@ -1,0 +1,22 @@
+{
+    "id": "everforest-dark",
+    "name": "Everforest Dark",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Nature-inspired forest tones for low eye strain by Sainnhe",
+    "colors": {
+        "text": "#D3C6AA",
+        "headingText": "#DBBC7F",
+        "blockquoteText": "#83C092",
+        "linkText": "#7FBBB3",
+        "codeText": "#A7C080",
+        "surfaceCode": "#343F44",
+        "surfaceInlineCode": "#3D484D",
+        "surfaceTableHeader": "#475258",
+        "surfaceTableAlt": "#2D353B",
+        "pageBackground": "#2D353B",
+        "borderOuter": "#859289",
+        "borderInner": "#3D484D",
+        "borderHeaderBottom": "#DBBC7F"
+    }
+}

@@ -3,22 +3,29 @@
 
 #include <KXmlGuiWindow>
 
+class QAction;
 class QCloseEvent;
 class QLabel;
 class QSlider;
 class QSplitter;
 class QSpinBox;
 class QTabWidget;
+class KActionMenu;
 class KRecentFilesAction;
 class FileBrowserDock;
 class FontManager;
+class PageTemplateManager;
+class TypeSetManager;
 class MetadataStore;
 class PageLayoutWidget;
+class PaletteManager;
 class Sidebar;
 class TextShaper;
+class ThemeComposer;
 class TocWidget;
 class ThemeManager;
 class StyleDockWidget;
+class ThemePickerDock;
 class DocumentTab;
 class DocumentView;
 class Hyphenator;
@@ -44,7 +51,8 @@ private slots:
     void onFileExportRtf();
     void onFilePrint();
     void onFileClose();
-    void onThemeChanged(const QString &themeId);
+    // onThemeChanged removed — composition is handled by onCompositionApplied()
+    void onCompositionApplied();
     void onStyleOverrideChanged();
     void onPageLayoutChanged();
     void onZoomIn();
@@ -54,6 +62,7 @@ private slots:
     void onToggleSourceMode();
     void showPreferences();
     void onSettingsChanged();
+    void onRenderModeChanged();
 
 private:
     void setupActions();
@@ -74,6 +83,8 @@ private:
     int m_tocTabId = -1;
     int m_styleTabId = -1;
 
+    ThemePickerDock *m_themePickerDock = nullptr;
+    int m_themePickerTabId = -1;
     StyleDockWidget *m_styleDockWidget = nullptr;
     PageLayoutWidget *m_pageLayoutWidget = nullptr;
     FileBrowserDock *m_fileBrowserWidget = nullptr;
@@ -81,6 +92,10 @@ private:
     int m_pageLayoutTabId = -1;
     KRecentFilesAction *m_recentFilesAction = nullptr;
     ThemeManager *m_themeManager = nullptr;
+    PaletteManager *m_paletteManager = nullptr;
+    TypeSetManager *m_typeSetManager = nullptr;
+    PageTemplateManager *m_pageTemplateManager = nullptr;
+    ThemeComposer *m_themeComposer = nullptr;
     MetadataStore *m_metadataStore = nullptr;
     Hyphenator *m_hyphenator = nullptr;
     ShortWords *m_shortWords = nullptr;
@@ -91,6 +106,11 @@ private:
     // PDF rendering pipeline (Phase 4)
     FontManager *m_fontManager = nullptr;
     TextShaper *m_textShaper = nullptr;
+
+    // Render mode (Print vs Web)
+    QAction *m_webViewAction = nullptr;
+    QAction *m_printViewAction = nullptr;
+    KActionMenu *m_pageArrangementMenu = nullptr;
 };
 
 #endif // PRETTYREADER_MAINWINDOW_H

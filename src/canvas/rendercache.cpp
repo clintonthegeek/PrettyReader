@@ -225,6 +225,9 @@ void RenderCache::onRenderFinished(int pageNumber, QImage image, int width, int 
 
     {
         QMutexLocker lock(&m_mutex);
+        auto existing = m_cache.find(key);
+        if (existing != m_cache.end())
+            m_currentMemory -= existing->sizeBytes;
         m_cache[key] = entry;
         m_currentMemory += entry.sizeBytes;
     }

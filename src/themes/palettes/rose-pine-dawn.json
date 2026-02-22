@@ -1,0 +1,22 @@
+{
+    "id": "rose-pine-dawn",
+    "name": "Rose Pine Dawn",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Warm parchment with dusty rose and muted teal accents",
+    "colors": {
+        "text": "#575279",
+        "headingText": "#B4637A",
+        "blockquoteText": "#56949F",
+        "linkText": "#907AA9",
+        "codeText": "#286983",
+        "surfaceCode": "#F2E9E1",
+        "surfaceInlineCode": "#DFDAD9",
+        "surfaceTableHeader": "#CECACD",
+        "surfaceTableAlt": "#F4EDE8",
+        "pageBackground": "#FAF4ED",
+        "borderOuter": "#9893A5",
+        "borderInner": "#DFDAD9",
+        "borderHeaderBottom": "#B4637A"
+    }
+}

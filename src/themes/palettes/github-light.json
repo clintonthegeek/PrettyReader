@@ -1,0 +1,22 @@
+{
+    "id": "github-light",
+    "name": "GitHub Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "The familiar GitHub markdown style from Primer",
+    "colors": {
+        "text": "#1F2328",
+        "headingText": "#1F2328",
+        "blockquoteText": "#59636E",
+        "linkText": "#0969DA",
+        "codeText": "#0550AE",
+        "surfaceCode": "#F6F8FA",
+        "surfaceInlineCode": "#EFF2F5",
+        "surfaceTableHeader": "#F6F8FA",
+        "surfaceTableAlt": "#F6F8FA",
+        "pageBackground": "#FFFFFF",
+        "borderOuter": "#D1D9E0",
+        "borderInner": "#D1D9E0",
+        "borderHeaderBottom": "#D1D9E0"
+    }
+}

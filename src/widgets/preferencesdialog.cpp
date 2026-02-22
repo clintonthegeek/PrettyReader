@@ -1,6 +1,5 @@
 #include "preferencesdialog.h"
 #include "prettyreadersettings.h"
-#include "thememanager.h"
 #include "hyphenator.h"
 
 #include <KLocalizedString>
@@ -16,26 +15,12 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent,
-                                                     ThemeManager *themeManager)
+PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent)
     : KConfigDialog(parent, QStringLiteral("settings"), PrettyReaderSettings::self())
-    , m_themeManager(themeManager)
 {
     // ===== General Page =====
     auto *generalPage = new QWidget;
     auto *generalLayout = new QVBoxLayout(generalPage);
-
-    auto *themeGroup = new QGroupBox(i18n("Theme"));
-    auto *themeGroupLayout = new QVBoxLayout(themeGroup);
-    auto *themeRow = new QHBoxLayout;
-    themeRow->addWidget(new QLabel(i18n("Default theme:")));
-    m_themeCombo = new QComboBox;
-    const QStringList themes = m_themeManager->availableThemes();
-    for (const QString &id : themes)
-        m_themeCombo->addItem(m_themeManager->themeName(id), id);
-    themeRow->addWidget(m_themeCombo, 1);
-    themeGroupLayout->addLayout(themeRow);
-    generalLayout->addWidget(themeGroup);
 
     auto *filesGroup = new QGroupBox(i18n("Files"));
     auto *filesGroupLayout = new QVBoxLayout(filesGroup);
@@ -190,7 +175,28 @@ PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent,
     minWordRow->addStretch();
     hyphGroupLayout->addLayout(minWordRow);
 
+    auto *justifyHyphCheck = new QCheckBox(i18n("Hyphenate justified text to improve word spacing"));
+    justifyHyphCheck->setObjectName(QStringLiteral("kcfg_HyphenateJustifiedText"));
+    hyphGroupLayout->addWidget(justifyHyphCheck);
+
     typoLayout->addWidget(hyphGroup);
+
+    auto *justifyGroup = new QGroupBox(i18n("Justification"));
+    auto *justifyGroupLayout = new QVBoxLayout(justifyGroup);
+
+    auto *gapRow = new QHBoxLayout;
+    gapRow->addWidget(new QLabel(i18n("Max inter-word gap:")));
+    auto *gapSpin = new QDoubleSpinBox;
+    gapSpin->setObjectName(QStringLiteral("kcfg_MaxJustifyGap"));
+    gapSpin->setRange(4.0, 40.0);
+    gapSpin->setSingleStep(1.0);
+    gapSpin->setDecimals(1);
+    gapSpin->setSuffix(i18n(" pt"));
+    gapRow->addWidget(gapSpin);
+    gapRow->addStretch();
+    justifyGroupLayout->addLayout(gapRow);
+
+    typoLayout->addWidget(justifyGroup);
 
     auto *swGroup = new QGroupBox(i18n("Short Words"));
     auto *swGroupLayout = new QVBoxLayout(swGroup);
@@ -203,36 +209,4 @@ PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent,
 
     addPage(typoPage, i18n("Typography"), QStringLiteral("preferences-desktop-font"));
 
-    connect(m_themeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, [this]() { updateButtons(); });
-}
-
-void PrettyReaderConfigDialog::updateWidgets()
-{
-    // Load the theme combo from the saved setting
-    QString savedTheme = PrettyReaderSettings::self()->defaultTheme();
-    for (int i = 0; i < m_themeCombo->count(); ++i) {
-        if (m_themeCombo->itemData(i).toString() == savedTheme) {
-            m_themeCombo->setCurrentIndex(i);
-            return;
-        }
-    }
-    // If not found, select first
-    if (m_themeCombo->count() > 0)
-        m_themeCombo->setCurrentIndex(0);
-}
-
-void PrettyReaderConfigDialog::updateSettings()
-{
-    // Save the theme combo selection to the setting
-    QString themeId = m_themeCombo->currentData().toString();
-    PrettyReaderSettings::self()->setDefaultTheme(themeId);
-    PrettyReaderSettings::self()->save();
-}
-
-bool PrettyReaderConfigDialog::hasChanged()
-{
-    QString savedTheme = PrettyReaderSettings::self()->defaultTheme();
-    QString currentTheme = m_themeCombo->currentData().toString();
-    return currentTheme != savedTheme;
 }

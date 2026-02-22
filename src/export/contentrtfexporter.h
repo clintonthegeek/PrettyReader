@@ -40,7 +40,7 @@ private:
     void writeParagraph(QByteArray &out, const Content::Paragraph &para);
     void writeHeading(QByteArray &out, const Content::Heading &heading);
     void writeCodeBlock(QByteArray &out, const Content::CodeBlock &cb);
-    void writeList(QByteArray &out, const Content::List &list);
+    void writeList(QByteArray &out, const Content::List &list, int depth = 0);
     void writeTable(QByteArray &out, const Content::Table &table);
     void writeHorizontalRule(QByteArray &out);
     void writeBlockQuote(QByteArray &out, const Content::BlockQuote &bq);

@@ -1,6 +1,5 @@
 #include "stylepropertieseditor.h"
 
-#include <KColorButton>
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
@@ -86,6 +85,11 @@ void StylePropertiesEditor::repopulateFontStyleCombo(const QString &family)
     const QStringList styles = QFontDatabase::styles(family);
     for (const QString &s : styles)
         m_fontStyleCombo->addItem(s);
+}
+
+QString StylePropertiesEditor::currentFontFamily() const
+{
+    return m_fontCombo->currentFont().family();
 }
 
 void StylePropertiesEditor::buildUI()
@@ -183,25 +187,6 @@ void StylePropertiesEditor::buildUI()
     sizeRow->addWidget(m_sizeInd.resetBtn);
     charLayout->addLayout(sizeRow);
 
-    // Color row
-    auto *colorRow = new QHBoxLayout;
-    m_fgInd.label = new QLabel(tr("Fg:"));
-    m_fgInd.resetBtn = createResetButton();
-    m_fgColorBtn = new KColorButton;
-    m_fgColorBtn->setColor(QColor(0x1a, 0x1a, 0x1a));
-    m_bgInd.label = new QLabel(tr("Bg:"));
-    m_bgInd.resetBtn = createResetButton();
-    m_bgColorBtn = new KColorButton;
-    m_bgColorBtn->setColor(Qt::white);
-    colorRow->addWidget(m_fgInd.label);
-    colorRow->addWidget(m_fgColorBtn);
-    colorRow->addWidget(m_fgInd.resetBtn);
-    colorRow->addWidget(m_bgInd.label);
-    colorRow->addWidget(m_bgColorBtn);
-    colorRow->addWidget(m_bgInd.resetBtn);
-    colorRow->addStretch();
-    charLayout->addLayout(colorRow);
-
     // Connect character change signals — mark property as explicit
     connect(m_fontCombo, &QFontComboBox::currentFontChanged,
             this, [this]() {
@@ -222,19 +207,6 @@ void StylePropertiesEditor::buildUI()
         updatePropertyIndicators();
         Q_EMIT propertyChanged();
     });
-    connect(m_fgColorBtn, &KColorButton::changed,
-            this, [this]() {
-        m_explicit.foreground = true;
-        updatePropertyIndicators();
-        Q_EMIT propertyChanged();
-    });
-    connect(m_bgColorBtn, &KColorButton::changed,
-            this, [this]() {
-        m_explicit.background = true;
-        updatePropertyIndicators();
-        Q_EMIT propertyChanged();
-    });
-
     // Connect reset buttons for character properties
     connect(m_fontInd.resetBtn, &QToolButton::clicked, this, [this]() {
         m_explicit.fontFamily = false;
@@ -258,7 +230,7 @@ void StylePropertiesEditor::buildUI()
         m_explicit.fontWeight = false;
         m_explicit.fontItalic = false;
         blockAllSignals(true);
-        const QString family = m_fontCombo->currentFont().family();
+        const QString family = currentFontFamily();
         auto w = m_isParagraphMode ? m_resolvedPara.fontWeight() : m_resolvedChar.fontWeight();
         bool it = m_isParagraphMode ? m_resolvedPara.fontItalic() : m_resolvedChar.fontItalic();
         m_fontStyleCombo->setCurrentIndex(
@@ -273,34 +245,6 @@ void StylePropertiesEditor::buildUI()
         blockAllSignals(true);
         m_sizeSpin->setValue(m_isParagraphMode
             ? m_resolvedPara.fontSize() : m_resolvedChar.fontSize());
-        blockAllSignals(false);
-        updatePropertyIndicators();
-        Q_EMIT propertyChanged();
-    });
-
-    connect(m_fgInd.resetBtn, &QToolButton::clicked, this, [this]() {
-        m_explicit.foreground = false;
-        blockAllSignals(true);
-        bool hasFg = m_isParagraphMode
-            ? m_resolvedPara.hasForeground() : m_resolvedChar.hasForeground();
-        QColor fg = hasFg
-            ? (m_isParagraphMode ? m_resolvedPara.foreground() : m_resolvedChar.foreground())
-            : QColor(0x1a, 0x1a, 0x1a);
-        m_fgColorBtn->setColor(fg);
-        blockAllSignals(false);
-        updatePropertyIndicators();
-        Q_EMIT propertyChanged();
-    });
-
-    connect(m_bgInd.resetBtn, &QToolButton::clicked, this, [this]() {
-        m_explicit.background = false;
-        blockAllSignals(true);
-        bool hasBg = m_isParagraphMode
-            ? m_resolvedPara.hasBackground() : m_resolvedChar.hasBackground();
-        QColor bg = hasBg
-            ? (m_isParagraphMode ? m_resolvedPara.background() : m_resolvedChar.background())
-            : Qt::white;
-        m_bgColorBtn->setColor(bg);
         blockAllSignals(false);
         updatePropertyIndicators();
         Q_EMIT propertyChanged();
@@ -667,8 +611,6 @@ void StylePropertiesEditor::blockAllSignals(bool block)
     m_sizeSpin->blockSignals(block);
     m_underlineBtn->blockSignals(block);
     m_strikeBtn->blockSignals(block);
-    m_fgColorBtn->blockSignals(block);
-    m_bgColorBtn->blockSignals(block);
     m_alignLeftBtn->blockSignals(block);
     m_alignCenterBtn->blockSignals(block);
     m_alignRightBtn->blockSignals(block);
@@ -716,9 +658,6 @@ void StylePropertiesEditor::updatePropertyIndicators()
     setIndicator(m_fontInd, m_explicit.fontFamily);
     setIndicator(m_fontStyleInd, m_explicit.fontWeight || m_explicit.fontItalic);
     setIndicator(m_sizeInd, m_explicit.fontSize);
-    setIndicator(m_fgInd, m_explicit.foreground);
-    setIndicator(m_bgInd, m_explicit.background);
-
     if (m_isParagraphMode) {
         setIndicator(m_alignInd, m_explicit.alignment);
         setIndicator(m_spaceBeforeInd, m_explicit.spaceBefore);
@@ -749,8 +688,6 @@ void StylePropertiesEditor::loadParagraphStyle(const ParagraphStyle &style,
     m_explicit.fontSize = style.hasFontSize();
     m_explicit.fontWeight = style.hasFontWeight();
     m_explicit.fontItalic = style.hasFontItalic();
-    m_explicit.foreground = style.hasForeground();
-    m_explicit.background = style.hasBackground();
     m_explicit.alignment = style.hasAlignment();
     m_explicit.spaceBefore = style.hasSpaceBefore();
     m_explicit.spaceAfter = style.hasSpaceAfter();
@@ -772,10 +709,7 @@ void StylePropertiesEditor::loadParagraphStyle(const ParagraphStyle &style,
     // Show resolved values in all controls so the user sees effective values
     m_fontCombo->setCurrentFont(QFont(resolved.fontFamily()));
     // Populate style combo for this font family
-    m_fontStyleCombo->clear();
-    const QStringList styles = QFontDatabase::styles(resolved.fontFamily());
-    for (const QString &s : styles)
-        m_fontStyleCombo->addItem(s);
+    repopulateFontStyleCombo(resolved.fontFamily());
     // Select the best matching style
     m_fontStyleCombo->setCurrentIndex(
         findBestStyleIndex(m_fontStyleCombo, resolved.fontFamily(),
@@ -784,9 +718,6 @@ void StylePropertiesEditor::loadParagraphStyle(const ParagraphStyle &style,
     m_sizeSpin->setValue(resolved.fontSize());
     m_underlineBtn->setChecked(false);
     m_strikeBtn->setChecked(false);
-    m_fgColorBtn->setColor(resolved.hasForeground() ? resolved.foreground() : QColor(0x1a, 0x1a, 0x1a));
-    m_bgColorBtn->setColor(resolved.hasBackground() ? resolved.background() : Qt::white);
-
     // Paragraph properties
     Qt::Alignment align = resolved.alignment();
     m_alignLeftBtn->setChecked(align == Qt::AlignLeft);
@@ -837,8 +768,6 @@ void StylePropertiesEditor::loadCharacterStyle(const CharacterStyle &style,
     m_explicit.fontItalic = style.hasFontItalic();
     m_explicit.fontUnderline = style.hasFontUnderline();
     m_explicit.fontStrikeOut = style.hasFontStrikeOut();
-    m_explicit.foreground = style.hasForeground();
-    m_explicit.background = style.hasBackground();
     m_explicit.letterSpacing = style.hasLetterSpacing();
     m_explicit.fontFeatures = style.hasFontFeatures();
 
@@ -852,10 +781,7 @@ void StylePropertiesEditor::loadCharacterStyle(const CharacterStyle &style,
 
     // Show resolved values
     m_fontCombo->setCurrentFont(QFont(resolved.fontFamily()));
-    m_fontStyleCombo->clear();
-    const QStringList styles = QFontDatabase::styles(resolved.fontFamily());
-    for (const QString &s : styles)
-        m_fontStyleCombo->addItem(s);
+    repopulateFontStyleCombo(resolved.fontFamily());
     m_fontStyleCombo->setCurrentIndex(
         findBestStyleIndex(m_fontStyleCombo, resolved.fontFamily(),
                            resolved.fontWeight(), resolved.fontItalic()));
@@ -863,9 +789,6 @@ void StylePropertiesEditor::loadCharacterStyle(const CharacterStyle &style,
     m_sizeSpin->setValue(resolved.fontSize());
     m_underlineBtn->setChecked(resolved.fontUnderline());
     m_strikeBtn->setChecked(resolved.fontStrikeOut());
-    m_fgColorBtn->setColor(resolved.hasForeground() ? resolved.foreground() : QColor(0x1a, 0x1a, 0x1a));
-    m_bgColorBtn->setColor(resolved.hasBackground() ? resolved.background() : Qt::white);
-
     // Font features
     FontFeatures::Features ff = resolved.hasFontFeatures()
         ? resolved.fontFeatures() : FontFeatures::defaultFeatures();
@@ -888,7 +811,7 @@ void StylePropertiesEditor::applyToParagraphStyle(ParagraphStyle &style) const
 
     // Only set properties that are explicitly flagged
     if (m_explicit.fontFamily)
-        style.setFontFamily(m_fontCombo->currentFont().family());
+        style.setFontFamily(currentFontFamily());
     if (m_explicit.fontSize)
         style.setFontSize(m_sizeSpin->value());
     if (m_explicit.fontWeight) {
@@ -903,11 +826,6 @@ void StylePropertiesEditor::applyToParagraphStyle(ParagraphStyle &style) const
         QFont f = QFontDatabase::font(family, styleName, 12);
         style.setFontItalic(f.italic());
     }
-    if (m_explicit.foreground)
-        style.setForeground(m_fgColorBtn->color());
-    if (m_explicit.background)
-        style.setBackground(m_bgColorBtn->color());
-
     // Paragraph properties
     if (m_explicit.alignment) {
         if (m_alignJustifyBtn->isChecked())
@@ -953,7 +871,7 @@ void StylePropertiesEditor::applyToCharacterStyle(CharacterStyle &style) const
 
     // Only set properties that are explicitly flagged
     if (m_explicit.fontFamily)
-        style.setFontFamily(m_fontCombo->currentFont().family());
+        style.setFontFamily(currentFontFamily());
     if (m_explicit.fontSize)
         style.setFontSize(m_sizeSpin->value());
     if (m_explicit.fontWeight) {
@@ -972,10 +890,6 @@ void StylePropertiesEditor::applyToCharacterStyle(CharacterStyle &style) const
         style.setFontUnderline(m_underlineBtn->isChecked());
     if (m_explicit.fontStrikeOut)
         style.setFontStrikeOut(m_strikeBtn->isChecked());
-    if (m_explicit.foreground)
-        style.setForeground(m_fgColorBtn->color());
-    if (m_explicit.background)
-        style.setBackground(m_bgColorBtn->color());
     if (m_explicit.letterSpacing)
         style.setLetterSpacing(m_letterSpacingSpin->value());
     if (m_explicit.fontFeatures) {

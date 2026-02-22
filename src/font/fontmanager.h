@@ -36,6 +36,8 @@ inline size_t qHash(const FontKey &k, size_t seed = 0)
     return qHash(k.family, seed) ^ qHash(k.weight, seed) ^ qHash(k.italic, seed);
 }
 
+class HersheyFont;
+
 struct FontFace {
     FT_Face ftFace = nullptr;
     hb_font_t *hbFont = nullptr;
@@ -44,6 +46,12 @@ struct FontFace {
     QByteArray rawData; // kept alive for FreeType/HarfBuzz
 
     QSet<uint> usedGlyphs;
+
+    // Hershey stroke font support
+    bool isHershey = false;
+    HersheyFont *hersheyFont = nullptr;
+    bool hersheyBold = false;    // synthesize bold via stroke width
+    bool hersheyItalic = false;  // synthesize italic via skew
 
     ~FontFace();
 };

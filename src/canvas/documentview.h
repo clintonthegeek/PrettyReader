@@ -7,13 +7,16 @@
 #include <QSet>
 #include <QString>
 #include <QTextDocument>
+#include <QTimer>
 
 #include "layoutengine.h"
 #include "pagelayout.h"
 
+class FontManager;
 class PageItem;
 class PdfPageItem;
 class RenderCache;
+class WebViewItem;
 
 namespace Poppler { class Document; }
 
@@ -29,6 +32,12 @@ struct ViewState
     int currentPage = 0;
     qreal scrollFraction = 0.0;
     bool valid = false;
+};
+
+struct HeadingPosition {
+    int page = 0;
+    qreal yOffset = 0; // page-local, points from top of content area
+    int sourceLine = 0; // stable identifier from Content::SourceRange::startLine
 };
 
 class DocumentView : public QGraphicsView
@@ -64,6 +73,8 @@ public:
 
     // Navigation
     void goToPage(int page);
+    void scrollToPosition(int page, qreal yOffset);
+    void setHeadingPositions(const QList<HeadingPosition> &positions);
     void previousPage();
     void nextPage();
     int currentPage() const { return m_currentPage; }
@@ -99,12 +110,22 @@ public:
     enum ViewMode { Continuous, SinglePage, FacingPages, FacingPagesFirstAlone, ContinuousFacing, ContinuousFacingFirstAlone };
     Q_ENUM(ViewMode)
 
+    // Render modes: paginated PDF vs continuous web-style
+    enum RenderMode { PrintMode, WebMode };
+    Q_ENUM(RenderMode)
+
     void setViewMode(ViewMode mode);
     ViewMode viewMode() const { return m_viewMode; }
 
     // Legacy compatibility
     void setContinuousMode(bool continuous);
     bool isContinuous() const { return m_viewMode == Continuous || m_viewMode == ContinuousFacing || m_viewMode == ContinuousFacingFirstAlone; }
+
+    // Web view mode
+    void setRenderMode(RenderMode mode);
+    RenderMode renderMode() const { return m_renderMode; }
+    void setWebContent(Layout::ContinuousLayoutResult &&result);
+    void setWebFontManager(FontManager *fm) { m_webFontManager = fm; }
 
     bool isPdfMode() const { return m_pdfMode; }
     QByteArray pdfData() const { return m_pdfData; }
@@ -115,6 +136,9 @@ Q_SIGNALS:
     void viewModeChanged(ViewMode mode);
     void statusHintChanged(const QString &hint);  // A7: hover hints
     void codeBlockLanguageChanged();
+    void currentHeadingChanged(int index);
+    void renderModeChanged(RenderMode mode);
+    void webRelayoutRequested();
 
 protected:
     void wheelEvent(QWheelEvent *event) override;
@@ -173,6 +197,12 @@ private:
     RenderCache *m_renderCache = nullptr;
     QList<PdfPageItem *> m_pdfPageItems;
 
+    // Web view rendering
+    RenderMode m_renderMode = PrintMode;
+    WebViewItem *m_webViewItem = nullptr;
+    QTimer m_relayoutTimer;
+    FontManager *m_webFontManager = nullptr;
+
     // Middle-mouse smooth zoom (Okular pattern)
     bool m_middleZooming = false;
     QPoint m_middleZoomOrigin;
@@ -200,8 +230,12 @@ private:
     QList<Layout::CodeBlockRegion> m_codeBlockRegions;
     QHash<QString, QString> m_codeBlockLanguageOverrides; // trimmed code -> language
     bool m_wordSelection = false; // set by double-click, cleared by mouse press
+    QList<HeadingPosition> m_headingPositions;
+    int m_currentHeadingLine = -1; // source line of current heading (stable ID)
 
     static constexpr qreal kPageGap = 12.0;
+
+public:
     static constexpr qreal kSceneMargin = 40.0;
 };
 

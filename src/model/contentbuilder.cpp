@@ -95,12 +95,43 @@ Content::ParagraphFormat ContentBuilder::resolveParagraphFormat(const QString &s
     return f;
 }
 
+// --- Block routing ---
+
+void ContentBuilder::addBlock(Content::BlockNode block)
+{
+    if (!m_blockQuoteStack.isEmpty()) {
+        m_blockQuoteStack.top().append(std::move(block));
+    } else if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
+        m_listStack.top().items.last().children.append(std::move(block));
+    } else {
+        m_doc.blocks.append(std::move(block));
+    }
+}
+
 // --- Inline management ---
 
 void ContentBuilder::appendInlineNode(Content::InlineNode node)
 {
-    if (auto *inlines = currentInlines())
+    if (auto *inlines = currentInlines()) {
         inlines->append(std::move(node));
+        return;
+    }
+
+    // Tight list item: MD4C didn't emit MD_BLOCK_P, create implicit paragraph
+    if (!m_listStack.isEmpty()) {
+        auto &info = m_listStack.top();
+        if (!info.items.isEmpty()) {
+            Content::ParagraphFormat fmt;
+            if (m_styleManager)
+                fmt = resolveParagraphFormat(QStringLiteral("ListItem"));
+            auto &children = info.items.last().children;
+            children.append(Content::Paragraph{fmt, {}});
+            auto *p = std::get_if<Content::Paragraph>(&children.last());
+            m_inlineStack.push(&p->inlines);
+            info.hasImplicitParagraph = true;
+            p->inlines.append(std::move(node));
+        }
+    }
 }
 
 QList<Content::InlineNode> *ContentBuilder::currentInlines()
@@ -133,6 +164,7 @@ Content::Document ContentBuilder::build(const QString &markdownText)
     m_styleStack.clear();
     m_listStack.clear();
     m_blockQuoteLevel = 0;
+    m_blockQuoteStack.clear();
     m_inCodeBlock = false;
     m_codeLanguage.clear();
     m_codeText.clear();
@@ -144,8 +176,8 @@ Content::Document ContentBuilder::build(const QString &markdownText)
     m_tableCol = 0;
     m_collectingAltText = false;
     m_altText.clear();
+    m_linkHref.clear();
     m_footnotes.clear();
-    m_inListItem = false;
 
     // Resolve default text style
     if (m_styleManager)
@@ -257,63 +289,45 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
         break;
 
     case MD_BLOCK_P: {
-        auto *para = new Content::Paragraph;
+        // Resolve paragraph format and text style
+        Content::ParagraphFormat fmt;
         if (m_blockQuoteLevel > 0) {
             if (m_styleManager) {
-                para->format = resolveParagraphFormat(QStringLiteral("BlockQuote"));
+                fmt = resolveParagraphFormat(QStringLiteral("BlockQuote"));
                 m_currentStyle = resolveTextStyle(QStringLiteral("BlockQuote"));
             } else {
-                para->format.leftMargin = 20.0 * m_blockQuoteLevel;
+                fmt.leftMargin = 20.0 * m_blockQuoteLevel;
                 m_currentStyle.italic = true;
                 m_currentStyle.foreground = QColor(0x55, 0x55, 0x55);
             }
         } else if (!m_listStack.isEmpty()) {
             if (m_styleManager) {
-                para->format = resolveParagraphFormat(QStringLiteral("ListItem"));
+                fmt = resolveParagraphFormat(QStringLiteral("ListItem"));
                 m_currentStyle = resolveTextStyle(QStringLiteral("ListItem"));
             }
         } else {
             if (m_styleManager) {
-                para->format = resolveParagraphFormat(QStringLiteral("BodyText"));
+                fmt = resolveParagraphFormat(QStringLiteral("BodyText"));
                 m_currentStyle = resolveTextStyle(QStringLiteral("BodyText"));
             } else {
-                para->format.spaceAfter = 6.0;
+                fmt.spaceAfter = 6.0;
             }
         }
-        m_inlineStack.push(&para->inlines);
 
-        // Store para pointer temporarily via a lambda trick: we push to doc on leave
-        // Actually, store as a variant in the doc blocks and get a reference
-        if (m_inListItem && !m_listStack.isEmpty()) {
-            auto &items = m_listStack.top().items;
-            if (!items.isEmpty()) {
-                items.last().children.append(Content::Paragraph{para->format, {}});
-                auto &lastBlock = items.last().children.last();
-                auto *p = std::get_if<Content::Paragraph>(&lastBlock);
-                m_inlineStack.pop();
-                m_inlineStack.push(&p->inlines);
-                delete para;
-            } else {
-                m_doc.blocks.append(Content::Paragraph{para->format, {}});
-                auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
-                m_inlineStack.pop();
-                m_inlineStack.push(&p->inlines);
-                delete para;
-            }
-        } else if (m_blockQuoteLevel > 0) {
-            // Find the innermost blockquote and add to its children
-            // For simplicity in flat output, add directly to doc
-            m_doc.blocks.append(Content::Paragraph{para->format, {}});
-            auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
-            m_inlineStack.pop();
+        // Place paragraph in the right container
+        if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
+            auto &children = m_listStack.top().items.last().children;
+            children.append(Content::Paragraph{fmt, {}});
+            auto *p = std::get_if<Content::Paragraph>(&children.last());
             m_inlineStack.push(&p->inlines);
-            delete para;
+        } else if (!m_blockQuoteStack.isEmpty()) {
+            m_blockQuoteStack.top().append(Content::Paragraph{fmt, {}});
+            auto *p = std::get_if<Content::Paragraph>(&m_blockQuoteStack.top().last());
+            m_inlineStack.push(&p->inlines);
         } else {
-            m_doc.blocks.append(Content::Paragraph{para->format, {}});
+            m_doc.blocks.append(Content::Paragraph{fmt, {}});
             auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
-            m_inlineStack.pop();
             m_inlineStack.push(&p->inlines);
-            delete para;
         }
         break;
     }
@@ -342,31 +356,48 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
             if (level == 6) m_currentStyle.italic = true;
         }
 
-        m_doc.blocks.append(std::move(heading));
-        auto *h = std::get_if<Content::Heading>(&m_doc.blocks.last());
-        m_inlineStack.push(&h->inlines);
+        if (!m_blockQuoteStack.isEmpty()) {
+            m_blockQuoteStack.top().append(std::move(heading));
+            auto *h = std::get_if<Content::Heading>(&m_blockQuoteStack.top().last());
+            m_inlineStack.push(&h->inlines);
+        } else {
+            m_doc.blocks.append(std::move(heading));
+            auto *h = std::get_if<Content::Heading>(&m_doc.blocks.last());
+            m_inlineStack.push(&h->inlines);
+        }
         break;
     }
 
     case MD_BLOCK_QUOTE:
         m_blockQuoteLevel++;
+        m_blockQuoteStack.push(QList<Content::BlockNode>{});
         break;
 
     case MD_BLOCK_UL: {
+        // Close parent item's implicit paragraph before nesting
+        if (!m_listStack.isEmpty() && m_listStack.top().hasImplicitParagraph) {
+            if (!m_inlineStack.isEmpty())
+                m_inlineStack.pop();
+            m_listStack.top().hasImplicitParagraph = false;
+        }
         ListInfo info;
         info.type = Content::ListType::Unordered;
         info.startNumber = 1;
-        info.depth = m_listStack.size();
         m_listStack.push(info);
         break;
     }
 
     case MD_BLOCK_OL: {
+        // Close parent item's implicit paragraph before nesting
+        if (!m_listStack.isEmpty() && m_listStack.top().hasImplicitParagraph) {
+            if (!m_inlineStack.isEmpty())
+                m_inlineStack.pop();
+            m_listStack.top().hasImplicitParagraph = false;
+        }
         auto *d = static_cast<MD_BLOCK_OL_DETAIL *>(detail);
         ListInfo info;
         info.type = Content::ListType::Ordered;
         info.startNumber = static_cast<int>(d->start);
-        info.depth = m_listStack.size();
         m_listStack.push(info);
         break;
     }
@@ -374,25 +405,34 @@ int ContentBuilder::enterBlock(MD_BLOCKTYPE type, void *detail)
     case MD_BLOCK_LI: {
         auto *d = static_cast<MD_BLOCK_LI_DETAIL *>(detail);
         if (!m_listStack.isEmpty()) {
+            // Close previous item's implicit paragraph
+            if (m_listStack.top().hasImplicitParagraph) {
+                if (!m_inlineStack.isEmpty())
+                    m_inlineStack.pop();
+                m_listStack.top().hasImplicitParagraph = false;
+            }
             Content::ListItem item;
             item.isTask = d->is_task;
             item.taskChecked = (d->task_mark != ' ');
             m_listStack.top().items.append(item);
         }
-        m_inListItem = true;
+        // Set list item text style for tight lists (no P block will set it)
+        if (m_styleManager)
+            m_currentStyle = resolveTextStyle(QStringLiteral("ListItem"));
         break;
     }
 
     case MD_BLOCK_CODE: {
         auto *d = static_cast<MD_BLOCK_CODE_DETAIL *>(detail);
         m_codeLanguage = extractAttribute(d->lang);
+        m_codeFenced = (d->fence_char != 0);
         m_inCodeBlock = true;
         m_codeText.clear();
         break;
     }
 
     case MD_BLOCK_HR:
-        m_doc.blocks.append(Content::HorizontalRule{12.0, 12.0});
+        addBlock(Content::HorizontalRule{12.0, 12.0});
         break;
 
     case MD_BLOCK_TABLE: {
@@ -480,12 +520,15 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
                 range.startLine = byteOffsetToLine(tracker.firstByteOffset);
                 range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
             }
-            if (m_inListItem && !m_listStack.isEmpty()) {
-                auto &items = m_listStack.top().items;
-                if (!items.isEmpty() && !items.last().children.isEmpty()) {
-                    auto *p = std::get_if<Content::Paragraph>(&items.last().children.last());
+            if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
+                auto &children = m_listStack.top().items.last().children;
+                if (!children.isEmpty()) {
+                    auto *p = std::get_if<Content::Paragraph>(&children.last());
                     if (p) p->source = range;
                 }
+            } else if (!m_blockQuoteStack.isEmpty() && !m_blockQuoteStack.top().isEmpty()) {
+                auto *p = std::get_if<Content::Paragraph>(&m_blockQuoteStack.top().last());
+                if (p) p->source = range;
             } else if (!m_doc.blocks.isEmpty()) {
                 auto *p = std::get_if<Content::Paragraph>(&m_doc.blocks.last());
                 if (p) p->source = range;
@@ -504,7 +547,10 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
                 range.startLine = byteOffsetToLine(tracker.firstByteOffset);
                 range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
             }
-            if (!m_doc.blocks.isEmpty()) {
+            if (!m_blockQuoteStack.isEmpty() && !m_blockQuoteStack.top().isEmpty()) {
+                auto *h = std::get_if<Content::Heading>(&m_blockQuoteStack.top().last());
+                if (h) h->source = range;
+            } else if (!m_doc.blocks.isEmpty()) {
                 auto *h = std::get_if<Content::Heading>(&m_doc.blocks.last());
                 if (h) h->source = range;
             }
@@ -512,12 +558,29 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
         break;
     }
 
-    case MD_BLOCK_QUOTE:
+    case MD_BLOCK_QUOTE: {
         m_blockQuoteLevel--;
+        QList<Content::BlockNode> children;
+        if (!m_blockQuoteStack.isEmpty())
+            children = m_blockQuoteStack.pop();
+
+        Content::BlockQuote bq;
+        bq.level = m_blockQuoteLevel + 1; // level of this blockquote (1-based)
+        bq.children = std::move(children);
+        if (m_styleManager)
+            bq.format = resolveParagraphFormat(QStringLiteral("BlockQuote"));
+
+        addBlock(std::move(bq));
         break;
+    }
 
     case MD_BLOCK_LI:
-        m_inListItem = false;
+        // Close implicit paragraph if open
+        if (!m_listStack.isEmpty() && m_listStack.top().hasImplicitParagraph) {
+            if (!m_inlineStack.isEmpty())
+                m_inlineStack.pop();
+            m_listStack.top().hasImplicitParagraph = false;
+        }
         break;
 
     case MD_BLOCK_UL:
@@ -535,19 +598,14 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
             Content::List list;
             list.type = info.type;
             list.startNumber = info.startNumber;
-            list.depth = info.depth;
             list.items = info.items;
             list.source = range;
 
-            if (!m_listStack.isEmpty() && m_inListItem) {
+            if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty()) {
                 // Nested list: add to parent list's current item
-                auto &parentItems = m_listStack.top().items;
-                if (!parentItems.isEmpty())
-                    parentItems.last().children.append(std::move(list));
-                else
-                    m_doc.blocks.append(std::move(list));
+                m_listStack.top().items.last().children.append(std::move(list));
             } else {
-                m_doc.blocks.append(std::move(list));
+                addBlock(std::move(list));
             }
         }
         break;
@@ -557,6 +615,7 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
         m_inCodeBlock = false;
         Content::CodeBlock cb;
         cb.language = m_codeLanguage;
+        cb.isFenced = m_codeFenced;
         cb.code = m_codeText;
         if (m_styleManager) {
             cb.style = resolveTextStyle(QStringLiteral("CodeBlock"));
@@ -574,7 +633,7 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
                 cb.source.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
             }
         }
-        m_doc.blocks.append(std::move(cb));
+        addBlock(std::move(cb));
         m_codeLanguage.clear();
         m_codeText.clear();
         break;
@@ -621,7 +680,7 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
                 table.source.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
             }
         }
-        m_doc.blocks.append(std::move(table));
+        addBlock(std::move(table));
         m_tableRows.clear();
         break;
     }
@@ -644,12 +703,23 @@ int ContentBuilder::leaveBlock(MD_BLOCKTYPE type, void * /*detail*/)
     case MD_BLOCK_HR:
         if (!m_blockTrackers.isEmpty()) {
             auto tracker = m_blockTrackers.pop();
-            if (tracker.firstByteOffset >= 0 && !m_doc.blocks.isEmpty()) {
-                auto *hr = std::get_if<Content::HorizontalRule>(&m_doc.blocks.last());
-                if (hr) {
-                    hr->source.startLine = byteOffsetToLine(tracker.firstByteOffset);
-                    hr->source.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
-                }
+            if (tracker.firstByteOffset >= 0) {
+                Content::SourceRange range;
+                range.startLine = byteOffsetToLine(tracker.firstByteOffset);
+                range.endLine = byteOffsetToLine(tracker.lastByteEnd - 1);
+                // Find the HR in whatever container addBlock placed it
+                auto setHrSource = [&](QList<Content::BlockNode> &blocks) {
+                    if (!blocks.isEmpty()) {
+                        auto *hr = std::get_if<Content::HorizontalRule>(&blocks.last());
+                        if (hr) hr->source = range;
+                    }
+                };
+                if (!m_blockQuoteStack.isEmpty())
+                    setHrSource(m_blockQuoteStack.top());
+                else if (!m_listStack.isEmpty() && !m_listStack.top().items.isEmpty())
+                    setHrSource(m_listStack.top().items.last().children);
+                else
+                    setHrSource(m_doc.blocks);
             }
         }
         break;
@@ -696,9 +766,8 @@ int ContentBuilder::enterSpan(MD_SPANTYPE type, void *detail)
             m_currentStyle.foreground = QColor(0x03, 0x66, 0xd6);
             m_currentStyle.underline = true;
         }
-        // We'll create the Link node when we encounter text inside
-        // For now, store the href in the style stack
-        Q_UNUSED(d);
+        m_linkHref = extractAttribute(d->href);
+        m_currentStyle.linkHref = m_linkHref;
         break;
     }
 
@@ -761,9 +830,20 @@ int ContentBuilder::leaveSpan(MD_SPANTYPE type, void * /*detail*/)
         break;
     }
 
-    default:
+    case MD_SPAN_A:
         if (!m_styleStack.isEmpty())
             m_currentStyle = m_styleStack.pop();
+        m_linkHref.clear();
+        m_currentStyle.linkHref.clear();
+        break;
+
+    default:
+        if (!m_styleStack.isEmpty()) {
+            m_currentStyle = m_styleStack.pop();
+            // Preserve linkHref if we're still inside a link span
+            if (!m_linkHref.isEmpty())
+                m_currentStyle.linkHref = m_linkHref;
+        }
         break;
     }
     return 0;

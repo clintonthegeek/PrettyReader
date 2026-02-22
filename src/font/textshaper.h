@@ -51,6 +51,8 @@ public:
 
     QList<ShapedRun> shape(const QString &text, const QList<StyleRun> &styles);
 
+    void setFallbackFont(FontFace *face) { m_fallbackFont = face; }
+
 private:
     struct InternalRun {
         int start;
@@ -58,6 +60,7 @@ private:
         int dir; // 0=LTR, 1=RTL
         int script; // UScriptCode
         int styleIndex; // index into styles list
+        bool useFallbackFont = false;
     };
 
     QList<InternalRun> itemizeBiDi(const QString &text) const;
@@ -65,8 +68,12 @@ private:
                                       const QList<InternalRun> &runs) const;
     QList<InternalRun> itemizeStyles(const QList<InternalRun> &runs,
                                      const QList<StyleRun> &styles) const;
+    QList<InternalRun> itemizeFontCoverage(const QString &text,
+                                           const QList<InternalRun> &runs,
+                                           const QList<StyleRun> &styles) const;
 
     FontManager *m_fontManager;
+    FontFace *m_fallbackFont = nullptr;
 };
 
 #endif // PRETTYREADER_TEXTSHAPER_H

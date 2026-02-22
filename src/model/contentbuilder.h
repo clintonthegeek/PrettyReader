@@ -95,9 +95,18 @@ private:
     QStack<Content::TextStyle> m_styleStack;
     Content::TextStyle m_currentStyle;
 
+    // Link tracking (href flows through TextStyle on each TextRun inside the span)
+    QString m_linkHref;
+
+    // Block routing: adds a completed block to the correct container
+    // (blockquote stack > list stack > doc.blocks)
+    void addBlock(Content::BlockNode block);
+
     // Block tracking
     int m_blockQuoteLevel = 0;
+    QStack<QList<Content::BlockNode>> m_blockQuoteStack;
     bool m_inCodeBlock = false;
+    bool m_codeFenced = true;
     QString m_codeLanguage;
     QString m_codeText;
 
@@ -105,11 +114,10 @@ private:
     struct ListInfo {
         Content::ListType type;
         int startNumber;
-        int depth;
         QList<Content::ListItem> items;
+        bool hasImplicitParagraph = false; // current item has implicit para on inline stack
     };
     QStack<ListInfo> m_listStack;
-    bool m_inListItem = false;
 
     // Table tracking
     bool m_inTable = false;

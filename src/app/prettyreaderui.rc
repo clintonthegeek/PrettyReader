@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="prettyreader" version="8">
+<gui name="prettyreader" version="14">
 
   <MenuBar>
     <Menu name="file">
@@ -8,9 +8,10 @@
       <Action name="file_open"/>
       <Action name="file_open_recent"/>
       <Separator/>
+      <Action name="file_print"/>
+      <Separator/>
       <Action name="file_export_pdf"/>
       <Action name="file_export_rtf"/>
-      <Action name="file_print"/>
       <Separator/>
       <Action name="file_close"/>
       <Separator/>
@@ -32,6 +33,9 @@
       <Action name="view_zoom_fit_width"/>
       <Action name="view_zoom_fit_page"/>
       <Separator/>
+      <Action name="view_web_mode"/>
+      <Action name="view_print_mode"/>
+      <Separator/>
       <Action name="view_page_arrangement"/>
       <Separator/>
       <Action name="view_source_mode"/>
@@ -41,6 +45,7 @@
       <Separator/>
       <Action name="view_toggle_files"/>
       <Action name="view_toggle_toc"/>
+      <Action name="view_toggle_theme"/>
       <Action name="view_toggle_style"/>
     </Menu>
 
@@ -72,6 +77,10 @@
     <Action name="view_zoom_out"/>
     <Action name="view_zoom_in"/>
     <Action name="view_zoom_fit_width"/>
+    <Separator/>
+    <Action name="view_web_mode"/>
+    <Action name="view_print_mode"/>
+    <Separator/>
     <Action name="view_page_arrangement"/>
     <Separator/>
     <Action name="go_previous_page"/>
@@ -80,8 +89,8 @@
     <Action name="tool_hand"/>
     <Action name="tool_selection"/>
     <Separator/>
-    <Action name="file_export_pdf"/>
     <Action name="file_print"/>
+    <Action name="file_export_pdf"/>
   </ToolBar>
 
 </gui>

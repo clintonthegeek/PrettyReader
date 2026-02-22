@@ -1,0 +1,51 @@
+{
+    "id": "academic",
+    "name": "Thesis",
+    "version": 1,
+    "type": "pageTemplate",
+    "description": "A4, wider margins, header with title, mirrored left/right pages",
+    "pageLayout": {
+        "pageSize": "A4",
+        "orientation": "portrait",
+        "margins": {
+            "left": 30.0,
+            "top": 30.0,
+            "right": 25.0,
+            "bottom": 25.0
+        },
+        "header": {
+            "enabled": true,
+            "left": "",
+            "center": "",
+            "right": "{title}"
+        },
+        "footer": {
+            "enabled": true,
+            "left": "",
+            "center": "{page}",
+            "right": ""
+        }
+    },
+    "masterPages": {
+        "first": {
+            "headerEnabled": false,
+            "footerEnabled": true
+        },
+        "left": {
+            "headerLeft": "{title}",
+            "headerCenter": "",
+            "headerRight": "",
+            "footerLeft": "{page}",
+            "footerCenter": "",
+            "footerRight": ""
+        },
+        "right": {
+            "headerLeft": "",
+            "headerCenter": "",
+            "headerRight": "{title}",
+            "footerLeft": "",
+            "footerCenter": "",
+            "footerRight": "{page}"
+        }
+    }
+}

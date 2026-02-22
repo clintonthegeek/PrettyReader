@@ -1,0 +1,45 @@
+{
+    "id": "default",
+    "name": "Standard",
+    "version": 1,
+    "type": "pageTemplate",
+    "description": "Letter, 1\" margins, footer with page numbers",
+    "pageLayout": {
+        "pageSize": "Letter",
+        "orientation": "portrait",
+        "margins": {
+            "left": 25.4,
+            "top": 25.4,
+            "right": 25.4,
+            "bottom": 25.4
+        },
+        "header": {
+            "enabled": false,
+            "left": "",
+            "center": "",
+            "right": ""
+        },
+        "footer": {
+            "enabled": true,
+            "left": "",
+            "center": "",
+            "right": "{page} / {pages}"
+        }
+    },
+    "masterPages": {
+        "first": {
+            "headerEnabled": false,
+            "footerEnabled": true
+        },
+        "left": {
+            "headerLeft": "{title}",
+            "headerCenter": "",
+            "headerRight": ""
+        },
+        "right": {
+            "headerLeft": "",
+            "headerCenter": "",
+            "headerRight": "{title}"
+        }
+    }
+}

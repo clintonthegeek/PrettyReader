@@ -1,0 +1,22 @@
+{
+    "id": "flexoki-dark",
+    "name": "Flexoki Dark",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Ink-inspired palette for reading on screens by Steph Ango",
+    "colors": {
+        "text": "#878580",
+        "headingText": "#D0A215",
+        "blockquoteText": "#3AA99F",
+        "linkText": "#4385BE",
+        "codeText": "#879A39",
+        "surfaceCode": "#1C1B1A",
+        "surfaceInlineCode": "#282726",
+        "surfaceTableHeader": "#343331",
+        "surfaceTableAlt": "#161514",
+        "pageBackground": "#100F0F",
+        "borderOuter": "#403E3C",
+        "borderInner": "#282726",
+        "borderHeaderBottom": "#D0A215"
+    }
+}

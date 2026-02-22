@@ -1,0 +1,96 @@
+{
+    "name": "Hershey",
+    "version": 2,
+    "description": "Retro vector stroke typography \u2014 no embedded fonts",
+    "hersheyMode": true,
+
+    "paragraphStyles": {
+        "Default Paragraph Style": {
+            "fontFamily": "Hershey Serif",
+            "fontSize": 11.0,
+            "lineHeightPercent": 100,
+            "foreground": "#1a1a1a"
+        },
+        "Heading": {
+            "parent": "Default Paragraph Style",
+            "fontFamily": "Hershey Sans",
+            "fontWeight": "bold",
+            "alignment": "left"
+        },
+        "BodyText": {
+            "parent": "Default Paragraph Style",
+            "alignment": "justify",
+            "spaceAfter": 6.0
+        },
+        "Heading1": { "parent": "Heading", "fontSize": 28.0, "spaceBefore": 24.0, "spaceAfter": 12.0, "foreground": "#1a1a2e" },
+        "Heading2": { "parent": "Heading", "fontSize": 22.0, "spaceBefore": 20.0, "spaceAfter": 10.0, "foreground": "#1a1a2e" },
+        "Heading3": { "parent": "Heading", "fontSize": 18.0, "spaceBefore": 16.0, "spaceAfter": 8.0, "foreground": "#1a1a2e" },
+        "Heading4": { "parent": "Heading", "fontSize": 15.0, "spaceBefore": 12.0, "spaceAfter": 6.0, "foreground": "#1a1a2e" },
+        "Heading5": { "parent": "Heading", "fontSize": 13.0, "spaceBefore": 10.0, "spaceAfter": 4.0, "foreground": "#1a1a2e" },
+        "Heading6": { "parent": "Heading", "fontSize": 11.0, "fontItalic": true, "spaceBefore": 8.0, "spaceAfter": 4.0, "foreground": "#1a1a2e" },
+        "BlockQuote": { "parent": "BodyText", "fontFamily": "Hershey Script", "fontItalic": true, "foreground": "#555555" },
+        "ListItem": { "parent": "BodyText" },
+        "OrderedListItem": { "parent": "ListItem" },
+        "UnorderedListItem": { "parent": "ListItem" },
+        "TaskListItem": { "parent": "ListItem" },
+        "CodeBlock": { "parent": "Default Paragraph Style", "baseCharacterStyle": "Code", "background": "#f6f8fa", "lineHeightPercent": 140 },
+        "TableHeader": { "parent": "Default Paragraph Style", "fontWeight": "bold", "background": "#f0f0f0", "alignment": "center" },
+        "TableBody": { "parent": "Default Paragraph Style" },
+        "HorizontalRule": { "parent": "Default Paragraph Style" },
+        "MathDisplay": { "parent": "Default Paragraph Style" }
+    },
+
+    "characterStyles": {
+        "Default Character Style": {
+            "fontFamily": "Hershey Serif",
+            "fontSize": 11.0,
+            "foreground": "#1a1a1a"
+        },
+        "DefaultText": { "parent": "Default Character Style" },
+        "Emphasis": { "parent": "Default Character Style", "fontItalic": true },
+        "Strong": { "parent": "Default Character Style", "fontWeight": "bold" },
+        "StrongEmphasis": { "parent": "Default Character Style", "fontWeight": "bold", "fontItalic": true },
+        "Strikethrough": { "parent": "Default Character Style", "strikeOut": true },
+        "Subscript": { "parent": "Default Character Style" },
+        "Superscript": { "parent": "Default Character Style" },
+        "Code": { "parent": "Default Character Style", "fontFamily": "Hershey Roman", "fontSize": 10.0 },
+        "InlineCode": { "parent": "Code", "foreground": "#c7254e", "background": "#f0f0f0" },
+        "Link": { "parent": "Default Character Style", "foreground": "#0366d6", "underline": true },
+        "MathInline": { "parent": "Default Character Style" },
+        "Emoji": { "parent": "Default Character Style" }
+    },
+
+    "tableStyles": {
+        "Default": {
+            "borderCollapse": true,
+            "cellPadding": { "top": 3, "bottom": 3, "left": 6, "right": 6 },
+            "headerBackground": "#f0f0f0",
+            "alternateRowColor": "#f9f9f9",
+            "outerBorder": { "width": 1.0, "color": "#333333" },
+            "innerBorder": { "width": 0.5, "color": "#cccccc" },
+            "headerBottomBorder": { "width": 2.0, "color": "#333333" },
+            "headerParagraphStyle": "TableHeader",
+            "bodyParagraphStyle": "TableBody"
+        }
+    },
+
+    "footnoteStyle": {
+        "format": "arabic",
+        "startNumber": 1,
+        "restart": "per_document",
+        "prefix": "",
+        "suffix": "",
+        "superscriptRef": true,
+        "superscriptNote": false,
+        "asEndnotes": true,
+        "showSeparator": true,
+        "separatorWidth": 0.5,
+        "separatorLength": 72.0
+    },
+
+    "masterPages": {
+        "first": { "headerEnabled": false, "footerEnabled": true },
+        "left": { "headerLeft": "{title}", "headerCenter": "", "headerRight": "" },
+        "right": { "headerLeft": "", "headerCenter": "", "headerRight": "{title}" }
+    }
+}

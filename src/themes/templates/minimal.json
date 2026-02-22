@@ -1,0 +1,14 @@
+{
+    "id": "minimal",
+    "name": "Minimal",
+    "version": 1,
+    "type": "pageTemplate",
+    "description": "Letter, narrow margins, no headers or footers",
+    "pageLayout": {
+        "pageSize": "Letter",
+        "orientation": "portrait",
+        "margins": { "left": 19.05, "top": 19.05, "right": 19.05, "bottom": 19.05 },
+        "header": { "enabled": false, "left": "", "center": "", "right": "" },
+        "footer": { "enabled": false, "left": "", "center": "", "right": "" }
+    }
+}

@@ -5,6 +5,7 @@
 #include <KLocalizedString>
 #include <KRecentFilesAction>
 #include <KStandardAction>
+#include <KToolBar>
 #include <KConfigGroup>
 #include <KSharedConfig>
 
@@ -25,6 +26,13 @@
 #include "printcontroller.h"
 #include "stylemanager.h"
 #include "styledockwidget.h"
+#include "themepickerdock.h"
+#include "typeset.h"
+#include "typesetmanager.h"
+#include "pagetemplatemanager.h"
+#include "colorpalette.h"
+#include "palettemanager.h"
+#include "themecomposer.h"
 #include "thememanager.h"
 #include "footnotestyle.h"
 #include "preferencesdialog.h"
@@ -36,6 +44,10 @@
 #include "textshaper.h"
 #include "layoutengine.h"
 #include "pdfgenerator.h"
+#include "pdfexportdialog.h"
+#include "pdfexportoptions.h"
+#include "contentfilter.h"
+#include "pagerangeparser.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -44,6 +56,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QLabel>
 #include <QMenuBar>
 #include <QAbstractTextDocumentLayout>
@@ -100,6 +113,10 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     m_themeManager = new ThemeManager(this);
+    m_paletteManager = new PaletteManager(this);
+    m_typeSetManager = new TypeSetManager(this);
+    m_pageTemplateManager = new PageTemplateManager(this);
+    m_themeComposer = new ThemeComposer(m_themeManager, this);
     m_metadataStore = new MetadataStore(this);
 
     // Typography engines
@@ -110,9 +127,14 @@ MainWindow::MainWindow(QWidget *parent)
     m_fontManager = new FontManager();
     m_textShaper = new TextShaper(m_fontManager);
 
+    // Load bundled symbol fallback font for glyphs missing in body fonts
+    FontFace *fallback = m_fontManager->loadFontFromPath(
+        QStringLiteral(":/fonts/PrettySymbolsFallback.ttf"));
+    m_textShaper->setFallbackFont(fallback);
+
     // Apply settings
     auto *settings = PrettyReaderSettings::self();
-    if (settings->hyphenationEnabled()) {
+    if (settings->hyphenationEnabled() || settings->hyphenateJustifiedText()) {
         m_hyphenator->loadDictionary(settings->hyphenationLanguage());
         m_hyphenator->setMinWordLength(settings->hyphenationMinWordLength());
     }
@@ -185,10 +207,21 @@ MainWindow::MainWindow(QWidget *parent)
     setMinimumSize(800, 600);
     resize(1200, 800);
 
-    // Load the first theme so the style tree is populated on startup
-    QStringList themes = m_themeManager->availableThemes();
-    if (!themes.isEmpty()) {
-        onThemeChanged(themes.first());
+    // Load default typography theme + color palette so the style tree is populated
+    {
+        QStringList typeSets = m_typeSetManager->availableTypeSets();
+        if (!typeSets.isEmpty()) {
+            TypeSet ts = m_typeSetManager->typeSet(
+                typeSets.contains(QStringLiteral("default")) ? QStringLiteral("default") : typeSets.first());
+            m_themeComposer->setTypeSet(ts);
+        }
+        QStringList palettes = m_paletteManager->availablePalettes();
+        if (!palettes.isEmpty()) {
+            ColorPalette palette = m_paletteManager->palette(
+                palettes.contains(QStringLiteral("default-light")) ? QStringLiteral("default-light") : palettes.first());
+            m_themeComposer->setColorPalette(palette);
+        }
+        onCompositionApplied();
     }
 
     restoreSession();
@@ -254,24 +287,52 @@ void MainWindow::setupSidebars()
         }
     });
 
-    // Right sidebar: Style panel + Page Layout panel
+    connect(m_tocWidget, &TocWidget::headingNavigate,
+            this, [this](int page, qreal yOffset) {
+        auto *view = currentDocumentView();
+        if (view)
+            view->scrollToPosition(page, yOffset);
+    });
+
+    // Right sidebar: Theme + Style + Page Layout
     m_rightSidebar = new Sidebar(Sidebar::Right, this);
 
-    m_styleDockWidget = new StyleDockWidget(m_themeManager, this);
+    // 1. Theme Picker (first panel)
+    m_themePickerDock = new ThemePickerDock(
+        m_themeManager, m_paletteManager, m_typeSetManager,
+        m_pageTemplateManager, m_themeComposer, this);
+    auto *themeView = new ToolView(i18n("Theme"), m_themePickerDock);
+    m_themePickerTabId = m_rightSidebar->addPanel(
+        themeView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Theme"));
+
+    // 2. Style (simplified -- tree + property editors only)
+    m_styleDockWidget = new StyleDockWidget(this);
     auto *styleView = new ToolView(i18n("Style"), m_styleDockWidget);
     m_styleTabId = m_rightSidebar->addPanel(
         styleView, QIcon::fromTheme(QStringLiteral("preferences-desktop-font")), i18n("Style"));
 
+    // 3. Page Layout
     m_pageLayoutWidget = new PageLayoutWidget(this);
     auto *pageView = new ToolView(i18n("Page"), m_pageLayoutWidget);
     m_pageLayoutTabId = m_rightSidebar->addPanel(
         pageView, QIcon::fromTheme(QStringLiteral("document-properties")), i18n("Page"));
 
-    m_styleDockWidget->setPageLayoutProvider([this]() {
-        return m_pageLayoutWidget->currentPageLayout();
+    // Wire signals
+    connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
+            this, &MainWindow::onCompositionApplied);
+    connect(m_themePickerDock, &ThemePickerDock::templateApplied,
+            this, [this](const PageLayout &templateLayout) {
+        // Merge template's page layout with current palette's page background
+        PageLayout pl = templateLayout;
+        QColor pageBg = m_themeComposer->currentPalette().pageBackground();
+        if (pageBg.isValid())
+            pl.pageBackground = pageBg;
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+        rebuildCurrentDocument();
     });
-    connect(m_styleDockWidget, &StyleDockWidget::themeChanged,
-            this, &MainWindow::onThemeChanged);
     connect(m_styleDockWidget, &StyleDockWidget::styleOverrideChanged,
             this, &MainWindow::onStyleOverrideChanged);
     connect(m_pageLayoutWidget, &PageLayoutWidget::pageLayoutChanged,
@@ -288,7 +349,7 @@ void MainWindow::setupActions()
 
     // File > Open
     auto *openAction = KStandardAction::open(this, &MainWindow::onFileOpen, ac);
-    Q_UNUSED(openAction);
+    openAction->setPriority(QAction::LowPriority);
 
     // File > Open Recent
     m_recentFilesAction = KStandardAction::openRecent(
@@ -311,15 +372,17 @@ void MainWindow::setupActions()
 
     // File > Print
     auto *printAction = KStandardAction::print(this, &MainWindow::onFilePrint, ac);
-    Q_UNUSED(printAction);
+    printAction->setPriority(QAction::LowPriority);
 
     // File > Close
     auto *closeAction = KStandardAction::close(this, &MainWindow::onFileClose, ac);
     Q_UNUSED(closeAction);
 
     // View > Zoom
-    KStandardAction::zoomIn(this, &MainWindow::onZoomIn, ac);
-    KStandardAction::zoomOut(this, &MainWindow::onZoomOut, ac);
+    auto *zoomInAction = KStandardAction::zoomIn(this, &MainWindow::onZoomIn, ac);
+    zoomInAction->setPriority(QAction::LowPriority);
+    auto *zoomOutAction = KStandardAction::zoomOut(this, &MainWindow::onZoomOut, ac);
+    zoomOutAction->setPriority(QAction::LowPriority);
 
     auto *fitWidth = ac->addAction(QStringLiteral("view_zoom_fit_width"));
     fitWidth->setText(i18n("Fit &Width"));
@@ -331,12 +394,41 @@ void MainWindow::setupActions()
     fitPage->setIcon(QIcon::fromTheme(QStringLiteral("zoom-fit-page")));
     connect(fitPage, &QAction::triggered, this, &MainWindow::onFitPage);
 
+    // View > Render Mode (Print vs Web)
+    auto *renderModeGroup = new QActionGroup(this);
+    renderModeGroup->setExclusive(true);
+
+    m_printViewAction = ac->addAction(QStringLiteral("view_print_mode"));
+    m_printViewAction->setText(i18n("&Print View"));
+    m_printViewAction->setIcon(QIcon::fromTheme(QStringLiteral("document-print-preview")));
+    m_printViewAction->setCheckable(true);
+    m_printViewAction->setChecked(!PrettyReaderSettings::self()->useWebView());
+    m_printViewAction->setActionGroup(renderModeGroup);
+    connect(m_printViewAction, &QAction::triggered, this, [this]() {
+        PrettyReaderSettings::self()->setUseWebView(false);
+        PrettyReaderSettings::self()->save();
+        onRenderModeChanged();
+    });
+
+    m_webViewAction = ac->addAction(QStringLiteral("view_web_mode"));
+    m_webViewAction->setText(i18n("&Web View"));
+    m_webViewAction->setIcon(QIcon::fromTheme(QStringLiteral("text-html")));
+    m_webViewAction->setCheckable(true);
+    m_webViewAction->setChecked(PrettyReaderSettings::self()->useWebView());
+    m_webViewAction->setActionGroup(renderModeGroup);
+    connect(m_webViewAction, &QAction::triggered, this, [this]() {
+        PrettyReaderSettings::self()->setUseWebView(true);
+        PrettyReaderSettings::self()->save();
+        onRenderModeChanged();
+    });
+
     // View > Mode (exclusive action group)
     auto *viewModeGroup = new QActionGroup(this);
     viewModeGroup->setExclusive(true);
 
     auto *continuous = ac->addAction(QStringLiteral("view_continuous"));
     continuous->setText(i18n("&Continuous Scroll"));
+    continuous->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-continuous")));
     continuous->setCheckable(true);
     continuous->setChecked(true);
     continuous->setActionGroup(viewModeGroup);
@@ -348,6 +440,7 @@ void MainWindow::setupActions()
 
     auto *singlePage = ac->addAction(QStringLiteral("view_single_page"));
     singlePage->setText(i18n("&Single Page"));
+    singlePage->setIcon(QIcon::fromTheme(QStringLiteral("view-paged-symbolic")));
     singlePage->setCheckable(true);
     singlePage->setActionGroup(viewModeGroup);
     connect(singlePage, &QAction::triggered, this, [this]() {
@@ -358,6 +451,7 @@ void MainWindow::setupActions()
 
     auto *facingPages = ac->addAction(QStringLiteral("view_facing_pages"));
     facingPages->setText(i18n("&Facing Pages"));
+    facingPages->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing")));
     facingPages->setCheckable(true);
     facingPages->setActionGroup(viewModeGroup);
     connect(facingPages, &QAction::triggered, this, [this]() {
@@ -368,6 +462,7 @@ void MainWindow::setupActions()
 
     auto *facingFirstAlone = ac->addAction(QStringLiteral("view_facing_first_alone"));
     facingFirstAlone->setText(i18n("Facing Pages (First &Alone)"));
+    facingFirstAlone->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing-first-centered")));
     facingFirstAlone->setCheckable(true);
     facingFirstAlone->setActionGroup(viewModeGroup);
     connect(facingFirstAlone, &QAction::triggered, this, [this]() {
@@ -378,6 +473,7 @@ void MainWindow::setupActions()
 
     auto *continuousFacing = ac->addAction(QStringLiteral("view_continuous_facing"));
     continuousFacing->setText(i18n("Continuous F&acing"));
+    continuousFacing->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing-symbolic")));
     continuousFacing->setCheckable(true);
     continuousFacing->setActionGroup(viewModeGroup);
     connect(continuousFacing, &QAction::triggered, this, [this]() {
@@ -388,6 +484,7 @@ void MainWindow::setupActions()
 
     auto *continuousFacingFirstAlone = ac->addAction(QStringLiteral("view_continuous_facing_first_alone"));
     continuousFacingFirstAlone->setText(i18n("Continuous Facing (First A&lone)"));
+    continuousFacingFirstAlone->setIcon(QIcon::fromTheme(QStringLiteral("view-pages-facing-first-centered")));
     continuousFacingFirstAlone->setCheckable(true);
     continuousFacingFirstAlone->setActionGroup(viewModeGroup);
     connect(continuousFacingFirstAlone, &QAction::triggered, this, [this]() {
@@ -401,6 +498,7 @@ void MainWindow::setupActions()
         QIcon::fromTheme(QStringLiteral("view-list-details")),
         i18n("Page &Arrangement"), this);
     ac->addAction(QStringLiteral("view_page_arrangement"), arrangementMenu);
+    m_pageArrangementMenu = arrangementMenu;
     arrangementMenu->addAction(continuous);
     arrangementMenu->addAction(singlePage);
     arrangementMenu->addAction(facingPages);
@@ -412,6 +510,7 @@ void MainWindow::setupActions()
     auto *prevPage = ac->addAction(QStringLiteral("go_previous_page"));
     prevPage->setText(i18n("&Previous Page"));
     prevPage->setIcon(QIcon::fromTheme(QStringLiteral("go-previous")));
+    prevPage->setPriority(QAction::LowPriority);
     ac->setDefaultShortcut(prevPage, QKeySequence(Qt::Key_PageUp));
     connect(prevPage, &QAction::triggered, this, [this]() {
         auto *view = currentDocumentView();
@@ -422,6 +521,7 @@ void MainWindow::setupActions()
     auto *nextPage = ac->addAction(QStringLiteral("go_next_page"));
     nextPage->setText(i18n("&Next Page"));
     nextPage->setIcon(QIcon::fromTheme(QStringLiteral("go-next")));
+    nextPage->setPriority(QAction::LowPriority);
     ac->setDefaultShortcut(nextPage, QKeySequence(Qt::Key_PageDown));
     connect(nextPage, &QAction::triggered, this, [this]() {
         auto *view = currentDocumentView();
@@ -469,6 +569,22 @@ void MainWindow::setupActions()
             this, [this, toggleToc](int tabId, bool visible) {
         if (tabId == m_tocTabId)
             toggleToc->setChecked(visible);
+    });
+
+    auto *toggleTheme = ac->addAction(QStringLiteral("view_toggle_theme"));
+    toggleTheme->setText(i18n("&Theme Panel"));
+    toggleTheme->setIcon(QIcon::fromTheme(QStringLiteral("color-management")));
+    toggleTheme->setCheckable(true);
+    connect(toggleTheme, &QAction::triggered, this, [this](bool checked) {
+        if (checked)
+            m_rightSidebar->showPanel(m_themePickerTabId);
+        else
+            m_rightSidebar->hidePanel(m_themePickerTabId);
+    });
+    connect(m_rightSidebar, &Sidebar::panelVisibilityChanged,
+            this, [this, toggleTheme](int tabId, bool visible) {
+        if (tabId == m_themePickerTabId)
+            toggleTheme->setChecked(visible);
     });
 
     auto *toggleStyle = ac->addAction(QStringLiteral("view_toggle_style"));
@@ -551,6 +667,9 @@ void MainWindow::setupActions()
     });
 
     setupGUI(Default, QStringLiteral("prettyreaderui.rc"));
+
+    // Show text labels by default; LowPriority actions get icon-only
+    toolBar()->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 }
 
 void MainWindow::onFileOpen()
@@ -580,14 +699,6 @@ void MainWindow::onFileExportPdf()
     }
 
     if (view->isPdfMode()) {
-        // New pipeline: the PDF data is already generated, just write to file
-        QString path = QFileDialog::getSaveFileName(
-            this, i18n("Export as PDF"),
-            QString(), i18n("PDF Files (*.pdf)"));
-        if (path.isEmpty())
-            return;
-
-        // Regenerate to get fresh PDF bytes (ensures current styles are applied)
         auto *tab = currentDocumentTab();
         if (!tab)
             return;
@@ -610,32 +721,140 @@ void MainWindow::onFileExportPdf()
             styleManager = editingSm->clone(this);
         } else {
             styleManager = new StyleManager(this);
-            QString themeId = m_styleDockWidget->currentThemeId();
-            if (!m_themeManager->loadTheme(themeId, styleManager))
-                m_themeManager->loadDefaults(styleManager);
+            m_themeComposer->compose(styleManager);
         }
 
         QFileInfo fi(filePath);
         PageLayout pl = m_pageLayoutWidget->currentPageLayout();
 
+        // Build content (needed for heading tree + page count)
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             contentBuilder.setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             contentBuilder.setShortWords(m_shortWords);
         contentBuilder.setFootnoteStyle(styleManager->footnoteStyle());
         Content::Document contentDoc = contentBuilder.build(markdown);
-
         view->applyLanguageOverrides(contentDoc);
 
+        // Pre-layout to get page count for dialog
         m_fontManager->resetUsage();
+        Layout::Engine preLayoutEngine(m_fontManager, m_textShaper);
+        preLayoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
+        Layout::LayoutResult preLayout = preLayoutEngine.layout(contentDoc, pl);
+        int pageCount = preLayout.pages.size();
 
+        // Load saved options from KConfig
+        PdfExportOptions opts;
+        auto *settings = PrettyReaderSettings::self();
+        opts.author = settings->pdfAuthor();
+        opts.markdownCopy = settings->pdfMarkdownCopy();
+        opts.unwrapParagraphs = settings->pdfUnwrapParagraphs();
+        opts.includeBookmarks = settings->pdfIncludeBookmarks();
+        opts.bookmarkMaxDepth = settings->pdfBookmarkMaxDepth();
+        opts.initialView = static_cast<PdfExportOptions::InitialView>(
+            settings->pdfInitialView());
+        opts.pageLayout = static_cast<PdfExportOptions::PageLayout>(
+            settings->pdfPageLayout());
+
+        // Overlay per-document options from MetadataStore
+        QJsonObject perDoc = m_metadataStore->load(filePath);
+        if (perDoc.contains(QStringLiteral("pdfExportOptions"))) {
+            QJsonObject saved = perDoc[QStringLiteral("pdfExportOptions")].toObject();
+            if (saved.contains(QStringLiteral("title")))
+                opts.title = saved[QStringLiteral("title")].toString();
+            if (saved.contains(QStringLiteral("author")))
+                opts.author = saved[QStringLiteral("author")].toString();
+            if (saved.contains(QStringLiteral("subject")))
+                opts.subject = saved[QStringLiteral("subject")].toString();
+            if (saved.contains(QStringLiteral("keywords")))
+                opts.keywords = saved[QStringLiteral("keywords")].toString();
+            if (saved.contains(QStringLiteral("pageRangeExpr")))
+                opts.pageRangeExpr = saved[QStringLiteral("pageRangeExpr")].toString();
+            if (saved.contains(QStringLiteral("excludedHeadingIndices"))) {
+                QJsonArray arr = saved[QStringLiteral("excludedHeadingIndices")].toArray();
+                for (const auto &v : arr)
+                    opts.excludedHeadingIndices.insert(v.toInt());
+            }
+        }
+
+        // Show export dialog
+        PdfExportDialog dlg(contentDoc, pageCount, fi.baseName(), this);
+        dlg.setOptions(opts);
+        dlg.setHasNonWhiteBackgrounds(m_themeComposer->currentPalette().hasNonWhiteBackgrounds());
+        if (dlg.exec() != QDialog::Accepted)
+            return;
+
+        opts = dlg.options();
+
+        // Save global defaults to KConfig
+        settings->setPdfAuthor(opts.author);
+        settings->setPdfMarkdownCopy(opts.markdownCopy);
+        settings->setPdfUnwrapParagraphs(opts.unwrapParagraphs);
+        settings->setPdfIncludeBookmarks(opts.includeBookmarks);
+        settings->setPdfBookmarkMaxDepth(opts.bookmarkMaxDepth);
+        settings->setPdfInitialView(static_cast<int>(opts.initialView));
+        settings->setPdfPageLayout(static_cast<int>(opts.pageLayout));
+        settings->save();
+
+        // Save per-document options to MetadataStore
+        QJsonObject docOpts;
+        docOpts[QStringLiteral("title")] = opts.title;
+        docOpts[QStringLiteral("author")] = opts.author;
+        docOpts[QStringLiteral("subject")] = opts.subject;
+        docOpts[QStringLiteral("keywords")] = opts.keywords;
+        docOpts[QStringLiteral("pageRangeExpr")] = opts.pageRangeExpr;
+        QJsonArray excludedArr;
+        for (int idx : opts.excludedHeadingIndices)
+            excludedArr.append(idx);
+        docOpts[QStringLiteral("excludedHeadingIndices")] = excludedArr;
+        m_metadataStore->setValue(filePath, QStringLiteral("pdfExportOptions"), docOpts);
+
+        // File save dialog
+        QString path = QFileDialog::getSaveFileName(
+            this, i18n("Export as PDF"),
+            QString(), i18n("PDF Files (*.pdf)"));
+        if (path.isEmpty())
+            return;
+
+        // Filter content by excluded sections
+        Content::Document filteredDoc = contentDoc;
+        if (opts.sectionsModified && !opts.excludedHeadingIndices.isEmpty())
+            filteredDoc = ContentFilter::filterSections(contentDoc, opts.excludedHeadingIndices);
+
+        // Layout with filtered content
+        m_fontManager->resetUsage();
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
-        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+        layoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
+        if (opts.markdownCopy)
+            layoutEngine.setMarkdownDecorations(true);
+        Layout::LayoutResult layoutResult = layoutEngine.layout(filteredDoc, pl);
 
+        // Filter pages by range
+        if (opts.pageRangeModified && !opts.pageRangeExpr.isEmpty()) {
+            auto rangeResult = PageRangeParser::parse(opts.pageRangeExpr, layoutResult.pages.size());
+            if (rangeResult.valid && rangeResult.pages.size() < layoutResult.pages.size()) {
+                QList<Layout::Page> filteredPages;
+                for (int i = 0; i < layoutResult.pages.size(); ++i) {
+                    if (rangeResult.pages.contains(i + 1))  // 1-based
+                        filteredPages.append(layoutResult.pages[i]);
+                }
+                layoutResult.pages = filteredPages;
+                // Renumber pages
+                for (int i = 0; i < layoutResult.pages.size(); ++i)
+                    layoutResult.pages[i].pageNumber = i;
+            }
+        }
+
+        // Generate PDF with options
         PdfGenerator pdfGen(m_fontManager);
+        pdfGen.setMaxJustifyGap(settings->maxJustifyGap());
+        pdfGen.setExportOptions(opts);
         if (pdfGen.generateToFile(layoutResult, pl, fi.baseName(), path)) {
             statusBar()->showMessage(i18n("Exported to %1", path), 3000);
         } else {
@@ -721,26 +940,42 @@ void MainWindow::onFileClose()
     }
 }
 
-void MainWindow::onThemeChanged(const QString &themeId)
+void MainWindow::onCompositionApplied()
 {
-    // Load theme into a new StyleManager and hand it to the dock
+    // Compose a fresh StyleManager and seed the style dock with it
     auto *sm = new StyleManager(this);
-    if (!m_themeManager->loadTheme(themeId, sm))
-        m_themeManager->loadDefaults(sm);
+    m_themeComposer->compose(sm);
     m_styleDockWidget->populateFromStyleManager(sm);
     delete sm;
 
-    // Re-apply page layout from theme
-    PageLayout pl = m_themeManager->themePageLayout();
-    auto *view = currentDocumentView();
-    if (view)
-        view->setPageLayout(pl);
+    // Page layout is driven by template selection + manual PageLayoutWidget edits.
+    // Here we only update the page background from the palette.
+    QColor pageBg = m_themeComposer->currentPalette().pageBackground();
+    if (pageBg.isValid()) {
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        pl.pageBackground = pageBg;
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+    }
 
     rebuildCurrentDocument();
 }
 
 void MainWindow::onStyleOverrideChanged()
 {
+    // Update page background from the current palette
+    QColor pageBg = m_themeComposer->currentPalette().pageBackground();
+    if (pageBg.isValid()) {
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        pl.pageBackground = pageBg;
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+    }
+
     rebuildCurrentDocument();
 }
 
@@ -818,7 +1053,7 @@ void MainWindow::showPreferences()
     if (KConfigDialog::showDialog(QStringLiteral("settings")))
         return;
 
-    auto *dialog = new PrettyReaderConfigDialog(this, m_themeManager);
+    auto *dialog = new PrettyReaderConfigDialog(this);
     connect(dialog, &KConfigDialog::settingsChanged,
             this, &MainWindow::onSettingsChanged);
     dialog->show();
@@ -829,7 +1064,7 @@ void MainWindow::onSettingsChanged()
     auto *settings = PrettyReaderSettings::self();
 
     // Reconfigure hyphenator
-    if (settings->hyphenationEnabled()) {
+    if (settings->hyphenationEnabled() || settings->hyphenateJustifiedText()) {
         m_hyphenator->loadDictionary(settings->hyphenationLanguage());
         m_hyphenator->setMinWordLength(settings->hyphenationMinWordLength());
     }
@@ -837,6 +1072,25 @@ void MainWindow::onSettingsChanged()
     // Reconfigure short words
     if (settings->shortWordsEnabled())
         m_shortWords->setLanguage(settings->hyphenationLanguage());
+
+    rebuildCurrentDocument();
+}
+
+void MainWindow::onRenderModeChanged()
+{
+    bool webMode = PrettyReaderSettings::self()->useWebView();
+
+    // Show/hide template picker based on render mode
+    if (m_themePickerDock)
+        m_themePickerDock->setRenderMode(!webMode);
+
+    // Enable/disable page arrangement (not meaningful in web mode)
+    if (m_pageArrangementMenu)
+        m_pageArrangementMenu->setEnabled(!webMode);
+
+    auto *view = currentDocumentView();
+    if (view)
+        view->setRenderMode(webMode ? DocumentView::WebMode : DocumentView::PrintMode);
 
     rebuildCurrentDocument();
 }
@@ -856,8 +1110,22 @@ void MainWindow::saveSession()
         else
             group.writeEntry("LeftActivePanel", QStringLiteral("files"));
     }
+    if (!m_rightSidebar->isCollapsed()) {
+        if (m_rightSidebar->isPanelVisible(m_themePickerTabId))
+            group.writeEntry("RightActivePanel", QStringLiteral("theme"));
+        else if (m_rightSidebar->isPanelVisible(m_styleTabId))
+            group.writeEntry("RightActivePanel", QStringLiteral("style"));
+        else
+            group.writeEntry("RightActivePanel", QStringLiteral("page"));
+    }
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
+
+    // Save current type set + color scheme + page template
+    group.writeEntry("TypeSet", m_themePickerDock->currentTypeSetId());
+    group.writeEntry("ColorScheme", m_themePickerDock->currentColorSchemeId());
+    group.writeEntry("PageTemplate", m_themePickerDock->currentTemplateId());
+
     group.sync();
 }
 
@@ -880,8 +1148,15 @@ void MainWindow::restoreSession()
         else
             m_leftSidebar->showPanel(m_tocTabId);
     }
-    if (!rightCollapsed)
-        m_rightSidebar->showPanel(m_styleTabId);
+    if (!rightCollapsed) {
+        QString rightPanel = group.readEntry("RightActivePanel", QStringLiteral("style"));
+        if (rightPanel == QLatin1String("theme"))
+            m_rightSidebar->showPanel(m_themePickerTabId);
+        else if (rightPanel == QLatin1String("page"))
+            m_rightSidebar->showPanel(m_pageLayoutTabId);
+        else
+            m_rightSidebar->showPanel(m_styleTabId);
+    }
 
     // Restore splitter proportions from last session
     QList<int> splitterSizes = group.readEntry("SplitterSizes", QList<int>());
@@ -893,6 +1168,36 @@ void MainWindow::restoreSession()
             splitterSizes[2] = 250;
         m_splitter->setSizes(splitterSizes);
     }
+
+    // Restore type set + color scheme (with backward compat for old session key)
+    QString typeSetId = group.readEntry("TypeSet", QString());
+    if (typeSetId.isEmpty())
+        typeSetId = group.readEntry("TypographyTheme", QStringLiteral("default"));
+    QString colorId = group.readEntry("ColorScheme", QStringLiteral("default-light"));
+
+    bool changed = false;
+    TypeSet ts = m_typeSetManager->typeSet(typeSetId);
+    if (!ts.id.isEmpty()) {
+        m_themeComposer->setTypeSet(ts);
+        changed = true;
+    }
+
+    ColorPalette palette = m_paletteManager->palette(colorId);
+    if (!palette.id.isEmpty()) {
+        m_themeComposer->setColorPalette(palette);
+        changed = true;
+    }
+
+    m_themePickerDock->syncPickersFromComposer();
+
+    // Restore page template selection
+    QString templateId = group.readEntry("PageTemplate", QString());
+    if (!templateId.isEmpty()) {
+        m_themePickerDock->setCurrentTemplateId(templateId);
+    }
+
+    if (changed)
+        onCompositionApplied();
 }
 
 void MainWindow::rebuildCurrentDocument()
@@ -924,9 +1229,7 @@ void MainWindow::rebuildCurrentDocument()
         styleManager = editingSm->clone(this);
     } else {
         styleManager = new StyleManager(this);
-        QString themeId = m_styleDockWidget->currentThemeId();
-        if (!m_themeManager->loadTheme(themeId, styleManager))
-            m_themeManager->loadDefaults(styleManager);
+        m_themeComposer->compose(styleManager);
     }
 
     auto *view = tab->documentView();
@@ -938,11 +1241,12 @@ void MainWindow::rebuildCurrentDocument()
     QFileInfo fi(filePath);
 
     if (PrettyReaderSettings::self()->usePdfRenderer()) {
-        // --- New PDF rendering pipeline ---
+        // --- New rendering pipeline (shared content building) ---
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             contentBuilder.setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             contentBuilder.setShortWords(m_shortWords);
@@ -954,41 +1258,121 @@ void MainWindow::rebuildCurrentDocument()
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
-        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+        layoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
 
-        PdfGenerator pdfGen(m_fontManager);
-        QByteArray pdf = pdfGen.generate(layoutResult, pl, fi.baseName());
+        if (PrettyReaderSettings::self()->useWebView()) {
+            // --- Web view pipeline ---
+            qreal availWidth = view->viewport()->width() - 2 * DocumentView::kSceneMargin;
+            qreal zoomFactor = view->zoomPercent() / 100.0;
+            if (zoomFactor > 0)
+                availWidth /= zoomFactor;
+            if (availWidth < 200)
+                availWidth = 200;
 
-        // Clear legacy document if switching pipelines
-        QTextDocument *oldDoc = view->document();
-        if (oldDoc) {
-            view->setDocument(nullptr);
-            delete oldDoc;
+            Layout::ContinuousLayoutResult webResult =
+                layoutEngine.layoutContinuous(contentDoc, availWidth);
+
+            // Build heading positions (absolute y from source map)
+            QList<HeadingPosition> headingPositions;
+            for (const auto &block : contentDoc.blocks) {
+                const auto *heading = std::get_if<Content::Heading>(&block);
+                if (!heading || heading->level < 1 || heading->level > 6)
+                    continue;
+                HeadingPosition hp;
+                hp.page = 0;
+                hp.sourceLine = heading->source.startLine;
+                if (heading->source.startLine > 0) {
+                    for (const auto &entry : webResult.sourceMap) {
+                        if (entry.startLine == heading->source.startLine
+                            && entry.endLine == heading->source.endLine) {
+                            hp.yOffset = entry.rect.top();
+                            break;
+                        }
+                    }
+                }
+                headingPositions.append(hp);
+            }
+
+            // TOC from content model
+            m_tocWidget->buildFromContentModel(contentDoc, webResult.sourceMap);
+
+            view->setWebFontManager(m_fontManager);
+            view->setHeadingPositions(headingPositions);
+            view->setSourceData(contentBuilder.processedMarkdown(), webResult.sourceMap,
+                                contentDoc, webResult.codeBlockRegions);
+            view->setWebContent(std::move(webResult));
+            view->setRenderMode(DocumentView::WebMode);
+            view->restoreViewState(state);
+            view->setDocumentInfo(fi.fileName(), fi.baseName());
+            connect(view, &DocumentView::currentHeadingChanged,
+                    m_tocWidget, &TocWidget::highlightHeading,
+                    Qt::UniqueConnection);
+
+            // Wire debounced relayout
+            connect(view, &DocumentView::webRelayoutRequested,
+                    this, &MainWindow::rebuildCurrentDocument,
+                    Qt::UniqueConnection);
+        } else {
+            // --- PDF rendering pipeline ---
+            Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+
+            PdfGenerator pdfGen(m_fontManager);
+            pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
+            QByteArray pdf = pdfGen.generate(layoutResult, pl, fi.baseName());
+
+            // Clear legacy document if switching pipelines
+            QTextDocument *oldDoc = view->document();
+            if (oldDoc) {
+                view->setDocument(nullptr);
+                delete oldDoc;
+            }
+
+            view->setPdfData(pdf);
+            view->setSourceData(contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
+                                layoutResult.codeBlockRegions);
+            view->setRenderMode(DocumentView::PrintMode);
+            view->restoreViewState(state);
+            view->setDocumentInfo(fi.fileName(), fi.baseName());
+
+            // Build TOC directly from content model + source map
+            m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+
+            // Pass heading positions to view for scroll-sync
+            {
+                QList<HeadingPosition> headingPositions;
+                for (const auto &block : contentDoc.blocks) {
+                    const auto *heading = std::get_if<Content::Heading>(&block);
+                    if (!heading || heading->level < 1 || heading->level > 6)
+                        continue;
+                    HeadingPosition hp;
+                    hp.sourceLine = heading->source.startLine;
+                    if (heading->source.startLine > 0) {
+                        for (const auto &entry : layoutResult.sourceMap) {
+                            if (entry.startLine == heading->source.startLine
+                                && entry.endLine == heading->source.endLine) {
+                                hp.page = entry.pageNumber;
+                                hp.yOffset = entry.rect.top();
+                                break;
+                            }
+                        }
+                    }
+                    headingPositions.append(hp);
+                }
+                view->setHeadingPositions(headingPositions);
+                connect(view, &DocumentView::currentHeadingChanged,
+                        m_tocWidget, &TocWidget::highlightHeading,
+                        Qt::UniqueConnection);
+            }
         }
-
-        view->setPdfData(pdf);
-        view->setSourceData(contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
-                            layoutResult.codeBlockRegions);
-        view->restoreViewState(state);
-        view->setDocumentInfo(fi.fileName(), fi.baseName());
-
-        // TOC from content model (build a temporary QTextDocument for TOC widget)
-        // TODO: build TOC directly from Content::Document
-        auto *tocDoc = new QTextDocument(this);
-        auto *tocBuilder = new DocumentBuilder(tocDoc, this);
-        tocBuilder->setBasePath(fi.absolutePath());
-        tocBuilder->setStyleManager(styleManager);
-        tocBuilder->build(markdown);
-        m_tocWidget->buildFromDocument(tocDoc);
-        delete tocBuilder;
-        delete tocDoc;
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
         auto *builder = new DocumentBuilder(doc, this);
         builder->setBasePath(fi.absolutePath());
         builder->setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             builder->setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             builder->setShortWords(m_shortWords);
@@ -1042,9 +1426,7 @@ void MainWindow::openFile(const QUrl &url)
         styleManager = editingSm->clone(this);
     } else {
         styleManager = new StyleManager(this);
-        QString themeId = m_styleDockWidget->currentThemeId();
-        if (!m_themeManager->loadTheme(themeId, styleManager))
-            m_themeManager->loadDefaults(styleManager);
+        m_themeComposer->compose(styleManager);
     }
 
     auto *tab = new DocumentTab(this);
@@ -1052,6 +1434,10 @@ void MainWindow::openFile(const QUrl &url)
     tab->setSourceText(markdown);
     PageLayout openPl = m_pageLayoutWidget->currentPageLayout();
     tab->documentView()->setPageLayout(openPl);
+
+    const bool webMode = PrettyReaderSettings::self()->useWebView();
+    if (webMode)
+        tab->documentView()->setRenderMode(DocumentView::WebMode);
 
     QFileInfo fi(filePath);
 
@@ -1065,12 +1451,15 @@ void MainWindow::openFile(const QUrl &url)
         tab->documentView()->setCodeBlockLanguageOverrides(overrides);
     }
 
-    if (PrettyReaderSettings::self()->usePdfRenderer()) {
+    if (webMode) {
+        // Web mode: defer to rebuildCurrentDocument() after tab is current
+    } else if (PrettyReaderSettings::self()->usePdfRenderer()) {
         // --- New PDF rendering pipeline ---
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             contentBuilder.setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             contentBuilder.setShortWords(m_shortWords);
@@ -1082,22 +1471,56 @@ void MainWindow::openFile(const QUrl &url)
         m_fontManager->resetUsage();
 
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
+        layoutEngine.setHyphenateJustifiedText(
+            PrettyReaderSettings::self()->hyphenateJustifiedText());
         Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, openPl);
 
         PdfGenerator pdfGen(m_fontManager);
+        pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
         QByteArray pdf = pdfGen.generate(layoutResult, openPl, fi.baseName());
 
         tab->documentView()->setPdfData(pdf);
         tab->documentView()->setSourceData(
             contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
             layoutResult.codeBlockRegions);
+
+        // Build TOC from content model (PDF mode)
+        m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+
+        // Pass heading positions to view for scroll-sync
+        {
+            QList<HeadingPosition> headingPositions;
+            for (const auto &block : contentDoc.blocks) {
+                const auto *heading = std::get_if<Content::Heading>(&block);
+                if (!heading || heading->level < 1 || heading->level > 6)
+                    continue;
+                HeadingPosition hp;
+                hp.sourceLine = heading->source.startLine;
+                if (heading->source.startLine > 0) {
+                    for (const auto &entry : layoutResult.sourceMap) {
+                        if (entry.startLine == heading->source.startLine
+                            && entry.endLine == heading->source.endLine) {
+                            hp.page = entry.pageNumber;
+                            hp.yOffset = entry.rect.top();
+                            break;
+                        }
+                    }
+                }
+                headingPositions.append(hp);
+            }
+            tab->documentView()->setHeadingPositions(headingPositions);
+            connect(tab->documentView(), &DocumentView::currentHeadingChanged,
+                    m_tocWidget, &TocWidget::highlightHeading,
+                    Qt::UniqueConnection);
+        }
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
         auto *builder = new DocumentBuilder(doc, this);
         builder->setBasePath(fi.absolutePath());
         builder->setStyleManager(styleManager);
-        if (PrettyReaderSettings::self()->hyphenationEnabled())
+        if (PrettyReaderSettings::self()->hyphenationEnabled()
+            || PrettyReaderSettings::self()->hyphenateJustifiedText())
             builder->setHyphenator(m_hyphenator);
         if (PrettyReaderSettings::self()->shortWordsEnabled())
             builder->setShortWords(m_shortWords);
@@ -1166,23 +1589,16 @@ void MainWindow::openFile(const QUrl &url)
     m_tabWidget->setTabToolTip(index, filePath);
     m_tabWidget->setCurrentIndex(index);
 
+    // In web mode, build now that the tab is current (needs viewport width)
+    if (webMode)
+        rebuildCurrentDocument();
+
     m_recentFilesAction->addUrl(url);
 
     // Update TOC
     if (!tab->documentView()->isPdfMode()) {
         m_tocWidget->buildFromDocument(tab->documentView()->document());
-    } else {
-        // For PDF mode, build TOC from a temporary document
-        auto *tocDoc = new QTextDocument(this);
-        auto *tocBuilder = new DocumentBuilder(tocDoc, this);
-        tocBuilder->setBasePath(fi.absolutePath());
-        tocBuilder->setStyleManager(styleManager);
-        tocBuilder->build(markdown);
-        m_tocWidget->buildFromDocument(tocDoc);
-        delete tocBuilder;
-        delete tocDoc;
     }
-
     // A6: Update file path label in status bar
     if (m_filePathLabel)
         m_filePathLabel->setText(filePath);

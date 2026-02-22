@@ -1,0 +1,22 @@
+{
+    "id": "one-light",
+    "name": "One Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Atom's clean, modern light theme",
+    "colors": {
+        "text": "#383A42",
+        "headingText": "#A626A4",
+        "blockquoteText": "#50A14F",
+        "linkText": "#4078F2",
+        "codeText": "#0184BB",
+        "surfaceCode": "#EAEAEB",
+        "surfaceInlineCode": "#E5E5E6",
+        "surfaceTableHeader": "#D4D4D6",
+        "surfaceTableAlt": "#F3F3F3",
+        "pageBackground": "#FAFAFA",
+        "borderOuter": "#A0A1A7",
+        "borderInner": "#E5E5E6",
+        "borderHeaderBottom": "#4078F2"
+    }
+}

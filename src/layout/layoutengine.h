@@ -18,6 +18,8 @@
 #include <QSizeF>
 #include <QString>
 
+#include <optional>
+
 #include "contentmodel.h"
 #include "pagelayout.h"
 
@@ -40,6 +42,8 @@ struct GlyphInfo {
 };
 
 struct GlyphBox {
+    enum CheckboxState { NoCheckbox, Unchecked, Checked };
+
     QList<GlyphInfo> glyphs;
     FontFace *font = nullptr;
     qreal fontSize = 0;
@@ -53,6 +57,14 @@ struct GlyphBox {
     bool rtl = false;
     bool trailingSoftHyphen = false; // word ended at a soft hyphen break point
     bool startsAfterSoftHyphen = false; // continues a soft-hyphenated word
+    bool attachedToPrevious = false;    // no space between this box and previous (mid-word style change)
+    bool isListMarker = false; // bullet/number prefix — excluded from justify expansion
+    // Markdown copy mode: prefix/suffix text and original word text
+    QString mdPrefix;  // e.g. "**", "`", "[", "# "
+    QString mdSuffix;  // e.g. "**", "`", "](url)"
+    QString text;      // original text content of this glyph box
+    // Task list checkbox (rendered as vector graphic, not font glyph)
+    CheckboxState checkboxState = NoCheckbox;
 };
 
 struct ImageBox {
@@ -79,10 +91,19 @@ struct LineBox {
     Qt::Alignment alignment = Qt::AlignLeft;
     bool isLastLine = false; // last line of paragraph (don't justify)
     bool showTrailingHyphen = false; // render '-' at end (soft hyphen break)
+
+    struct JustifyInfo {
+        qreal adjustmentRatio = 0;    // Knuth-Plass r: <0 = shrink, 0 = perfect, >0 = stretch
+        int wordGapCount = 0;         // eligible inter-word gaps
+        int charCount = 0;            // total characters (for letter spacing distribution)
+        qreal extraWordSpacing = 0;   // pre-computed per-word-gap expansion (points)
+        qreal extraLetterSpacing = 0; // pre-computed per-character expansion (points)
+    };
+    JustifyInfo justify;
 };
 
 struct BlockBox {
-    enum Type { ParagraphBlock, HeadingBlock, CodeBlockType, HRuleBlock, FootnoteSectionBlock };
+    enum Type { ParagraphBlock, HeadingBlock, CodeBlockType, HRuleBlock, FootnoteSectionBlock, ImageBlock };
     Type type = ParagraphBlock;
 
     QList<LineBox> lines;
@@ -90,6 +111,7 @@ struct BlockBox {
     qreal y = 0;
     qreal width = 0;
     qreal height = 0;
+    qreal firstLineIndent = 0;
     qreal spaceBefore = 0;
     qreal spaceAfter = 0;
     QColor background; // invalid = none
@@ -99,9 +121,30 @@ struct BlockBox {
     QColor borderColor;
     qreal borderWidth = 0;
     QString codeLanguage;
+    bool codeFenced = true; // false for 4-space indented code blocks
 
     // Heading level (0 = not heading)
     int headingLevel = 0;
+    bool keepWithNext = false; // headings: don't strand at page bottom
+    QString headingText;       // heading text for PDF bookmarks
+
+    // Image block data (when type == ImageBlock)
+    QImage image;
+    qreal imageWidth = 0;
+    qreal imageHeight = 0;
+    QString imageId;    // unique ID for PDF XObject reference
+
+    // Blockquote visual indicator
+    bool hasBlockQuoteBorder = false;
+    int blockQuoteLevel = 0;
+    qreal blockQuoteIndent = 0;
+
+    // List item (for markdown copy: \n separator instead of \n\n)
+    bool isListItem = false;
+
+    // Fragment flags for blocks split across pages
+    bool isFragmentStart = true;   // first or only fragment (emit opening fence)
+    bool isFragmentEnd = true;     // last or only fragment (emit closing fence/separator)
 
     // Source breadcrumb
     Content::SourceRange source;
@@ -166,6 +209,17 @@ struct FootnoteSectionBox {
     qreal height = 0;
 };
 
+// Split a block at a line boundary to fit within availableHeight.
+// Returns nullopt if the block can't be split (too few lines, or it fits already).
+// minLines: minimum lines per fragment (orphan/widow protection).
+std::optional<std::pair<BlockBox, BlockBox>>
+splitBlockBox(const BlockBox &block, qreal availableHeight, int minLines = 2);
+
+// Split a footnote section at a footnote boundary to fit within availableHeight.
+// Returns nullopt if fewer than 2 footnotes or can't split meaningfully.
+std::optional<std::pair<FootnoteSectionBox, FootnoteSectionBox>>
+splitFootnoteSection(const FootnoteSectionBox &box, qreal availableHeight);
+
 // A page element can be any of the above
 using PageElement = std::variant<BlockBox, TableBox, FootnoteSectionBox>;
 
@@ -198,6 +252,14 @@ struct LayoutResult {
     QList<CodeBlockRegion> codeBlockRegions;
 };
 
+struct ContinuousLayoutResult {
+    QList<PageElement> elements;       // each with absolute y position set
+    qreal totalHeight = 0;
+    qreal contentWidth = 0;
+    QList<SourceMapEntry> sourceMap;   // pageNumber always 0, absolute rects
+    QList<CodeBlockRegion> codeBlockRegions;
+};
+
 // --- Layout Engine ---
 
 class Engine {
@@ -205,6 +267,10 @@ public:
     Engine(FontManager *fontManager, TextShaper *textShaper);
 
     LayoutResult layout(const Content::Document &doc, const PageLayout &pageLayout);
+    ContinuousLayoutResult layoutContinuous(const Content::Document &doc, qreal availWidth);
+
+    void setHyphenateJustifiedText(bool enabled) { m_hyphenateJustifiedText = enabled; }
+    void setMarkdownDecorations(bool enabled) { m_markdownDecorations = enabled; }
 
 private:
     // Block layout
@@ -212,17 +278,22 @@ private:
     BlockBox layoutHeading(const Content::Heading &heading, qreal availWidth);
     BlockBox layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth);
     BlockBox layoutHorizontalRule(const Content::HorizontalRule &hr, qreal availWidth);
+    BlockBox layoutImage(const Content::InlineImage &img, qreal availWidth);
     TableBox layoutTable(const Content::Table &table, qreal availWidth);
     FootnoteSectionBox layoutFootnoteSection(const Content::FootnoteSection &fs, qreal availWidth);
 
+    // Blockquote layout: flattens children with indentation + left border
+    QList<PageElement> layoutBlockQuote(const Content::BlockQuote &bq, qreal availWidth);
+
     // List layout: flattens list items into block boxes with indentation
-    QList<PageElement> layoutList(const Content::List &list, qreal availWidth);
+    QList<PageElement> layoutList(const Content::List &list, qreal availWidth, int depth = 0);
 
     // Line breaking
     QList<LineBox> breakIntoLines(const QList<Content::InlineNode> &inlines,
                                   const Content::TextStyle &baseStyle,
                                   const Content::ParagraphFormat &format,
-                                  qreal availWidth);
+                                  qreal availWidth,
+                                  bool markdownRanges = true);
 
     QList<LineBox> shapeAndBreak(const QString &text,
                                  const Content::TextStyle &style,
@@ -243,6 +314,8 @@ private:
 
     FontManager *m_fontManager;
     TextShaper *m_textShaper;
+    bool m_hyphenateJustifiedText = true;
+    bool m_markdownDecorations = false;
 };
 
 } // namespace Layout
