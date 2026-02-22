@@ -6,11 +6,15 @@
 #include <QStringList>
 
 #include "characterstyle.h"
+#include "colorpalette.h"
+#include "fontpairing.h"
 #include "footnotestyle.h"
 #include "pagelayout.h"
 #include "paragraphstyle.h"
 #include "tablestyle.h"
 
+class PaletteManager;
+class FontPairingManager;
 class StyleManager;
 
 class ThemeManager : public QObject
@@ -26,11 +30,26 @@ public:
     // Load a theme into the given StyleManager
     bool loadTheme(const QString &themeId, StyleManager *styleManager);
 
+    // Load a preset JSON file (palette + pairing + style overrides)
+    bool loadPreset(const QString &path,
+                    PaletteManager *paletteMgr,
+                    FontPairingManager *pairingMgr,
+                    StyleManager *styleManager);
+
     // Create a default StyleManager with built-in defaults
     void loadDefaults(StyleManager *styleManager);
 
+    // Ensure parent hierarchy is intact after external modifications
+    void assignDefaultParents(StyleManager *sm);
+
     // Get the page layout from the last loaded theme (if specified)
     PageLayout themePageLayout() const { return m_themePageLayout; }
+
+    // Extract a ColorPalette from a loaded StyleManager (legacy extraction)
+    static ColorPalette extractPalette(const StyleManager *sm, const PageLayout &layout);
+
+    // Extract a FontPairing from a loaded StyleManager (legacy extraction)
+    static FontPairing extractFontPairing(const StyleManager *sm);
 
     // Theme management (M22)
     QString saveTheme(const QString &name, StyleManager *sm, const PageLayout &layout);
@@ -44,8 +63,8 @@ signals:
 
 private:
     bool loadThemeFromJson(const QString &path, StyleManager *styleManager);
+    void applyStyleOverrides(const QJsonObject &root, StyleManager *sm);
     void registerBuiltinThemes();
-    void assignDefaultParents(StyleManager *sm);
     void resolveAllStyles(StyleManager *sm);
 
     // Serialization helpers

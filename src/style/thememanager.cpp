@@ -6,6 +6,11 @@
 #include "footnotestyle.h"
 #include "fontfeatures.h"
 #include "masterpage.h"
+#include "colorpalette.h"
+#include "fontpairing.h"
+#include "palettemanager.h"
+#include "fontpairingmanager.h"
+#include "themecomposer.h"
 
 #include <QColor>
 #include <QDir>
@@ -143,11 +148,89 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
     // Hershey stroke font mode
     sm->setHersheyMode(root.value(QLatin1String("hersheyMode")).toBool(false));
 
+    // Apply paragraph, character, and table styles + page layout + footnote
+    applyStyleOverrides(root, sm);
+
+    // Assign default parents to styles that don't have one
+    assignDefaultParents(sm);
+
+    return true;
+}
+
+bool ThemeManager::loadPreset(const QString &path,
+                              PaletteManager *paletteMgr,
+                              FontPairingManager *pairingMgr,
+                              StyleManager *sm)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (doc.isNull())
+        return false;
+
+    QJsonObject root = doc.object();
+
+    // Verify this is a preset file
+    QString type = root.value(QLatin1String("type")).toString();
+    if (type != QLatin1String("themePreset"))
+        return false;
+
+    // Load palette and pairing by ID
+    QString paletteId = root.value(QLatin1String("paletteId")).toString();
+    QString pairingId = root.value(QLatin1String("pairingId")).toString();
+
+    ColorPalette palette;
+    if (paletteMgr && !paletteId.isEmpty())
+        palette = paletteMgr->palette(paletteId);
+
+    FontPairing pairing;
+    if (pairingMgr && !pairingId.isEmpty())
+        pairing = pairingMgr->pairing(pairingId);
+
+    // Hershey mode: true if pairingId contains "hershey"
+    sm->setHersheyMode(root.value(QLatin1String("hersheyMode")).toBool(
+        pairingId.contains(QLatin1String("hershey"), Qt::CaseInsensitive)));
+
+    // Compose palette + pairing into the StyleManager
+    ThemeComposer composer(this);
+    composer.setColorPalette(palette);
+    composer.setFontPairing(pairing);
+    composer.compose(sm);
+
+    // Apply style overrides on top (from "styleOverrides" section)
+    if (root.contains(QLatin1String("styleOverrides"))) {
+        QJsonObject overrides = root.value(QLatin1String("styleOverrides")).toObject();
+        applyStyleOverrides(overrides, sm);
+    }
+
+    // Apply page layout, master pages, and footnote style from root level
+    applyStyleOverrides(root, sm);
+
+    // Apply palette's pageBackground AFTER root-level overrides, because
+    // applyStyleOverrides() resets m_themePageLayout when a pageLayout key
+    // is present and the preset's pageLayout may not specify pageBackground.
+    QColor pageBg = palette.pageBackground();
+    if (pageBg.isValid())
+        m_themePageLayout.pageBackground = pageBg;
+
+    // Ensure hierarchy after overrides
+    assignDefaultParents(sm);
+
+    return true;
+}
+
+void ThemeManager::applyStyleOverrides(const QJsonObject &root, StyleManager *sm)
+{
     // Paragraph styles
     QJsonObject paraStyles = root.value(QLatin1String("paragraphStyles")).toObject();
     for (auto it = paraStyles.begin(); it != paraStyles.end(); ++it) {
         QJsonObject props = it.value().toObject();
-        ParagraphStyle style(it.key());
+
+        // If this style already exists, get it and modify; otherwise create new
+        ParagraphStyle *existing = sm->paragraphStyle(it.key());
+        ParagraphStyle style = existing ? *existing : ParagraphStyle(it.key());
 
         if (props.contains(QLatin1String("parent")))
             style.setParentStyleName(props.value(QLatin1String("parent")).toString());
@@ -196,7 +279,9 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
     QJsonObject charStyles = root.value(QLatin1String("characterStyles")).toObject();
     for (auto it = charStyles.begin(); it != charStyles.end(); ++it) {
         QJsonObject props = it.value().toObject();
-        CharacterStyle style(it.key());
+
+        CharacterStyle *existing = sm->characterStyle(it.key());
+        CharacterStyle style = existing ? *existing : CharacterStyle(it.key());
 
         if (props.contains(QLatin1String("parent")))
             style.setParentStyleName(props.value(QLatin1String("parent")).toString());
@@ -234,7 +319,9 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
         QJsonObject tableStyles = root.value(QLatin1String("tableStyles")).toObject();
         for (auto it = tableStyles.begin(); it != tableStyles.end(); ++it) {
             QJsonObject props = it.value().toObject();
-            TableStyle ts(it.key());
+
+            TableStyle *existing = sm->tableStyle(it.key());
+            TableStyle ts = existing ? *existing : TableStyle(it.key());
 
             if (props.contains(QLatin1String("borderCollapse")))
                 ts.setBorderCollapse(props.value(QLatin1String("borderCollapse")).toBool());
@@ -278,12 +365,9 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
         }
     }
 
-    // Assign default parents to styles that don't have one
-    assignDefaultParents(sm);
-
     // Optional page layout
-    m_themePageLayout = PageLayout{};
     if (root.contains(QLatin1String("pageLayout"))) {
+        m_themePageLayout = PageLayout{};
         QJsonObject plObj = root.value(QLatin1String("pageLayout")).toObject();
         if (plObj.contains(QLatin1String("pageSize"))) {
             QString sizeStr = plObj.value(QLatin1String("pageSize")).toString();
@@ -417,8 +501,6 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
 
         sm->setFootnoteStyle(fs);
     }
-
-    return true;
 }
 
 void ThemeManager::assignDefaultParents(StyleManager *sm)
@@ -1103,4 +1185,118 @@ QJsonDocument ThemeManager::serializeTheme(const QString &name, StyleManager *sm
     root[QLatin1String("footnoteStyle")] = serializeFootnoteStyle(sm->footnoteStyle());
 
     return QJsonDocument(root);
+}
+
+// --- Legacy extraction ---
+
+ColorPalette ThemeManager::extractPalette(const StyleManager *sm, const PageLayout &layout)
+{
+    ColorPalette palette;
+    palette.id   = QStringLiteral("extracted");
+    palette.name = QStringLiteral("Extracted from theme");
+
+    const auto &paraStyles = sm->paragraphStyles();
+    const auto &charStyles = sm->characterStyles();
+
+    // text ← Default Paragraph Style.foreground
+    {
+        auto it = paraStyles.find(QStringLiteral("Default Paragraph Style"));
+        if (it != paraStyles.end() && it->hasForeground())
+            palette.colors[QStringLiteral("text")] = it->foreground();
+    }
+
+    // headingText ← Heading.foreground
+    {
+        auto it = paraStyles.find(QStringLiteral("Heading"));
+        if (it != paraStyles.end() && it->hasForeground())
+            palette.colors[QStringLiteral("headingText")] = it->foreground();
+    }
+
+    // blockquoteText ← BlockQuote.foreground
+    {
+        auto it = paraStyles.find(QStringLiteral("BlockQuote"));
+        if (it != paraStyles.end() && it->hasForeground())
+            palette.colors[QStringLiteral("blockquoteText")] = it->foreground();
+    }
+
+    // surfaceCode ← CodeBlock.background
+    {
+        auto it = paraStyles.find(QStringLiteral("CodeBlock"));
+        if (it != paraStyles.end() && it->hasBackground())
+            palette.colors[QStringLiteral("surfaceCode")] = it->background();
+    }
+
+    // linkText ← Link.foreground
+    {
+        auto it = charStyles.find(QStringLiteral("Link"));
+        if (it != charStyles.end() && it->hasForeground())
+            palette.colors[QStringLiteral("linkText")] = it->foreground();
+    }
+
+    // codeText ← InlineCode.foreground, surfaceInlineCode ← InlineCode.background
+    {
+        auto it = charStyles.find(QStringLiteral("InlineCode"));
+        if (it != charStyles.end()) {
+            if (it->hasForeground())
+                palette.colors[QStringLiteral("codeText")] = it->foreground();
+            if (it->hasBackground())
+                palette.colors[QStringLiteral("surfaceInlineCode")] = it->background();
+        }
+    }
+
+    // Table style colors
+    {
+        const auto &tableStyles = sm->tableStyles();
+        auto it = tableStyles.find(QStringLiteral("Default"));
+        if (it != tableStyles.end()) {
+            if (it->hasHeaderBackground())
+                palette.colors[QStringLiteral("surfaceTableHeader")] = it->headerBackground();
+            if (it->hasAlternateRowColor())
+                palette.colors[QStringLiteral("surfaceTableAlt")] = it->alternateRowColor();
+            if (it->hasOuterBorder())
+                palette.colors[QStringLiteral("borderOuter")] = it->outerBorder().color;
+            if (it->hasInnerBorder())
+                palette.colors[QStringLiteral("borderInner")] = it->innerBorder().color;
+            if (it->hasHeaderBottomBorder())
+                palette.colors[QStringLiteral("borderHeaderBottom")] = it->headerBottomBorder().color;
+        }
+    }
+
+    // pageBackground ← PageLayout.pageBackground
+    palette.colors[QStringLiteral("pageBackground")] = layout.pageBackground;
+
+    return palette;
+}
+
+FontPairing ThemeManager::extractFontPairing(const StyleManager *sm)
+{
+    FontPairing pairing;
+    pairing.id   = QStringLiteral("extracted");
+    pairing.name = QStringLiteral("Extracted from theme");
+
+    const auto &paraStyles = sm->paragraphStyles();
+
+    // body ← Default Paragraph Style.fontFamily
+    {
+        auto it = paraStyles.find(QStringLiteral("Default Paragraph Style"));
+        if (it != paraStyles.end() && it->hasFontFamily())
+            pairing.body.family = it->fontFamily();
+    }
+
+    // heading ← Heading.fontFamily
+    {
+        auto it = paraStyles.find(QStringLiteral("Heading"));
+        if (it != paraStyles.end() && it->hasFontFamily())
+            pairing.heading.family = it->fontFamily();
+    }
+
+    // mono ← Code.fontFamily (character style)
+    {
+        const auto &charStyles = sm->characterStyles();
+        auto it = charStyles.find(QStringLiteral("Code"));
+        if (it != charStyles.end() && it->hasFontFamily())
+            pairing.mono.family = it->fontFamily();
+    }
+
+    return pairing;
 }

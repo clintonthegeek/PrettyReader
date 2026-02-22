@@ -54,6 +54,8 @@ add_library(PrettyReaderCore STATIC
     style/fontdegradationmap.h
     style/thememanager.cpp
     style/thememanager.h
+    style/themecomposer.cpp
+    style/themecomposer.h
     style/palettemanager.cpp
     style/palettemanager.h
     style/fontpairingmanager.cpp
@@ -184,6 +186,16 @@ qt_add_resources(PrettyReaderCore "pairings"
         themes/pairings/noto-serif-sans-jetbrains.json
         themes/pairings/noto-serif-source-code.json
         themes/pairings/hershey-serif-sans-roman.json
+)
+
+# Bundle theme preset JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "presets"
+    PREFIX "/presets"
+    BASE themes/presets
+    FILES
+        themes/presets/default.json
+        themes/presets/academic.json
+        themes/presets/hershey.json
 )
 
 # Bundle hyphenation dictionaries as Qt resources
