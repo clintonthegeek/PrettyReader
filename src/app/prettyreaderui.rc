@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="prettyreader" version="12">
+<gui name="prettyreader" version="13">
 
   <MenuBar>
     <Menu name="file">
@@ -33,8 +33,8 @@
       <Action name="view_zoom_fit_width"/>
       <Action name="view_zoom_fit_page"/>
       <Separator/>
-      <Action name="view_print_mode"/>
       <Action name="view_web_mode"/>
+      <Action name="view_print_mode"/>
       <Separator/>
       <Action name="view_page_arrangement"/>
       <Separator/>
@@ -77,8 +77,8 @@
     <Action name="view_zoom_in"/>
     <Action name="view_zoom_fit_width"/>
     <Separator/>
-    <Action name="view_print_mode"/>
     <Action name="view_web_mode"/>
+    <Action name="view_print_mode"/>
     <Separator/>
     <Action name="view_page_arrangement"/>
     <Separator/>

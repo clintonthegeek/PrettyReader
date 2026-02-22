@@ -1306,6 +1306,10 @@ void MainWindow::openFile(const QUrl &url)
     PageLayout openPl = m_pageLayoutWidget->currentPageLayout();
     tab->documentView()->setPageLayout(openPl);
 
+    const bool webMode = PrettyReaderSettings::self()->useWebView();
+    if (webMode)
+        tab->documentView()->setRenderMode(DocumentView::WebMode);
+
     QFileInfo fi(filePath);
 
     // Load persisted code block language overrides from MetadataStore
@@ -1318,7 +1322,9 @@ void MainWindow::openFile(const QUrl &url)
         tab->documentView()->setCodeBlockLanguageOverrides(overrides);
     }
 
-    if (PrettyReaderSettings::self()->usePdfRenderer()) {
+    if (webMode) {
+        // Web mode: defer to rebuildCurrentDocument() after tab is current
+    } else if (PrettyReaderSettings::self()->usePdfRenderer()) {
         // --- New PDF rendering pipeline ---
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
@@ -1452,6 +1458,10 @@ void MainWindow::openFile(const QUrl &url)
     int index = m_tabWidget->addTab(tab, fi.fileName());
     m_tabWidget->setTabToolTip(index, filePath);
     m_tabWidget->setCurrentIndex(index);
+
+    // In web mode, build now that the tab is current (needs viewport width)
+    if (webMode)
+        rebuildCurrentDocument();
 
     m_recentFilesAction->addUrl(url);
 
