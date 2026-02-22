@@ -23,6 +23,8 @@ add_library(PrettyReaderCore STATIC
     canvas/pdfpageitem.h
     canvas/rendercache.cpp
     canvas/rendercache.h
+    canvas/qtboxrenderer.cpp
+    canvas/qtboxrenderer.h
     canvas/webviewrenderer.cpp
     canvas/webviewrenderer.h
     canvas/webviewitem.cpp
