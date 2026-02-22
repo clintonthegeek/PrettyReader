@@ -13,6 +13,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QDesktopServices>
 #include <QContextMenuEvent>
 #include <QGraphicsScene>
 #include <QMenu>
@@ -743,6 +744,13 @@ void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
 
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    // Restore scroll position to the current heading after relayout
+    if (m_currentHeading >= 0 && m_currentHeading < m_headingPositions.size()) {
+        qreal headingY = m_headingPositions[m_currentHeading].yOffset;
+        qreal sceneY = headingY + kSceneMargin;
+        centerOn(0, sceneY);
+    }
 }
 
 // --- Events ---
@@ -785,6 +793,25 @@ void DocumentView::mousePressEvent(QMouseEvent *event)
         m_middleZoomStartPercent = m_currentZoom;
         setCursor(Qt::SizeVerCursor);
         event->accept();
+    } else if (event->button() == Qt::LeftButton && m_renderMode == WebMode && m_webViewItem) {
+        // Web mode: check for link click before selection
+        QPointF scenePos = mapToScene(event->pos());
+        QPointF itemPos = m_webViewItem->mapFromScene(scenePos);
+        QString href = m_webViewItem->linkAt(itemPos);
+        if (!href.isEmpty()) {
+            QDesktopServices::openUrl(QUrl(href));
+            event->accept();
+            return;
+        }
+        if (m_cursorMode == SelectionTool) {
+            m_selectPressPos = mapToScene(event->pos());
+            m_selectCurrentPos = m_selectPressPos;
+            m_wordSelection = false;
+            clearSelection();
+            event->accept();
+        } else {
+            QGraphicsView::mousePressEvent(event);
+        }
     } else if (event->button() == Qt::LeftButton && m_cursorMode == SelectionTool) {
         // B2: Start selection (don't select yet — wait for threshold)
         m_selectPressPos = mapToScene(event->pos());
@@ -1584,6 +1611,26 @@ void DocumentView::ensureLinkCacheForPage(int pageNum)
 
 void DocumentView::checkLinkHover(const QPointF &scenePos)
 {
+    // Web mode: use WebViewItem link hit-testing
+    if (m_renderMode == WebMode && m_webViewItem) {
+        QPointF itemPos = m_webViewItem->mapFromScene(scenePos);
+        QString href = m_webViewItem->linkAt(itemPos);
+        if (!href.isEmpty()) {
+            if (m_currentHoverLink != href) {
+                m_currentHoverLink = href;
+                viewport()->setCursor(Qt::PointingHandCursor);
+                Q_EMIT statusHintChanged(href);
+            }
+        } else {
+            if (!m_currentHoverLink.isEmpty()) {
+                m_currentHoverLink.clear();
+                viewport()->setCursor(Qt::ArrowCursor);
+                Q_EMIT statusHintChanged(QString());
+            }
+        }
+        return;
+    }
+
     if (!m_pdfMode || !m_popplerDoc)
         return;
 
