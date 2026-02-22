@@ -26,6 +26,7 @@
 #include "printcontroller.h"
 #include "stylemanager.h"
 #include "styledockwidget.h"
+#include "themepickerdock.h"
 #include "fontpairingmanager.h"
 #include "palettemanager.h"
 #include "themecomposer.h"
@@ -278,25 +279,41 @@ void MainWindow::setupSidebars()
             view->scrollToPosition(page, yOffset);
     });
 
-    // Right sidebar: Style panel + Page Layout panel
+    // Right sidebar: Theme + Style + Page Layout
     m_rightSidebar = new Sidebar(Sidebar::Right, this);
 
-    m_styleDockWidget = new StyleDockWidget(m_themeManager, m_paletteManager,
-                                               m_pairingManager, m_themeComposer, this);
+    // 1. Theme Picker (first panel)
+    m_themePickerDock = new ThemePickerDock(
+        m_themeManager, m_paletteManager, m_pairingManager, m_themeComposer, this);
+    auto *themeView = new ToolView(i18n("Theme"), m_themePickerDock);
+    m_themePickerTabId = m_rightSidebar->addPanel(
+        themeView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Theme"));
+
+    // 2. Style (simplified -- tree + property editors only)
+    m_styleDockWidget = new StyleDockWidget(this);
     auto *styleView = new ToolView(i18n("Style"), m_styleDockWidget);
     m_styleTabId = m_rightSidebar->addPanel(
         styleView, QIcon::fromTheme(QStringLiteral("preferences-desktop-font")), i18n("Style"));
 
+    // 3. Page Layout
     m_pageLayoutWidget = new PageLayoutWidget(this);
     auto *pageView = new ToolView(i18n("Page"), m_pageLayoutWidget);
     m_pageLayoutTabId = m_rightSidebar->addPanel(
         pageView, QIcon::fromTheme(QStringLiteral("document-properties")), i18n("Page"));
 
-    m_styleDockWidget->setPageLayoutProvider([this]() {
+    // Wire providers from other docks to the theme picker
+    m_themePickerDock->setStyleManagerProvider([this]() {
+        return m_styleDockWidget->currentStyleManager();
+    });
+    m_themePickerDock->setPageLayoutProvider([this]() {
         return m_pageLayoutWidget->currentPageLayout();
     });
-    connect(m_styleDockWidget, &StyleDockWidget::themeChanged,
+
+    // Wire signals
+    connect(m_themePickerDock, &ThemePickerDock::themeChanged,
             this, &MainWindow::onThemeChanged);
+    connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
+            this, &MainWindow::onCompositionApplied);
     connect(m_styleDockWidget, &StyleDockWidget::styleOverrideChanged,
             this, &MainWindow::onStyleOverrideChanged);
     connect(m_pageLayoutWidget, &PageLayoutWidget::pageLayoutChanged,
@@ -535,6 +552,22 @@ void MainWindow::setupActions()
             toggleToc->setChecked(visible);
     });
 
+    auto *toggleTheme = ac->addAction(QStringLiteral("view_toggle_theme"));
+    toggleTheme->setText(i18n("&Theme Panel"));
+    toggleTheme->setIcon(QIcon::fromTheme(QStringLiteral("color-management")));
+    toggleTheme->setCheckable(true);
+    connect(toggleTheme, &QAction::triggered, this, [this](bool checked) {
+        if (checked)
+            m_rightSidebar->showPanel(m_themePickerTabId);
+        else
+            m_rightSidebar->hidePanel(m_themePickerTabId);
+    });
+    connect(m_rightSidebar, &Sidebar::panelVisibilityChanged,
+            this, [this, toggleTheme](int tabId, bool visible) {
+        if (tabId == m_themePickerTabId)
+            toggleTheme->setChecked(visible);
+    });
+
     auto *toggleStyle = ac->addAction(QStringLiteral("view_toggle_style"));
     toggleStyle->setText(i18n("&Style Panel"));
     toggleStyle->setIcon(QIcon::fromTheme(QStringLiteral("preferences-desktop-font")));
@@ -669,7 +702,7 @@ void MainWindow::onFileExportPdf()
             styleManager = editingSm->clone(this);
         } else {
             styleManager = new StyleManager(this);
-            QString themeId = m_styleDockWidget->currentThemeId();
+            QString themeId = m_themePickerDock->currentThemeId();
             if (!m_themeManager->loadTheme(themeId, styleManager))
                 m_themeManager->loadDefaults(styleManager);
         }
@@ -899,8 +932,12 @@ void MainWindow::onThemeChanged(const QString &themeId)
     m_styleDockWidget->populateFromStyleManager(sm);
     delete sm;
 
-    // Re-apply page layout from theme
+    // Sync pickers to match the loaded theme
+    m_themePickerDock->syncPickersFromComposer();
+
+    // Re-apply page layout from theme (updates widget + view + background)
     PageLayout pl = m_themeManager->themePageLayout();
+    m_pageLayoutWidget->setPageLayout(pl);
     auto *view = currentDocumentView();
     if (view)
         view->setPageLayout(pl);
@@ -908,8 +945,38 @@ void MainWindow::onThemeChanged(const QString &themeId)
     rebuildCurrentDocument();
 }
 
+void MainWindow::onCompositionApplied()
+{
+    // ThemePickerDock already called compose() on the editing styles
+    m_styleDockWidget->refreshTreeModel();
+
+    // Update page background from palette
+    QColor pageBg = m_themeComposer->currentPalette().pageBackground();
+    if (pageBg.isValid()) {
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        pl.pageBackground = pageBg;
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+    }
+
+    rebuildCurrentDocument();
+}
+
 void MainWindow::onStyleOverrideChanged()
 {
+    // Update page background from the current palette
+    QColor pageBg = m_themeComposer->currentPalette().pageBackground();
+    if (pageBg.isValid()) {
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        pl.pageBackground = pageBg;
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+    }
+
     rebuildCurrentDocument();
 }
 
@@ -1040,6 +1107,14 @@ void MainWindow::saveSession()
         else
             group.writeEntry("LeftActivePanel", QStringLiteral("files"));
     }
+    if (!m_rightSidebar->isCollapsed()) {
+        if (m_rightSidebar->isPanelVisible(m_themePickerTabId))
+            group.writeEntry("RightActivePanel", QStringLiteral("theme"));
+        else if (m_rightSidebar->isPanelVisible(m_styleTabId))
+            group.writeEntry("RightActivePanel", QStringLiteral("style"));
+        else
+            group.writeEntry("RightActivePanel", QStringLiteral("page"));
+    }
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
     group.sync();
@@ -1064,8 +1139,15 @@ void MainWindow::restoreSession()
         else
             m_leftSidebar->showPanel(m_tocTabId);
     }
-    if (!rightCollapsed)
-        m_rightSidebar->showPanel(m_styleTabId);
+    if (!rightCollapsed) {
+        QString rightPanel = group.readEntry("RightActivePanel", QStringLiteral("style"));
+        if (rightPanel == QLatin1String("theme"))
+            m_rightSidebar->showPanel(m_themePickerTabId);
+        else if (rightPanel == QLatin1String("page"))
+            m_rightSidebar->showPanel(m_pageLayoutTabId);
+        else
+            m_rightSidebar->showPanel(m_styleTabId);
+    }
 
     // Restore splitter proportions from last session
     QList<int> splitterSizes = group.readEntry("SplitterSizes", QList<int>());
@@ -1108,7 +1190,7 @@ void MainWindow::rebuildCurrentDocument()
         styleManager = editingSm->clone(this);
     } else {
         styleManager = new StyleManager(this);
-        QString themeId = m_styleDockWidget->currentThemeId();
+        QString themeId = m_themePickerDock->currentThemeId();
         if (!m_themeManager->loadTheme(themeId, styleManager))
             m_themeManager->loadDefaults(styleManager);
     }
@@ -1305,7 +1387,7 @@ void MainWindow::openFile(const QUrl &url)
         styleManager = editingSm->clone(this);
     } else {
         styleManager = new StyleManager(this);
-        QString themeId = m_styleDockWidget->currentThemeId();
+        QString themeId = m_themePickerDock->currentThemeId();
         if (!m_themeManager->loadTheme(themeId, styleManager))
             m_themeManager->loadDefaults(styleManager);
     }

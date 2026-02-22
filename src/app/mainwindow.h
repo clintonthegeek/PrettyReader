@@ -24,6 +24,7 @@ class ThemeComposer;
 class TocWidget;
 class ThemeManager;
 class StyleDockWidget;
+class ThemePickerDock;
 class DocumentTab;
 class DocumentView;
 class Hyphenator;
@@ -50,6 +51,7 @@ private slots:
     void onFilePrint();
     void onFileClose();
     void onThemeChanged(const QString &themeId);
+    void onCompositionApplied();
     void onStyleOverrideChanged();
     void onPageLayoutChanged();
     void onZoomIn();
@@ -80,6 +82,8 @@ private:
     int m_tocTabId = -1;
     int m_styleTabId = -1;
 
+    ThemePickerDock *m_themePickerDock = nullptr;
+    int m_themePickerTabId = -1;
     StyleDockWidget *m_styleDockWidget = nullptr;
     PageLayoutWidget *m_pageLayoutWidget = nullptr;
     FileBrowserDock *m_fileBrowserWidget = nullptr;

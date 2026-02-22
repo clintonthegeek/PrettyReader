@@ -136,6 +136,8 @@ add_library(PrettyReaderCore STATIC
     widgets/paletteeditordialog.h
     widgets/fontpairingeditordialog.cpp
     widgets/fontpairingeditordialog.h
+    widgets/themepickerdock.cpp
+    widgets/themepickerdock.h
 )
 
 target_include_directories(PrettyReaderCore
