@@ -1,0 +1,12 @@
+{
+    "id": "hershey-serif-sans-roman",
+    "name": "Hershey Serif + Sans + Roman",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "Native Hershey vector stroke font pairing",
+    "roles": {
+        "body": { "family": "Hershey Serif", "hersheyFamily": "Hershey Serif" },
+        "heading": { "family": "Hershey Sans", "hersheyFamily": "Hershey Sans" },
+        "mono": { "family": "Hershey Roman", "hersheyFamily": "Hershey Roman" }
+    }
+}

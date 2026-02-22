@@ -1,0 +1,12 @@
+{
+    "id": "noto-serif-sans-jetbrains",
+    "name": "Noto Serif + Noto Sans + JetBrains Mono",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "Clean pairing for everyday reading",
+    "roles": {
+        "body": { "family": "Noto Serif", "hersheyFamily": "Hershey Serif" },
+        "heading": { "family": "Noto Sans", "hersheyFamily": "Hershey Sans" },
+        "mono": { "family": "JetBrains Mono", "hersheyFamily": "Hershey Roman" }
+    }
+}

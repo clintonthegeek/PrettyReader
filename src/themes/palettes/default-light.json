@@ -1,0 +1,22 @@
+{
+    "id": "default-light",
+    "name": "Default Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Clean light palette for everyday reading",
+    "colors": {
+        "text": "#1a1a1a",
+        "headingText": "#1a1a2e",
+        "blockquoteText": "#555555",
+        "linkText": "#0366d6",
+        "codeText": "#c7254e",
+        "surfaceCode": "#f6f8fa",
+        "surfaceInlineCode": "#f0f0f0",
+        "surfaceTableHeader": "#f0f0f0",
+        "surfaceTableAlt": "#f9f9f9",
+        "pageBackground": "#ffffff",
+        "borderOuter": "#333333",
+        "borderInner": "#cccccc",
+        "borderHeaderBottom": "#333333"
+    }
+}
