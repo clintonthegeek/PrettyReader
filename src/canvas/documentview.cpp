@@ -782,7 +782,7 @@ void DocumentView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
     if (m_renderMode == WebMode) {
-        m_relayoutTimer.start(); // restart 200ms debounce
+        Q_EMIT webRelayoutRequested();
     }
 }
 
