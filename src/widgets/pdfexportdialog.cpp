@@ -95,6 +95,29 @@ void PdfExportDialog::setupGeneralPage()
     copyForm->addRow(m_xobjectGlyphsCheck);
 
     layout->addWidget(copyGroup);
+
+    // Font rendering group
+    auto *fontGroup = new QGroupBox(i18n("Font Rendering"), page);
+    auto *fontForm = new QFormLayout(fontGroup);
+
+    m_hersheyFontsCheck = new QCheckBox(i18n("Use Hershey stroke fonts"), fontGroup);
+    m_hersheyFontsCheck->setToolTip(
+        i18n("Replaces TTF/OTF fonts with Hershey vector stroke fonts at export time. "
+             "Produces smaller files with a distinctive hand-drawn aesthetic."));
+    fontForm->addRow(m_hersheyFontsCheck);
+
+    layout->addWidget(fontGroup);
+
+    // Ink waste warning (hidden by default)
+    m_inkWarning = new KMessageWidget(page);
+    m_inkWarning->setMessageType(KMessageWidget::Warning);
+    m_inkWarning->setWordWrap(true);
+    m_inkWarning->setText(
+        i18n("This color palette uses non-white backgrounds that may waste ink when printed."));
+    m_inkWarning->setCloseButtonVisible(true);
+    m_inkWarning->setVisible(false);
+    layout->addWidget(m_inkWarning);
+
     layout->addStretch();
 
     auto *pageItem = addPage(page, i18n("General"));
@@ -395,6 +418,7 @@ PdfExportOptions PdfExportDialog::options() const
     opts.markdownCopy = m_markdownCopyCheck->isChecked();
     opts.unwrapParagraphs = m_unwrapParagraphsCheck->isChecked();
     opts.xobjectGlyphs = m_xobjectGlyphsCheck->isChecked();
+    opts.useHersheyFonts = m_hersheyFontsCheck->isChecked();
 
     // Content — excluded headings
     std::function<void(QTreeWidgetItem *)> collectExcluded =
@@ -438,6 +462,7 @@ void PdfExportDialog::setOptions(const PdfExportOptions &opts)
     m_markdownCopyCheck->setChecked(opts.markdownCopy);
     m_unwrapParagraphsCheck->setChecked(opts.unwrapParagraphs);
     m_xobjectGlyphsCheck->setChecked(opts.xobjectGlyphs);
+    m_hersheyFontsCheck->setChecked(opts.useHersheyFonts);
 
     // Content — page range
     m_pageRangeEdit->setText(opts.pageRangeExpr);
@@ -461,4 +486,12 @@ void PdfExportDialog::setOptions(const PdfExportOptions &opts)
         m_initialViewCombo->findData(opts.initialView));
     m_pageLayoutCombo->setCurrentIndex(
         m_pageLayoutCombo->findData(opts.pageLayout));
+}
+
+void PdfExportDialog::setHasNonWhiteBackgrounds(bool hasNonWhite)
+{
+    if (hasNonWhite && !m_inkWarning->isVisible())
+        m_inkWarning->animatedShow();
+    else if (!hasNonWhite && m_inkWarning->isVisible())
+        m_inkWarning->animatedHide();
 }

@@ -34,6 +34,9 @@ public:
     // Pre-fill from saved options (KConfig + MetadataStore overlay)
     void setOptions(const PdfExportOptions &opts);
 
+    // Show/hide ink waste warning based on current palette
+    void setHasNonWhiteBackgrounds(bool hasNonWhite);
+
 private:
     void setupGeneralPage();
     void setupContentPage();
@@ -53,6 +56,8 @@ private:
     QCheckBox *m_markdownCopyCheck = nullptr;
     QCheckBox *m_unwrapParagraphsCheck = nullptr;
     QCheckBox *m_xobjectGlyphsCheck = nullptr;
+    QCheckBox *m_hersheyFontsCheck = nullptr;
+    KMessageWidget *m_inkWarning = nullptr;
 
     // Content page
     QTreeWidget *m_headingTree = nullptr;

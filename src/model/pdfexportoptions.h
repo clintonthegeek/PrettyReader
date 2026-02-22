@@ -21,6 +21,9 @@ struct PdfExportOptions {
     bool unwrapParagraphs = false;  // embed unwrapped paragraph text in PDF
     bool xobjectGlyphs = false;     // render all glyphs as Form XObjects (no text operators)
 
+    // General — font rendering
+    bool useHersheyFonts = false;   // substitute TTF fonts with Hershey stroke fonts
+
     // Content — section selection
     QSet<int> excludedHeadingIndices;   // indices into doc.blocks of unchecked headings
     bool sectionsModified = false;      // true if user changed any checkboxes

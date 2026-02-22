@@ -735,6 +735,7 @@ void MainWindow::onFileExportPdf()
         // Show export dialog
         PdfExportDialog dlg(contentDoc, pageCount, fi.baseName(), this);
         dlg.setOptions(opts);
+        dlg.setHasNonWhiteBackgrounds(m_themeComposer->currentPalette().hasNonWhiteBackgrounds());
         if (dlg.exec() != QDialog::Accepted)
             return;
 

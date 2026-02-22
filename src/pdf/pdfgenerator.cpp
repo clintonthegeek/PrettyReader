@@ -122,6 +122,10 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         if (m_hasHersheyGlyphs) break;
     }
 
+    // Force Hershey mode if requested by export options
+    if (m_exportOptions.useHersheyFonts)
+        m_hasHersheyGlyphs = true;
+
     // First pass: register fonts by scanning all glyph boxes
     for (const auto &page : layout.pages) {
         for (const auto &elem : page.elements) {
