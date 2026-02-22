@@ -48,7 +48,7 @@ DocumentView::DocumentView(QWidget *parent)
 
     // Web view relayout debounce timer
     m_relayoutTimer.setSingleShot(true);
-    m_relayoutTimer.setInterval(200);
+    m_relayoutTimer.setInterval(50);
     connect(&m_relayoutTimer, &QTimer::timeout, this, [this]() {
         Q_EMIT webRelayoutRequested();
     });
@@ -782,7 +782,7 @@ void DocumentView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
     if (m_renderMode == WebMode) {
-        Q_EMIT webRelayoutRequested();
+        m_relayoutTimer.start();
     }
 }
 
