@@ -1,0 +1,22 @@
+{
+    "id": "solarized-light",
+    "name": "Solarized Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Ethan Schoonover's precision-engineered light palette",
+    "colors": {
+        "text": "#657b83",
+        "headingText": "#586e75",
+        "blockquoteText": "#93a1a1",
+        "linkText": "#268bd2",
+        "codeText": "#dc322f",
+        "surfaceCode": "#eee8d5",
+        "surfaceInlineCode": "#eee8d5",
+        "surfaceTableHeader": "#eee8d5",
+        "surfaceTableAlt": "#f5efdc",
+        "pageBackground": "#fdf6e3",
+        "borderOuter": "#586e75",
+        "borderInner": "#93a1a1",
+        "borderHeaderBottom": "#586e75"
+    }
+}

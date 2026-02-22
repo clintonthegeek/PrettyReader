@@ -1,0 +1,22 @@
+{
+    "id": "solarized-dark",
+    "name": "Solarized Dark",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Ethan Schoonover's precision-engineered dark palette",
+    "colors": {
+        "text": "#839496",
+        "headingText": "#93a1a1",
+        "blockquoteText": "#657b83",
+        "linkText": "#268bd2",
+        "codeText": "#dc322f",
+        "surfaceCode": "#073642",
+        "surfaceInlineCode": "#073642",
+        "surfaceTableHeader": "#073642",
+        "surfaceTableAlt": "#05303e",
+        "pageBackground": "#002b36",
+        "borderOuter": "#93a1a1",
+        "borderInner": "#586e75",
+        "borderHeaderBottom": "#93a1a1"
+    }
+}

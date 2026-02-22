@@ -184,6 +184,9 @@ qt_add_resources(PrettyReaderCore "palettes"
         themes/palettes/default-light.json
         themes/palettes/academic-light.json
         themes/palettes/hershey-ink.json
+        themes/palettes/solarized-light.json
+        themes/palettes/solarized-dark.json
+        themes/palettes/dracula.json
 )
 
 # Bundle font pairing JSON files as Qt resources
