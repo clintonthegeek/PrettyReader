@@ -1583,19 +1583,57 @@ void DocumentView::updateCurrentPage()
                 m_currentPage = page;
                 Q_EMIT currentPageChanged(page);
             }
-            return;
+            break;
         }
     }
 
     // Check legacy pages
-    for (int i = 0; i < m_pageItems.size(); ++i) {
-        QRectF r = m_pageItems[i]->boundingRect().translated(m_pageItems[i]->pos());
-        if (r.contains(center)) {
-            if (m_currentPage != i) {
-                m_currentPage = i;
-                Q_EMIT currentPageChanged(i);
+    if (m_pdfPageItems.isEmpty()) {
+        for (int i = 0; i < m_pageItems.size(); ++i) {
+            QRectF r = m_pageItems[i]->boundingRect().translated(m_pageItems[i]->pos());
+            if (r.contains(center)) {
+                if (m_currentPage != i) {
+                    m_currentPage = i;
+                    Q_EMIT currentPageChanged(i);
+                }
+                break;
             }
-            return;
         }
+    }
+
+    // --- Heading scroll-sync ---
+    if (m_headingPositions.isEmpty())
+        return;
+
+    QPointF viewTop = mapToScene(viewport()->rect().topLeft());
+
+    int bestHeading = -1;
+    for (int i = m_headingPositions.size() - 1; i >= 0; --i) {
+        const auto &hp = m_headingPositions[i];
+        // Convert heading's page-local yOffset to scene coordinates
+        QPointF headingScene;
+        bool found = false;
+        for (auto *item : m_pdfPageItems) {
+            if (item->pageNumber() == hp.page) {
+                headingScene = item->pos() + QPointF(0, hp.yOffset);
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            continue;
+        if (headingScene.y() <= viewTop.y()) {
+            bestHeading = i;
+            break;
+        }
+    }
+
+    // If no heading is above viewport top, use the first heading
+    if (bestHeading == -1 && !m_headingPositions.isEmpty())
+        bestHeading = 0;
+
+    if (bestHeading != m_currentHeading) {
+        m_currentHeading = bestHeading;
+        Q_EMIT currentHeadingChanged(bestHeading);
     }
 }
