@@ -756,7 +756,9 @@ void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
     m_webViewItem->setLayoutResult(std::move(result));
     m_webViewItem->setPos(kSceneMargin, kSceneMargin);
 
-    qreal sceneW = m_webViewItem->boundingRect().width() + kSceneMargin * 2;
+    // Lock scene width to viewport so hand-drag can't scroll horizontally
+    qreal viewW = viewport()->width();
+    qreal sceneW = qMax(viewW, m_webViewItem->boundingRect().width() + kSceneMargin * 2);
     qreal sceneH = m_webViewItem->boundingRect().height() + kSceneMargin * 2;
     m_scene->setSceneRect(0, 0, sceneW, sceneH);
 
