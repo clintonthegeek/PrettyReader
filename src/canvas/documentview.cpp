@@ -229,6 +229,8 @@ void DocumentView::layoutPages()
         case ContinuousFacing:              layoutPagesContinuousFacing(); break;
         case ContinuousFacingFirstAlone:    layoutPagesContinuousFacingFirstAlone(); break;
         }
+        for (auto *item : m_pdfPageItems)
+            item->setPageBackground(m_pageLayout.pageBackground);
         return;
     }
 
@@ -735,6 +737,7 @@ void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
     m_webViewItem = nullptr;
 
     m_webViewItem = new WebViewItem(m_webFontManager);
+    m_webViewItem->setPageBackground(m_pageLayout.pageBackground);
     m_scene->addItem(m_webViewItem);
 
     m_webViewItem->setLayoutResult(std::move(result));

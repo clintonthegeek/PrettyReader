@@ -321,6 +321,10 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
             m_themePageLayout.footerRight   = f.value(QLatin1String("right")).toString(
                 QStringLiteral("{page} / {pages}"));
         }
+        if (plObj.contains(QLatin1String("pageBackground"))) {
+            m_themePageLayout.pageBackground = QColor(
+                plObj.value(QLatin1String("pageBackground")).toString());
+        }
     }
 
     // Master pages
@@ -1003,6 +1007,9 @@ QJsonObject ThemeManager::serializePageLayout(const PageLayout &layout)
     footer[QLatin1String("center")]  = layout.footerCenter;
     footer[QLatin1String("right")]   = layout.footerRight;
     obj[QLatin1String("footer")] = footer;
+
+    if (layout.pageBackground != Qt::white)
+        obj[QLatin1String("pageBackground")] = layout.pageBackground.name();
 
     return obj;
 }

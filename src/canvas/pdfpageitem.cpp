@@ -40,8 +40,8 @@ void PdfPageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     painter->setBrush(QColor(0, 0, 0, 50));
     painter->drawRect(pageRect.translated(4, 4));
 
-    // White page background
-    painter->setBrush(Qt::white);
+    // Page background
+    painter->setBrush(m_pageBackground);
     painter->setPen(QPen(QColor(0xcc, 0xcc, 0xcc), 0.5));
     painter->drawRect(pageRect);
 

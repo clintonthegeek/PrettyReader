@@ -9,6 +9,7 @@
 #include "layoutengine.h"
 #include "webviewrenderer.h"
 
+#include <QColor>
 #include <QGraphicsItem>
 
 class FontManager;
@@ -25,6 +26,8 @@ public:
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                QWidget *widget) override;
 
+    void setPageBackground(const QColor &color) { m_pageBackground = color; update(); }
+
     const QList<LinkHitRect> &linkHitRects() const { return m_renderer.linkHitRects(); }
     QString linkAt(const QPointF &pos) const;
 
@@ -33,6 +36,7 @@ private:
 
     Layout::ContinuousLayoutResult m_result;
     WebViewRenderer m_renderer;
+    QColor m_pageBackground = Qt::white;
 };
 
 #endif // PRETTYREADER_WEBVIEWITEM_H

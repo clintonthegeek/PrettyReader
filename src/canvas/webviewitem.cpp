@@ -56,6 +56,10 @@ void WebViewItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
                          QWidget * /*widget*/)
 {
     QRectF exposed = option->exposedRect;
+
+    // Page background
+    painter->fillRect(exposed, m_pageBackground);
+
     m_renderer.clearLinkHitRects();
 
     int startIdx = firstVisibleElement(exposed.top());

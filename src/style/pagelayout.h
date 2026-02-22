@@ -1,6 +1,7 @@
 #ifndef PRETTYREADER_PAGELAYOUT_H
 #define PRETTYREADER_PAGELAYOUT_H
 
+#include <QColor>
 #include <QHash>
 #include <QMarginsF>
 #include <QPageLayout>
@@ -15,6 +16,7 @@ struct PageLayout
     QPageSize::PageSizeId pageSizeId = QPageSize::A4;
     QPageLayout::Orientation orientation = QPageLayout::Portrait;
     QMarginsF margins{25.0, 25.0, 25.0, 25.0}; // mm
+    QColor pageBackground = Qt::white;
 
     // Header/footer configuration
     bool headerEnabled = false;

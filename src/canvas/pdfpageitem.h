@@ -9,6 +9,7 @@
 #ifndef PRETTYREADER_PDFPAGEITEM_H
 #define PRETTYREADER_PDFPAGEITEM_H
 
+#include <QColor>
 #include <QGraphicsItem>
 #include <QSizeF>
 
@@ -29,6 +30,7 @@ public:
     QSizeF pageSize() const { return m_pageSize; }
 
     void setZoomFactor(qreal zoom);
+    void setPageBackground(const QColor &color) { m_pageBackground = color; update(); }
 
     // B2: Selection highlight
     void setSelectionRects(const QList<QRectF> &rects);
@@ -39,6 +41,7 @@ private:
     QSizeF m_pageSize; // in points
     RenderCache *m_cache;
     qreal m_zoom = 1.0;
+    QColor m_pageBackground = Qt::white;
     QList<QRectF> m_selectionRects;  // page-local coords
 };
 

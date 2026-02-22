@@ -46,8 +46,8 @@ void PageItem::paint(QPainter *painter,
     painter->fillRect(boundingRect().translated(kShadowOffset, kShadowOffset),
                       QColor(0, 0, 0, 50));
 
-    // White page background
-    painter->fillRect(boundingRect(), Qt::white);
+    // Page background
+    painter->fillRect(boundingRect(), m_pageLayout.pageBackground);
 
     // Page border
     painter->setPen(QPen(Qt::lightGray, 0.5));
@@ -115,7 +115,7 @@ void PageItem::paint(QPainter *painter,
                       docBodyW, docBodyH);
     QPalette pal;
     pal.setColor(QPalette::Text, QColor(0x1a, 0x1a, 0x1a));
-    pal.setColor(QPalette::Base, Qt::white);
+    pal.setColor(QPalette::Base, m_pageLayout.pageBackground);
     ctx.palette = pal;
     m_document->documentLayout()->draw(painter, ctx);
     painter->restore();
