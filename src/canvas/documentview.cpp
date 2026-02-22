@@ -545,6 +545,13 @@ void DocumentView::setZoomPercent(int percent)
     scale(factor, factor);
     m_currentZoom = percent;
 
+    if (m_renderMode == WebMode) {
+        // Web mode: scale immediately, debounced relayout at new effective width
+        m_relayoutTimer.start();
+        Q_EMIT zoomChanged(percent);
+        return;
+    }
+
     // Update PDF page items zoom
     for (auto *item : m_pdfPageItems)
         item->setZoomFactor(factor);
