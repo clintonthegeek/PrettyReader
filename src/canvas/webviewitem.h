@@ -7,7 +7,7 @@
 #define PRETTYREADER_WEBVIEWITEM_H
 
 #include "layoutengine.h"
-#include "webviewrenderer.h"
+#include "qtboxrenderer.h"
 
 #include <QColor>
 #include <QGraphicsItem>
@@ -35,7 +35,7 @@ private:
     int firstVisibleElement(qreal top) const;
 
     Layout::ContinuousLayoutResult m_result;
-    WebViewRenderer m_renderer;
+    QtBoxRenderer m_renderer;
     QColor m_pageBackground = Qt::white;
 };
 

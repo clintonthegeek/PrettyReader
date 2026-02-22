@@ -35,13 +35,7 @@ int WebViewItem::firstVisibleElement(qreal top) const
         int mid = (lo + hi) / 2;
         qreal elemBottom = 0;
         std::visit([&](const auto &e) {
-            using T = std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, Layout::BlockBox>)
-                elemBottom = e.y + e.height;
-            else if constexpr (std::is_same_v<T, Layout::TableBox>)
-                elemBottom = e.y + e.height;
-            else if constexpr (std::is_same_v<T, Layout::FootnoteSectionBox>)
-                elemBottom = e.y + e.height;
+            elemBottom = e.y + e.height;
         }, m_result.elements[mid]);
 
         if (elemBottom < top)
@@ -61,6 +55,7 @@ void WebViewItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     painter->fillRect(exposed, m_pageBackground);
 
     m_renderer.clearLinkHitRects();
+    m_renderer.setPainter(painter);
 
     int startIdx = firstVisibleElement(exposed.top());
 
@@ -69,28 +64,14 @@ void WebViewItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
 
         qreal elemY = 0;
         std::visit([&](const auto &e) {
-            using T = std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, Layout::BlockBox>)
-                elemY = e.y;
-            else if constexpr (std::is_same_v<T, Layout::TableBox>)
-                elemY = e.y;
-            else if constexpr (std::is_same_v<T, Layout::FootnoteSectionBox>)
-                elemY = e.y;
+            elemY = e.y;
         }, element);
 
         // Stop if we've passed the visible area
         if (elemY > exposed.bottom())
             break;
 
-        std::visit([&](const auto &e) {
-            using T = std::decay_t<decltype(e)>;
-            if constexpr (std::is_same_v<T, Layout::BlockBox>)
-                m_renderer.renderBlockBox(painter, e);
-            else if constexpr (std::is_same_v<T, Layout::TableBox>)
-                m_renderer.renderTableBox(painter, e);
-            else if constexpr (std::is_same_v<T, Layout::FootnoteSectionBox>)
-                m_renderer.renderFootnoteSectionBox(painter, e);
-        }, element);
+        m_renderer.renderElement(element);
     }
 }
 
