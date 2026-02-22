@@ -1,10 +1,10 @@
 /*
- * typographythememanager.cpp — Discovery/loading/saving for typography themes
+ * typesetmanager.cpp — Discovery/loading/saving for type sets
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "typographythememanager.h"
+#include "typesetmanager.h"
 
 #include <QDir>
 #include <QFile>
@@ -14,26 +14,38 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
-TypographyThemeManager::TypographyThemeManager(QObject *parent)
+TypeSetManager::TypeSetManager(QObject *parent)
     : QObject(parent)
 {
-    discoverThemes();
+    discoverTypeSets();
 }
 
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
 
-static QString userThemesDir()
+static QString userTypeSetsDir()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+           + QLatin1String("/typesets");
+}
+
+static QString legacyUserTypeSetsDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
            + QLatin1String("/typography");
 }
 
-void TypographyThemeManager::discoverThemes()
+static bool isTypeSetJson(const QJsonObject &root)
 {
-    // Built-in themes bundled as Qt resources
-    QDir resourceDir(QStringLiteral(":/typography"));
+    QString type = root.value(QLatin1String("type")).toString();
+    return type == QLatin1String("typeSet") || type == QLatin1String("typographyTheme");
+}
+
+void TypeSetManager::discoverTypeSets()
+{
+    // Built-in type sets bundled as Qt resources
+    QDir resourceDir(QStringLiteral(":/typesets"));
     const QStringList entries = resourceDir.entryList(
         {QStringLiteral("*.json")}, QDir::Files);
 
@@ -48,8 +60,7 @@ void TypographyThemeManager::discoverThemes()
             continue;
 
         QJsonObject root = doc.object();
-        if (root.value(QLatin1String("type")).toString()
-            != QLatin1String("typographyTheme"))
+        if (!isTypeSetJson(root))
             continue;
 
         QString id = root.value(QLatin1String("id")).toString();
@@ -57,12 +68,14 @@ void TypographyThemeManager::discoverThemes()
             id = QFileInfo(entry).completeBaseName();
         QString name = root.value(QLatin1String("name")).toString(id);
 
-        m_themes.append({id, name, path, true});
+        m_typeSets.append({id, name, path, true});
     }
 
-    // User themes from XDG data directory
-    QDir dir(userThemesDir());
-    if (dir.exists()) {
+    // User type sets from XDG data directory (new path + legacy fallback)
+    auto scanUserDir = [this](const QString &dirPath) {
+        QDir dir(dirPath);
+        if (!dir.exists())
+            return;
         const QStringList userEntries = dir.entryList(
             {QStringLiteral("*.json")}, QDir::Files);
         for (const QString &entry : userEntries) {
@@ -76,52 +89,54 @@ void TypographyThemeManager::discoverThemes()
                 continue;
 
             QJsonObject root = doc.object();
-            if (root.value(QLatin1String("type")).toString()
-                != QLatin1String("typographyTheme"))
+            if (!isTypeSetJson(root))
                 continue;
 
             QString id = root.value(QLatin1String("id")).toString();
             if (id.isEmpty())
                 id = QFileInfo(entry).completeBaseName();
 
-            // Skip if a built-in already owns this ID
+            // Skip if already known
             bool alreadyKnown = false;
-            for (const auto &existing : m_themes) {
+            for (const auto &existing : m_typeSets) {
                 if (existing.id == id) { alreadyKnown = true; break; }
             }
             if (alreadyKnown)
                 continue;
 
             QString name = root.value(QLatin1String("name")).toString(id);
-            m_themes.append({id, name, path, false});
+            m_typeSets.append({id, name, path, false});
         }
-    }
+    };
+
+    scanUserDir(userTypeSetsDir());
+    scanUserDir(legacyUserTypeSetsDir());
 }
 
 // ---------------------------------------------------------------------------
 // Accessors
 // ---------------------------------------------------------------------------
 
-QStringList TypographyThemeManager::availableThemes() const
+QStringList TypeSetManager::availableTypeSets() const
 {
     QStringList ids;
-    for (const auto &t : m_themes)
+    for (const auto &t : m_typeSets)
         ids.append(t.id);
     return ids;
 }
 
-QString TypographyThemeManager::themeName(const QString &id) const
+QString TypeSetManager::typeSetName(const QString &id) const
 {
-    for (const auto &t : m_themes) {
+    for (const auto &t : m_typeSets) {
         if (t.id == id)
             return t.name;
     }
     return id;
 }
 
-TypographyTheme TypographyThemeManager::theme(const QString &id) const
+TypeSet TypeSetManager::typeSet(const QString &id) const
 {
-    for (const auto &t : m_themes) {
+    for (const auto &t : m_typeSets) {
         if (t.id == id) {
             QFile file(t.path);
             if (!file.open(QIODevice::ReadOnly))
@@ -131,15 +146,15 @@ TypographyTheme TypographyThemeManager::theme(const QString &id) const
             if (doc.isNull())
                 return {};
 
-            return TypographyTheme::fromJson(doc.object());
+            return TypeSet::fromJson(doc.object());
         }
     }
     return {};
 }
 
-bool TypographyThemeManager::isBuiltin(const QString &id) const
+bool TypeSetManager::isBuiltin(const QString &id) const
 {
-    for (const auto &t : m_themes) {
+    for (const auto &t : m_typeSets) {
         if (t.id == id)
             return t.builtin;
     }
@@ -150,18 +165,18 @@ bool TypographyThemeManager::isBuiltin(const QString &id) const
 // Save / Delete
 // ---------------------------------------------------------------------------
 
-QString TypographyThemeManager::saveTheme(const TypographyTheme &theme)
+QString TypeSetManager::saveTypeSet(const TypeSet &typeSet)
 {
-    QString dir = userThemesDir();
+    QString dir = userTypeSetsDir();
     QDir().mkpath(dir);
 
-    QString id = theme.id;
+    QString id = typeSet.id;
     if (id.isEmpty()) {
-        QString base = theme.name.toLower().replace(
+        QString base = typeSet.name.toLower().replace(
             QRegularExpression(QStringLiteral("[^a-z0-9]+")),
             QStringLiteral("-"));
         if (base.isEmpty())
-            base = QStringLiteral("theme");
+            base = QStringLiteral("typeset");
         id = base;
         // Ensure filename uniqueness
         QString path = dir + QLatin1Char('/') + id + QLatin1String(".json");
@@ -172,9 +187,9 @@ QString TypographyThemeManager::saveTheme(const TypographyTheme &theme)
         }
     }
 
-    // Check if we are overwriting an existing user theme
+    // Check if we are overwriting an existing user type set
     bool found = false;
-    for (auto &t : m_themes) {
+    for (auto &t : m_typeSets) {
         if (t.id == id) {
             if (t.builtin)
                 return {}; // cannot overwrite built-in
@@ -185,7 +200,7 @@ QString TypographyThemeManager::saveTheme(const TypographyTheme &theme)
 
     QString path = dir + QLatin1Char('/') + id + QLatin1String(".json");
 
-    TypographyTheme toSave = theme;
+    TypeSet toSave = typeSet;
     toSave.id = id;
     QJsonDocument doc(toSave.toJson());
 
@@ -197,9 +212,9 @@ QString TypographyThemeManager::saveTheme(const TypographyTheme &theme)
     file.close();
 
     if (!found) {
-        m_themes.append({id, toSave.name, path, false});
+        m_typeSets.append({id, toSave.name, path, false});
     } else {
-        for (auto &t : m_themes) {
+        for (auto &t : m_typeSets) {
             if (t.id == id) {
                 t.name = toSave.name;
                 t.path = path;
@@ -208,22 +223,22 @@ QString TypographyThemeManager::saveTheme(const TypographyTheme &theme)
         }
     }
 
-    Q_EMIT themesChanged();
+    Q_EMIT typeSetsChanged();
     return id;
 }
 
-bool TypographyThemeManager::deleteTheme(const QString &id)
+bool TypeSetManager::deleteTypeSet(const QString &id)
 {
-    for (int i = 0; i < m_themes.size(); ++i) {
-        if (m_themes[i].id == id) {
-            if (m_themes[i].builtin)
+    for (int i = 0; i < m_typeSets.size(); ++i) {
+        if (m_typeSets[i].id == id) {
+            if (m_typeSets[i].builtin)
                 return false;
 
-            if (!QFile::remove(m_themes[i].path))
-                qWarning("TypographyThemeManager: failed to remove %s",
-                         qPrintable(m_themes[i].path));
-            m_themes.removeAt(i);
-            Q_EMIT themesChanged();
+            if (!QFile::remove(m_typeSets[i].path))
+                qWarning("TypeSetManager: failed to remove %s",
+                         qPrintable(m_typeSets[i].path));
+            m_typeSets.removeAt(i);
+            Q_EMIT typeSetsChanged();
             return true;
         }
     }

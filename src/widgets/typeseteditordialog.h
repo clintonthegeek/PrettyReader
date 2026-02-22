@@ -1,14 +1,14 @@
 /*
- * typographythemeeditordialog.h — Editor dialog for typography themes
+ * typeseteditordialog.h — Editor dialog for type sets
  *
- * Allows creating/editing a TypographyTheme with TTF/OTF family and
+ * Allows creating/editing a TypeSet with TTF/OTF family and
  * Hershey fallback selection for Body, Heading, and Mono roles.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#ifndef PRETTYREADER_TYPOGRAPHYTHEMEEDITORDIALOG_H
-#define PRETTYREADER_TYPOGRAPHYTHEMEEDITORDIALOG_H
+#ifndef PRETTYREADER_TYPESETEDITORDIALOG_H
+#define PRETTYREADER_TYPESETEDITORDIALOG_H
 
 #include <QDialog>
 
@@ -17,17 +17,17 @@ class QDialogButtonBox;
 class QFontComboBox;
 class QLabel;
 class QLineEdit;
-class TypographyTheme;
+class TypeSet;
 
-class TypographyThemeEditorDialog : public QDialog
+class TypeSetEditorDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit TypographyThemeEditorDialog(QWidget *parent = nullptr);
+    explicit TypeSetEditorDialog(QWidget *parent = nullptr);
 
-    void setTypographyTheme(const TypographyTheme &theme);
-    TypographyTheme typographyTheme() const;
+    void setTypeSet(const TypeSet &typeSet);
+    TypeSet typeSet() const;
 
 private:
     void buildUI();
@@ -53,4 +53,4 @@ private:
     QDialogButtonBox *m_buttonBox = nullptr;
 };
 
-#endif // PRETTYREADER_TYPOGRAPHYTHEMEEDITORDIALOG_H
+#endif // PRETTYREADER_TYPESETEDITORDIALOG_H

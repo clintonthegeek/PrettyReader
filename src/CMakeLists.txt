@@ -31,8 +31,13 @@ add_library(PrettyReaderCore STATIC
     print/headerfooterrenderer.h
     print/printcontroller.cpp
     print/printcontroller.h
+    style/pagelayout.cpp
     style/pagelayout.h
     style/masterpage.h
+    style/pagetemplate.cpp
+    style/pagetemplate.h
+    style/pagetemplatemanager.cpp
+    style/pagetemplatemanager.h
     style/fontfeatures.h
     style/paragraphstyle.cpp
     style/paragraphstyle.h
@@ -56,10 +61,10 @@ add_library(PrettyReaderCore STATIC
     style/themecomposer.h
     style/palettemanager.cpp
     style/palettemanager.h
-    style/typographytheme.cpp
-    style/typographytheme.h
-    style/typographythememanager.cpp
-    style/typographythememanager.h
+    style/typeset.cpp
+    style/typeset.h
+    style/typesetmanager.cpp
+    style/typesetmanager.h
     typography/hyphenator.cpp
     typography/hyphenator.h
     typography/shortwords.cpp
@@ -132,10 +137,12 @@ add_library(PrettyReaderCore STATIC
     widgets/palettepickerwidget.h
     widgets/paletteeditordialog.cpp
     widgets/paletteeditordialog.h
-    widgets/typographythemepickerwidget.cpp
-    widgets/typographythemepickerwidget.h
-    widgets/typographythemeeditordialog.cpp
-    widgets/typographythemeeditordialog.h
+    widgets/pagetemplatepickerwidget.cpp
+    widgets/pagetemplatepickerwidget.h
+    widgets/typesetpickerwidget.cpp
+    widgets/typesetpickerwidget.h
+    widgets/typeseteditordialog.cpp
+    widgets/typeseteditordialog.h
     widgets/themepickerdock.cpp
     widgets/themepickerdock.h
 )
@@ -206,26 +213,36 @@ qt_add_resources(PrettyReaderCore "palettes"
         themes/palettes/github-light.json
 )
 
-# Bundle typography theme JSON files as Qt resources
-qt_add_resources(PrettyReaderCore "typography"
-    PREFIX "/typography"
-    BASE themes/typography
+# Bundle page template JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "templates"
+    PREFIX "/templates"
+    BASE themes/templates
     FILES
-        themes/typography/default.json
-        themes/typography/academic.json
-        themes/typography/hershey.json
-        themes/typography/georgia-trebuchet-courier.json
-        themes/typography/georgia-inter-jetbrains.json
-        themes/typography/noto-source-family.json
-        themes/typography/ubuntu-family.json
-        themes/typography/fira-family.json
-        themes/typography/liberation-serif-sans-mono.json
-        themes/typography/dejavu-family.json
-        themes/typography/typewriter.json
-        themes/typography/sans-forward.json
-        themes/typography/serif-scholar.json
-        themes/typography/inverted-contrast.json
-        themes/typography/libertine-biolinum-hack.json
+        themes/templates/default.json
+        themes/templates/academic.json
+        themes/templates/minimal.json
+)
+
+# Bundle type set JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "typesets"
+    PREFIX "/typesets"
+    BASE themes/typesets
+    FILES
+        themes/typesets/default.json
+        themes/typesets/academic.json
+        themes/typesets/hershey.json
+        themes/typesets/georgia-trebuchet-courier.json
+        themes/typesets/georgia-inter-jetbrains.json
+        themes/typesets/noto-source-family.json
+        themes/typesets/ubuntu-family.json
+        themes/typesets/fira-family.json
+        themes/typesets/liberation-serif-sans-mono.json
+        themes/typesets/dejavu-family.json
+        themes/typesets/typewriter.json
+        themes/typesets/sans-forward.json
+        themes/typesets/serif-scholar.json
+        themes/typesets/inverted-contrast.json
+        themes/typesets/libertine-biolinum-hack.json
 )
 
 # Bundle hyphenation dictionaries as Qt resources

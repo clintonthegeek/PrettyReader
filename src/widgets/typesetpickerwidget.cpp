@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "typographythemepickerwidget.h"
+#include "typesetpickerwidget.h"
 
 #include <QFont>
 #include <QGridLayout>
@@ -11,28 +11,28 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "typographytheme.h"
-#include "typographythememanager.h"
+#include "typeset.h"
+#include "typesetmanager.h"
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// TypographyThemeCell — renders three text samples in the respective fonts
+// TypeSetCell — renders three text samples in the respective fonts
 // ---------------------------------------------------------------------------
-class TypographyThemeCell : public QWidget
+class TypeSetCell : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit TypographyThemeCell(const TypographyTheme &theme, bool selected,
-                                  QWidget *parent = nullptr)
+    explicit TypeSetCell(const TypeSet &typeSet, bool selected,
+                         QWidget *parent = nullptr)
         : QWidget(parent)
-        , m_theme(theme)
+        , m_typeSet(typeSet)
         , m_selected(selected)
     {
-        setFixedSize(120, 50);
+        setFixedSize(120, 62);
         setCursor(Qt::PointingHandCursor);
-        setToolTip(theme.name);
+        setToolTip(typeSet.name);
     }
 
     void setSelected(bool selected)
@@ -43,7 +43,7 @@ public:
         }
     }
 
-    QString themeId() const { return m_theme.id; }
+    QString typeSetId() const { return m_typeSet.id; }
 
 Q_SIGNALS:
     void clicked(const QString &id);
@@ -58,29 +58,39 @@ protected:
         p.fillRect(r, Qt::white);
 
         const int textMargin = 4;
-        const int fontSize = 9;
 
-        // Body font: render the body family name
-        QFont bodyFont(m_theme.body.family, fontSize);
+        // Name label at top
+        QFont nameFont = font();
+        nameFont.setPointSize(7);
+        nameFont.setBold(true);
+        p.setFont(nameFont);
+        p.setPen(Qt::black);
+        p.drawText(QRect(textMargin, 2, r.width() - 2 * textMargin, 12),
+                   Qt::AlignLeft | Qt::AlignVCenter, m_typeSet.name);
+
+        // Body font sample
+        const int fontSize = 8;
+        const int sampleTop = 15;
+        QFont bodyFont(m_typeSet.body.family, fontSize);
         p.setFont(bodyFont);
         p.setPen(Qt::black);
-        p.drawText(QRect(textMargin, 2, r.width() - 2 * textMargin, 14),
+        p.drawText(QRect(textMargin, sampleTop, r.width() - 2 * textMargin, 13),
                    Qt::AlignLeft | Qt::AlignVCenter,
-                   m_theme.body.family);
+                   m_typeSet.body.family);
 
-        // Heading font: render the heading family name
-        QFont headingFont(m_theme.heading.family, fontSize);
+        // Heading font sample (bold)
+        QFont headingFont(m_typeSet.heading.family, fontSize);
         headingFont.setBold(true);
         p.setFont(headingFont);
-        p.drawText(QRect(textMargin, 17, r.width() - 2 * textMargin, 14),
+        p.drawText(QRect(textMargin, sampleTop + 14, r.width() - 2 * textMargin, 13),
                    Qt::AlignLeft | Qt::AlignVCenter,
-                   m_theme.heading.family);
+                   m_typeSet.heading.family);
 
-        // Mono font: render "mono"
-        QFont monoFont(m_theme.mono.family, fontSize - 1);
+        // Mono font sample
+        QFont monoFont(m_typeSet.mono.family, fontSize - 1);
         p.setFont(monoFont);
         p.setPen(QColor(100, 100, 100));
-        p.drawText(QRect(textMargin, 32, r.width() - 2 * textMargin, 14),
+        p.drawText(QRect(textMargin, sampleTop + 28, r.width() - 2 * textMargin, 13),
                    Qt::AlignLeft | Qt::AlignVCenter,
                    QStringLiteral("mono"));
 
@@ -99,22 +109,22 @@ protected:
     void mousePressEvent(QMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton)
-            Q_EMIT clicked(m_theme.id);
+            Q_EMIT clicked(m_typeSet.id);
         QWidget::mousePressEvent(event);
     }
 
 private:
-    TypographyTheme m_theme;
+    TypeSet m_typeSet;
     bool m_selected = false;
 };
 
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// TypographyThemePickerWidget
+// TypeSetPickerWidget
 // ---------------------------------------------------------------------------
 
-TypographyThemePickerWidget::TypographyThemePickerWidget(TypographyThemeManager *manager, QWidget *parent)
+TypeSetPickerWidget::TypeSetPickerWidget(TypeSetManager *manager, QWidget *parent)
     : QWidget(parent)
     , m_manager(manager)
 {
@@ -122,7 +132,7 @@ TypographyThemePickerWidget::TypographyThemePickerWidget(TypographyThemeManager 
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->setSpacing(4);
 
-    auto *header = new QLabel(QStringLiteral("Typography"), this);
+    auto *header = new QLabel(QStringLiteral("Type Sets"), this);
     QFont headerFont = header->font();
     headerFont.setBold(true);
     header->setFont(headerFont);
@@ -139,27 +149,27 @@ TypographyThemePickerWidget::TypographyThemePickerWidget(TypographyThemeManager 
 
     rebuildGrid();
 
-    connect(m_manager, &TypographyThemeManager::themesChanged,
-            this, &TypographyThemePickerWidget::refresh);
+    connect(m_manager, &TypeSetManager::typeSetsChanged,
+            this, &TypeSetPickerWidget::refresh);
 }
 
-void TypographyThemePickerWidget::setCurrentThemeId(const QString &id)
+void TypeSetPickerWidget::setCurrentTypeSetId(const QString &id)
 {
     if (m_currentId == id)
         return;
     m_currentId = id;
 
-    auto cells = findChildren<TypographyThemeCell *>();
+    auto cells = findChildren<TypeSetCell *>();
     for (auto *cell : cells)
-        cell->setSelected(cell->themeId() == m_currentId);
+        cell->setSelected(cell->typeSetId() == m_currentId);
 }
 
-void TypographyThemePickerWidget::refresh()
+void TypeSetPickerWidget::refresh()
 {
     rebuildGrid();
 }
 
-void TypographyThemePickerWidget::rebuildGrid()
+void TypeSetPickerWidget::rebuildGrid()
 {
     while (QLayoutItem *item = m_gridLayout->takeAt(0)) {
         delete item->widget();
@@ -169,18 +179,18 @@ void TypographyThemePickerWidget::rebuildGrid()
     if (!m_manager)
         return;
 
-    const QStringList ids = m_manager->availableThemes();
+    const QStringList ids = m_manager->availableTypeSets();
     const int columns = 2;
 
     int row = 0;
     int col = 0;
     for (const QString &id : ids) {
-        TypographyTheme theme = m_manager->theme(id);
+        TypeSet ts = m_manager->typeSet(id);
         bool selected = (id == m_currentId);
-        auto *cell = new TypographyThemeCell(theme, selected, this);
-        connect(cell, &TypographyThemeCell::clicked, this, [this](const QString &clickedId) {
-            setCurrentThemeId(clickedId);
-            Q_EMIT themeSelected(clickedId);
+        auto *cell = new TypeSetCell(ts, selected, this);
+        connect(cell, &TypeSetCell::clicked, this, [this](const QString &clickedId) {
+            setCurrentTypeSetId(clickedId);
+            Q_EMIT typeSetSelected(clickedId);
         });
         m_gridLayout->addWidget(cell, row, col);
         ++col;
@@ -193,11 +203,11 @@ void TypographyThemePickerWidget::rebuildGrid()
     // Add [+] button at the end of the grid
     auto *addButton = new QToolButton(this);
     addButton->setText(QStringLiteral("+"));
-    addButton->setFixedSize(120, 50);
+    addButton->setFixedSize(120, 62);
     addButton->setCursor(Qt::PointingHandCursor);
-    addButton->setToolTip(QStringLiteral("Create new typography theme"));
-    connect(addButton, &QToolButton::clicked, this, &TypographyThemePickerWidget::createRequested);
+    addButton->setToolTip(QStringLiteral("Create new type set"));
+    connect(addButton, &QToolButton::clicked, this, &TypeSetPickerWidget::createRequested);
     m_gridLayout->addWidget(addButton, row, col);
 }
 
-#include "typographythemepickerwidget.moc"
+#include "typesetpickerwidget.moc"

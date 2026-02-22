@@ -1,15 +1,15 @@
 /*
- * typographytheme.h — Typography axis of the two-axis theme system
+ * typeset.h — Typography axis of the three-axis theme system
  *
  * Bundles font roles (body, heading, mono), sizing, spacing, and
- * all non-color style overrides.  Combined with a ColorPalette by
- * ThemeComposer to produce the final styled document.
+ * all non-color style overrides.  Combined with a ColorPalette and
+ * PageTemplate by ThemeComposer to produce the final styled document.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#ifndef PRETTYREADER_TYPOGRAPHYTHEME_H
-#define PRETTYREADER_TYPOGRAPHYTHEME_H
+#ifndef PRETTYREADER_TYPESET_H
+#define PRETTYREADER_TYPESET_H
 
 #include <QJsonObject>
 #include <QString>
@@ -23,10 +23,10 @@ struct FontRole {
     }
 };
 
-class TypographyTheme
+class TypeSet
 {
 public:
-    TypographyTheme() = default;
+    TypeSet() = default;
 
     QString id;          // kebab-case, e.g. "default"
     QString name;        // display name
@@ -43,19 +43,17 @@ public:
     QJsonObject characterStyles;
     QJsonObject tableStyles;
     QJsonObject footnoteStyle;
-    QJsonObject masterPages;
-    QJsonObject pageLayout;
 
     /// Look up the Hershey fallback family for a given TTF/OTF family.
     QString hersheyFamilyFor(const QString &ttfFamily) const;
 
-    bool operator==(const TypographyTheme &other) const {
+    bool operator==(const TypeSet &other) const {
         return id == other.id && body == other.body
                && heading == other.heading && mono == other.mono;
     }
 
-    static TypographyTheme fromJson(const QJsonObject &obj);
+    static TypeSet fromJson(const QJsonObject &obj);
     QJsonObject toJson() const;
 };
 
-#endif // PRETTYREADER_TYPOGRAPHYTHEME_H
+#endif // PRETTYREADER_TYPESET_H

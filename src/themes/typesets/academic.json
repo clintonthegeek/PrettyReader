@@ -1,0 +1,206 @@
+{
+    "id": "academic",
+    "name": "Academic",
+    "version": 1,
+    "type": "typeSet",
+    "description": "Clean serif typography for academic reading",
+    "hersheyMode": false,
+    "fonts": {
+        "body": {
+            "family": "Noto Serif",
+            "hersheyFamily": "Hershey Serif"
+        },
+        "heading": {
+            "family": "Noto Serif",
+            "hersheyFamily": "Hershey Serif"
+        },
+        "mono": {
+            "family": "Source Code Pro",
+            "hersheyFamily": "Hershey Roman"
+        }
+    },
+    "paragraphStyles": {
+        "Default Paragraph Style": {
+            "fontSize": 12.0,
+            "lineHeightPercent": 100,
+            "fontFeatures": [
+                "liga",
+                "kern",
+                "calt",
+                "onum"
+            ]
+        },
+        "Heading": {
+            "parent": "Default Paragraph Style",
+            "fontWeight": "bold",
+            "alignment": "left"
+        },
+        "BodyText": {
+            "parent": "Default Paragraph Style",
+            "alignment": "justify",
+            "spaceAfter": 8.0
+        },
+        "Heading1": {
+            "parent": "Heading",
+            "fontSize": 26.0,
+            "spaceBefore": 28.0,
+            "spaceAfter": 14.0
+        },
+        "Heading2": {
+            "parent": "Heading",
+            "fontSize": 20.0,
+            "spaceBefore": 22.0,
+            "spaceAfter": 10.0
+        },
+        "Heading3": {
+            "parent": "Heading",
+            "fontSize": 16.0,
+            "fontItalic": true,
+            "spaceBefore": 18.0,
+            "spaceAfter": 8.0
+        },
+        "Heading4": {
+            "parent": "Heading",
+            "fontSize": 14.0,
+            "spaceBefore": 14.0,
+            "spaceAfter": 6.0
+        },
+        "Heading5": {
+            "parent": "Heading",
+            "fontSize": 12.0,
+            "spaceBefore": 12.0,
+            "spaceAfter": 4.0
+        },
+        "Heading6": {
+            "parent": "Heading",
+            "fontSize": 12.0,
+            "fontItalic": true,
+            "spaceBefore": 10.0,
+            "spaceAfter": 4.0
+        },
+        "BlockQuote": {
+            "parent": "BodyText",
+            "fontItalic": true
+        },
+        "ListItem": {
+            "parent": "BodyText"
+        },
+        "OrderedListItem": {
+            "parent": "ListItem"
+        },
+        "UnorderedListItem": {
+            "parent": "ListItem"
+        },
+        "TaskListItem": {
+            "parent": "ListItem"
+        },
+        "CodeBlock": {
+            "parent": "Default Paragraph Style",
+            "baseCharacterStyle": "Code",
+            "lineHeightPercent": 140
+        },
+        "TableHeader": {
+            "parent": "Default Paragraph Style",
+            "fontWeight": "bold",
+            "alignment": "center"
+        },
+        "TableBody": {
+            "parent": "Default Paragraph Style"
+        },
+        "HorizontalRule": {
+            "parent": "Default Paragraph Style"
+        },
+        "MathDisplay": {
+            "parent": "Default Paragraph Style"
+        }
+    },
+    "characterStyles": {
+        "Default Character Style": {
+            "fontSize": 12.0,
+            "fontFeatures": [
+                "liga",
+                "kern",
+                "calt",
+                "onum"
+            ]
+        },
+        "DefaultText": {
+            "parent": "Default Character Style"
+        },
+        "Emphasis": {
+            "parent": "Default Character Style",
+            "fontItalic": true
+        },
+        "Strong": {
+            "parent": "Default Character Style",
+            "fontWeight": "bold"
+        },
+        "StrongEmphasis": {
+            "parent": "Default Character Style",
+            "fontWeight": "bold",
+            "fontItalic": true
+        },
+        "Strikethrough": {
+            "parent": "Default Character Style",
+            "strikeOut": true
+        },
+        "Subscript": {
+            "parent": "Default Character Style"
+        },
+        "Superscript": {
+            "parent": "Default Character Style"
+        },
+        "Code": {
+            "parent": "Default Character Style",
+            "fontSize": 10.5
+        },
+        "InlineCode": {
+            "parent": "Code"
+        },
+        "Link": {
+            "parent": "Default Character Style",
+            "underline": true
+        },
+        "MathInline": {
+            "parent": "Default Character Style"
+        },
+        "Emoji": {
+            "parent": "Default Character Style"
+        }
+    },
+    "tableStyles": {
+        "Default": {
+            "borderCollapse": true,
+            "cellPadding": {
+                "top": 4,
+                "bottom": 4,
+                "left": 8,
+                "right": 8
+            },
+            "outerBorder": {
+                "width": 1.0
+            },
+            "innerBorder": {
+                "width": 0.5
+            },
+            "headerBottomBorder": {
+                "width": 2.0
+            },
+            "headerParagraphStyle": "TableHeader",
+            "bodyParagraphStyle": "TableBody"
+        }
+    },
+    "footnoteStyle": {
+        "format": "arabic",
+        "startNumber": 1,
+        "restart": "per_document",
+        "prefix": "",
+        "suffix": "",
+        "superscriptRef": true,
+        "superscriptNote": true,
+        "asEndnotes": true,
+        "showSeparator": true,
+        "separatorWidth": 0.5,
+        "separatorLength": 72.0
+    }
+}

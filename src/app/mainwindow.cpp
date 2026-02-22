@@ -27,8 +27,9 @@
 #include "stylemanager.h"
 #include "styledockwidget.h"
 #include "themepickerdock.h"
-#include "typographytheme.h"
-#include "typographythememanager.h"
+#include "typeset.h"
+#include "typesetmanager.h"
+#include "pagetemplatemanager.h"
 #include "colorpalette.h"
 #include "palettemanager.h"
 #include "themecomposer.h"
@@ -113,7 +114,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_themeManager = new ThemeManager(this);
     m_paletteManager = new PaletteManager(this);
-    m_typographyThemeManager = new TypographyThemeManager(this);
+    m_typeSetManager = new TypeSetManager(this);
+    m_pageTemplateManager = new PageTemplateManager(this);
     m_themeComposer = new ThemeComposer(m_themeManager, this);
     m_metadataStore = new MetadataStore(this);
 
@@ -207,11 +209,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Load default typography theme + color palette so the style tree is populated
     {
-        QStringList typoThemes = m_typographyThemeManager->availableThemes();
-        if (!typoThemes.isEmpty()) {
-            TypographyTheme theme = m_typographyThemeManager->theme(
-                typoThemes.contains(QStringLiteral("default")) ? QStringLiteral("default") : typoThemes.first());
-            m_themeComposer->setTypographyTheme(theme);
+        QStringList typeSets = m_typeSetManager->availableTypeSets();
+        if (!typeSets.isEmpty()) {
+            TypeSet ts = m_typeSetManager->typeSet(
+                typeSets.contains(QStringLiteral("default")) ? QStringLiteral("default") : typeSets.first());
+            m_themeComposer->setTypeSet(ts);
         }
         QStringList palettes = m_paletteManager->availablePalettes();
         if (!palettes.isEmpty()) {
@@ -297,7 +299,8 @@ void MainWindow::setupSidebars()
 
     // 1. Theme Picker (first panel)
     m_themePickerDock = new ThemePickerDock(
-        m_themeManager, m_paletteManager, m_typographyThemeManager, m_themeComposer, this);
+        m_themeManager, m_paletteManager, m_typeSetManager,
+        m_pageTemplateManager, m_themeComposer, this);
     auto *themeView = new ToolView(i18n("Theme"), m_themePickerDock);
     m_themePickerTabId = m_rightSidebar->addPanel(
         themeView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Theme"));
@@ -317,6 +320,19 @@ void MainWindow::setupSidebars()
     // Wire signals
     connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
             this, &MainWindow::onCompositionApplied);
+    connect(m_themePickerDock, &ThemePickerDock::templateApplied,
+            this, [this](const PageLayout &templateLayout) {
+        // Merge template's page layout with current palette's page background
+        PageLayout pl = templateLayout;
+        QColor pageBg = m_themeComposer->currentPalette().pageBackground();
+        if (pageBg.isValid())
+            pl.pageBackground = pageBg;
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+        rebuildCurrentDocument();
+    });
     connect(m_styleDockWidget, &StyleDockWidget::styleOverrideChanged,
             this, &MainWindow::onStyleOverrideChanged);
     connect(m_pageLayoutWidget, &PageLayoutWidget::pageLayoutChanged,
@@ -932,21 +948,17 @@ void MainWindow::onCompositionApplied()
     m_styleDockWidget->populateFromStyleManager(sm);
     delete sm;
 
-    // Pick up page layout from theme manager (applyStyleOverrides may have set it)
-    PageLayout pl = m_themeManager->themePageLayout();
-    // If the theme didn't specify a page layout, start from the current one
-    if (pl.pageSizeId == QPageSize::A4 && pl.margins.isNull())
-        pl = m_pageLayoutWidget->currentPageLayout();
-
-    // Update page background from palette
+    // Page layout is driven by template selection + manual PageLayoutWidget edits.
+    // Here we only update the page background from the palette.
     QColor pageBg = m_themeComposer->currentPalette().pageBackground();
-    if (pageBg.isValid())
+    if (pageBg.isValid()) {
+        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
         pl.pageBackground = pageBg;
-
-    m_pageLayoutWidget->setPageLayout(pl);
-    auto *view = currentDocumentView();
-    if (view)
-        view->setPageLayout(pl);
+        m_pageLayoutWidget->setPageLayout(pl);
+        auto *view = currentDocumentView();
+        if (view)
+            view->setPageLayout(pl);
+    }
 
     rebuildCurrentDocument();
 }
@@ -1068,6 +1080,10 @@ void MainWindow::onRenderModeChanged()
 {
     bool webMode = PrettyReaderSettings::self()->useWebView();
 
+    // Show/hide template picker based on render mode
+    if (m_themePickerDock)
+        m_themePickerDock->setRenderMode(!webMode);
+
     // Enable/disable page arrangement (not meaningful in web mode)
     if (m_pageArrangementMenu)
         m_pageArrangementMenu->setEnabled(!webMode);
@@ -1105,9 +1121,10 @@ void MainWindow::saveSession()
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
 
-    // Save current typography theme + color scheme
-    group.writeEntry("TypographyTheme", m_themePickerDock->currentTypographyThemeId());
+    // Save current type set + color scheme + page template
+    group.writeEntry("TypeSet", m_themePickerDock->currentTypeSetId());
     group.writeEntry("ColorScheme", m_themePickerDock->currentColorSchemeId());
+    group.writeEntry("PageTemplate", m_themePickerDock->currentTemplateId());
 
     group.sync();
 }
@@ -1152,14 +1169,16 @@ void MainWindow::restoreSession()
         m_splitter->setSizes(splitterSizes);
     }
 
-    // Restore typography theme + color scheme
-    QString typoId = group.readEntry("TypographyTheme", QStringLiteral("default"));
+    // Restore type set + color scheme (with backward compat for old session key)
+    QString typeSetId = group.readEntry("TypeSet", QString());
+    if (typeSetId.isEmpty())
+        typeSetId = group.readEntry("TypographyTheme", QStringLiteral("default"));
     QString colorId = group.readEntry("ColorScheme", QStringLiteral("default-light"));
 
     bool changed = false;
-    TypographyTheme theme = m_typographyThemeManager->theme(typoId);
-    if (!theme.id.isEmpty()) {
-        m_themeComposer->setTypographyTheme(theme);
+    TypeSet ts = m_typeSetManager->typeSet(typeSetId);
+    if (!ts.id.isEmpty()) {
+        m_themeComposer->setTypeSet(ts);
         changed = true;
     }
 
@@ -1170,6 +1189,12 @@ void MainWindow::restoreSession()
     }
 
     m_themePickerDock->syncPickersFromComposer();
+
+    // Restore page template selection
+    QString templateId = group.readEntry("PageTemplate", QString());
+    if (!templateId.isEmpty()) {
+        m_themePickerDock->setCurrentTemplateId(templateId);
+    }
 
     if (changed)
         onCompositionApplied();

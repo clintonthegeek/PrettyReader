@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QHash>
+#include <QJsonObject>
 #include <QMarginsF>
 #include <QPageLayout>
 #include <QPageSize>
@@ -13,6 +14,12 @@
 
 struct PageLayout
 {
+    // JSON serialization
+    static PageLayout fromJson(const QJsonObject &pageLayoutObj,
+                               const QJsonObject &masterPagesObj);
+    QJsonObject toPageLayoutJson() const;
+    QJsonObject toMasterPagesJson() const;
+
     QPageSize::PageSizeId pageSizeId = QPageSize::A4;
     QPageLayout::Orientation orientation = QPageLayout::Portrait;
     QMarginsF margins{25.0, 25.0, 25.0, 25.0}; // mm

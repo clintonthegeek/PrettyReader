@@ -1,5 +1,5 @@
 /*
- * themecomposer.cpp — Compose ColorPalette + TypographyTheme into a StyleManager
+ * themecomposer.cpp — Compose ColorPalette + TypeSet into a StyleManager
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -25,17 +25,17 @@ void ThemeComposer::setColorPalette(const ColorPalette &palette)
     }
 }
 
-void ThemeComposer::setTypographyTheme(const TypographyTheme &theme)
+void ThemeComposer::setTypeSet(const TypeSet &typeSet)
 {
-    if (!(m_typographyTheme == theme)) {
-        m_typographyTheme = theme;
+    if (!(m_typeSet == typeSet)) {
+        m_typeSet = typeSet;
         Q_EMIT compositionChanged();
     }
 }
 
 QString ThemeComposer::hersheyFamilyFor(const QString &ttfFamily) const
 {
-    return m_typographyTheme.hersheyFamilyFor(ttfFamily);
+    return m_typeSet.hersheyFamilyFor(ttfFamily);
 }
 
 void ThemeComposer::compose(StyleManager *target)
@@ -46,8 +46,8 @@ void ThemeComposer::compose(StyleManager *target)
     // 1. Load hardcoded defaults to establish the style hierarchy
     m_themeManager->loadDefaults(target);
 
-    // 2. Apply typography theme (fonts + style overrides)
-    applyTypographyTheme(target);
+    // 2. Apply type set (fonts + style overrides)
+    applyTypeSet(target);
 
     // 3. Apply color palette (foreground/background colors) — always last
     applyColorPalette(target);
@@ -56,53 +56,49 @@ void ThemeComposer::compose(StyleManager *target)
     m_themeManager->assignDefaultParents(target);
 }
 
-void ThemeComposer::applyTypographyTheme(StyleManager *target)
+void ThemeComposer::applyTypeSet(StyleManager *target)
 {
-    // First, apply the font families from the typography theme
-    if (!m_typographyTheme.body.family.isEmpty()) {
+    // First, apply the font families from the type set
+    if (!m_typeSet.body.family.isEmpty()) {
         ParagraphStyle *dps = target->paragraphStyle(QStringLiteral("Default Paragraph Style"));
         if (dps)
-            dps->setFontFamily(m_typographyTheme.body.family);
+            dps->setFontFamily(m_typeSet.body.family);
 
         CharacterStyle *dcs = target->characterStyle(QStringLiteral("Default Character Style"));
         if (dcs)
-            dcs->setFontFamily(m_typographyTheme.body.family);
+            dcs->setFontFamily(m_typeSet.body.family);
     }
 
-    if (!m_typographyTheme.heading.family.isEmpty()) {
+    if (!m_typeSet.heading.family.isEmpty()) {
         ParagraphStyle *heading = target->paragraphStyle(QStringLiteral("Heading"));
         if (heading)
-            heading->setFontFamily(m_typographyTheme.heading.family);
+            heading->setFontFamily(m_typeSet.heading.family);
     }
 
-    if (!m_typographyTheme.mono.family.isEmpty()) {
+    if (!m_typeSet.mono.family.isEmpty()) {
         CharacterStyle *code = target->characterStyle(QStringLiteral("Code"));
         if (code)
-            code->setFontFamily(m_typographyTheme.mono.family);
+            code->setFontFamily(m_typeSet.mono.family);
     }
 
     // Then, apply the style override blocks via ThemeManager
     // Build a root JSON object matching what applyStyleOverrides() expects
     QJsonObject root;
-    if (!m_typographyTheme.paragraphStyles.isEmpty())
-        root[QStringLiteral("paragraphStyles")] = m_typographyTheme.paragraphStyles;
-    if (!m_typographyTheme.characterStyles.isEmpty())
-        root[QStringLiteral("characterStyles")] = m_typographyTheme.characterStyles;
-    if (!m_typographyTheme.tableStyles.isEmpty())
-        root[QStringLiteral("tableStyles")] = m_typographyTheme.tableStyles;
-    if (!m_typographyTheme.footnoteStyle.isEmpty())
-        root[QStringLiteral("footnoteStyle")] = m_typographyTheme.footnoteStyle;
-    if (!m_typographyTheme.masterPages.isEmpty())
-        root[QStringLiteral("masterPages")] = m_typographyTheme.masterPages;
-    if (!m_typographyTheme.pageLayout.isEmpty())
-        root[QStringLiteral("pageLayout")] = m_typographyTheme.pageLayout;
+    if (!m_typeSet.paragraphStyles.isEmpty())
+        root[QStringLiteral("paragraphStyles")] = m_typeSet.paragraphStyles;
+    if (!m_typeSet.characterStyles.isEmpty())
+        root[QStringLiteral("characterStyles")] = m_typeSet.characterStyles;
+    if (!m_typeSet.tableStyles.isEmpty())
+        root[QStringLiteral("tableStyles")] = m_typeSet.tableStyles;
+    if (!m_typeSet.footnoteStyle.isEmpty())
+        root[QStringLiteral("footnoteStyle")] = m_typeSet.footnoteStyle;
 
     m_themeManager->applyStyleOverrides(root, target);
 }
 
 void ThemeComposer::applyColorPalette(StyleManager *target)
 {
-    // text → Default Paragraph Style.foreground, Default Character Style.foreground
+    // text -> Default Paragraph Style.foreground, Default Character Style.foreground
     {
         QColor c = m_palette.text();
         if (c.isValid()) {
@@ -116,7 +112,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
     }
 
-    // headingText → Heading.foreground (inherited by Heading1-6)
+    // headingText -> Heading.foreground (inherited by Heading1-6)
     {
         QColor c = m_palette.headingText();
         if (c.isValid()) {
@@ -126,7 +122,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
     }
 
-    // blockquoteText → BlockQuote.foreground
+    // blockquoteText -> BlockQuote.foreground
     {
         QColor c = m_palette.blockquoteText();
         if (c.isValid()) {
@@ -136,7 +132,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
     }
 
-    // linkText → Link.foreground (character style)
+    // linkText -> Link.foreground (character style)
     {
         QColor c = m_palette.linkText();
         if (c.isValid()) {
@@ -146,7 +142,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
     }
 
-    // codeText → InlineCode.foreground (character style)
+    // codeText -> InlineCode.foreground (character style)
     {
         QColor c = m_palette.codeText();
         if (c.isValid()) {
@@ -156,7 +152,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
     }
 
-    // surfaceCode → CodeBlock.background (paragraph style)
+    // surfaceCode -> CodeBlock.background (paragraph style)
     {
         QColor c = m_palette.surfaceCode();
         if (c.isValid()) {
@@ -166,7 +162,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
     }
 
-    // surfaceInlineCode → InlineCode.background (character style)
+    // surfaceInlineCode -> InlineCode.background (character style)
     {
         QColor c = m_palette.surfaceInlineCode();
         if (c.isValid()) {
@@ -188,17 +184,17 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
         }
 
         if (ts) {
-            // surfaceTableHeader → TableStyle.headerBackground
+            // surfaceTableHeader -> TableStyle.headerBackground
             QColor hdrBg = m_palette.surfaceTableHeader();
             if (hdrBg.isValid())
                 ts->setHeaderBackground(hdrBg);
 
-            // surfaceTableAlt → TableStyle.alternateRowColor
+            // surfaceTableAlt -> TableStyle.alternateRowColor
             QColor altRow = m_palette.surfaceTableAlt();
             if (altRow.isValid())
                 ts->setAlternateRowColor(altRow);
 
-            // borderOuter → TableStyle.outerBorder.color
+            // borderOuter -> TableStyle.outerBorder.color
             QColor borderOuter = m_palette.borderOuter();
             if (borderOuter.isValid()) {
                 TableStyle::Border ob = ts->outerBorder();
@@ -206,7 +202,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
                 ts->setOuterBorder(ob);
             }
 
-            // borderInner → TableStyle.innerBorder.color
+            // borderInner -> TableStyle.innerBorder.color
             QColor borderInner = m_palette.borderInner();
             if (borderInner.isValid()) {
                 TableStyle::Border ib = ts->innerBorder();
@@ -214,7 +210,7 @@ void ThemeComposer::applyColorPalette(StyleManager *target)
                 ts->setInnerBorder(ib);
             }
 
-            // borderHeaderBottom → TableStyle.headerBottomBorder.color
+            // borderHeaderBottom -> TableStyle.headerBottomBorder.color
             QColor borderHdrBottom = m_palette.borderHeaderBottom();
             if (borderHdrBottom.isValid()) {
                 TableStyle::Border hbb = ts->headerBottomBorder();

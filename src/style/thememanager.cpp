@@ -189,99 +189,17 @@ void ThemeManager::applyStyleOverrides(const QJsonObject &root, StyleManager *sm
         }
     }
 
-    // Optional page layout
-    if (root.contains(QLatin1String("pageLayout"))) {
-        m_themePageLayout = PageLayout{};
+    // Optional page layout + master pages — delegate to PageLayout::fromJson()
+    if (root.contains(QLatin1String("pageLayout")) || root.contains(QLatin1String("masterPages"))) {
         QJsonObject plObj = root.value(QLatin1String("pageLayout")).toObject();
-        if (plObj.contains(QLatin1String("pageSize"))) {
-            QString sizeStr = plObj.value(QLatin1String("pageSize")).toString();
-            if (sizeStr == QLatin1String("Letter"))      m_themePageLayout.pageSizeId = QPageSize::Letter;
-            else if (sizeStr == QLatin1String("A5"))      m_themePageLayout.pageSizeId = QPageSize::A5;
-            else if (sizeStr == QLatin1String("Legal"))   m_themePageLayout.pageSizeId = QPageSize::Legal;
-            else if (sizeStr == QLatin1String("B5"))      m_themePageLayout.pageSizeId = QPageSize::B5;
-            else                                           m_themePageLayout.pageSizeId = QPageSize::A4;
-        }
-        if (plObj.contains(QLatin1String("orientation"))) {
-            QString orient = plObj.value(QLatin1String("orientation")).toString();
-            m_themePageLayout.orientation = (orient == QLatin1String("landscape"))
-                ? QPageLayout::Landscape : QPageLayout::Portrait;
-        }
-        if (plObj.contains(QLatin1String("margins"))) {
-            QJsonObject m = plObj.value(QLatin1String("margins")).toObject();
-            m_themePageLayout.margins = QMarginsF(
-                m.value(QLatin1String("left")).toDouble(25.0),
-                m.value(QLatin1String("top")).toDouble(25.0),
-                m.value(QLatin1String("right")).toDouble(25.0),
-                m.value(QLatin1String("bottom")).toDouble(25.0));
-        }
-        if (plObj.contains(QLatin1String("header"))) {
-            QJsonObject h = plObj.value(QLatin1String("header")).toObject();
-            m_themePageLayout.headerEnabled = h.value(QLatin1String("enabled")).toBool(false);
-            m_themePageLayout.headerLeft    = h.value(QLatin1String("left")).toString();
-            m_themePageLayout.headerCenter  = h.value(QLatin1String("center")).toString();
-            m_themePageLayout.headerRight   = h.value(QLatin1String("right")).toString();
-        }
-        if (plObj.contains(QLatin1String("footer"))) {
-            QJsonObject f = plObj.value(QLatin1String("footer")).toObject();
-            m_themePageLayout.footerEnabled = f.value(QLatin1String("enabled")).toBool(true);
-            m_themePageLayout.footerLeft    = f.value(QLatin1String("left")).toString();
-            m_themePageLayout.footerCenter  = f.value(QLatin1String("center")).toString();
-            m_themePageLayout.footerRight   = f.value(QLatin1String("right")).toString(
-                QStringLiteral("{page} / {pages}"));
-        }
+        QJsonObject mpObj = root.value(QLatin1String("masterPages")).toObject();
+        m_themePageLayout = PageLayout::fromJson(plObj, mpObj);
+
+        // pageBackground is handled separately (palette owns it in the new system,
+        // but legacy themes may still include it)
         if (plObj.contains(QLatin1String("pageBackground"))) {
             m_themePageLayout.pageBackground = QColor(
                 plObj.value(QLatin1String("pageBackground")).toString());
-        }
-    }
-
-    // Master pages
-    if (root.contains(QLatin1String("masterPages"))) {
-        QJsonObject mpObj = root.value(QLatin1String("masterPages")).toObject();
-        for (auto it = mpObj.begin(); it != mpObj.end(); ++it) {
-            QJsonObject props = it.value().toObject();
-            MasterPage mp;
-            mp.name = it.key();
-
-            if (props.contains(QLatin1String("headerEnabled")))
-                mp.headerEnabled = props.value(QLatin1String("headerEnabled")).toBool() ? 1 : 0;
-            if (props.contains(QLatin1String("footerEnabled")))
-                mp.footerEnabled = props.value(QLatin1String("footerEnabled")).toBool() ? 1 : 0;
-
-            if (props.contains(QLatin1String("headerLeft"))) {
-                mp.headerLeft = props.value(QLatin1String("headerLeft")).toString();
-                mp.hasHeaderLeft = true;
-            }
-            if (props.contains(QLatin1String("headerCenter"))) {
-                mp.headerCenter = props.value(QLatin1String("headerCenter")).toString();
-                mp.hasHeaderCenter = true;
-            }
-            if (props.contains(QLatin1String("headerRight"))) {
-                mp.headerRight = props.value(QLatin1String("headerRight")).toString();
-                mp.hasHeaderRight = true;
-            }
-            if (props.contains(QLatin1String("footerLeft"))) {
-                mp.footerLeft = props.value(QLatin1String("footerLeft")).toString();
-                mp.hasFooterLeft = true;
-            }
-            if (props.contains(QLatin1String("footerCenter"))) {
-                mp.footerCenter = props.value(QLatin1String("footerCenter")).toString();
-                mp.hasFooterCenter = true;
-            }
-            if (props.contains(QLatin1String("footerRight"))) {
-                mp.footerRight = props.value(QLatin1String("footerRight")).toString();
-                mp.hasFooterRight = true;
-            }
-
-            if (props.contains(QLatin1String("margins"))) {
-                QJsonObject m = props.value(QLatin1String("margins")).toObject();
-                if (m.contains(QLatin1String("top")))    mp.marginTop    = m.value(QLatin1String("top")).toDouble();
-                if (m.contains(QLatin1String("bottom"))) mp.marginBottom = m.value(QLatin1String("bottom")).toDouble();
-                if (m.contains(QLatin1String("left")))   mp.marginLeft   = m.value(QLatin1String("left")).toDouble();
-                if (m.contains(QLatin1String("right")))  mp.marginRight  = m.value(QLatin1String("right")).toDouble();
-            }
-
-            m_themePageLayout.masterPages.insert(mp.name, mp);
         }
     }
 

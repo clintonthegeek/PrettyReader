@@ -29,7 +29,7 @@ public:
         , m_palette(palette)
         , m_selected(selected)
     {
-        setFixedSize(60, 40);
+        setFixedSize(75, 52);
         setCursor(Qt::PointingHandCursor);
         setToolTip(palette.name);
     }
@@ -58,11 +58,11 @@ protected:
         // Fill background with pageBackground
         p.fillRect(r, m_palette.pageBackground());
 
-        // Draw color strips in the lower portion of the cell
+        // Draw color strips in the upper portion of the cell
         const int stripHeight = 4;
         const int stripMargin = 4;
         const int stripWidth = r.width() - 2 * stripMargin;
-        int y = 6;
+        int y = 4;
 
         // Text color strip
         p.fillRect(QRect(stripMargin, y, stripWidth, stripHeight), m_palette.text());
@@ -78,6 +78,16 @@ protected:
         // Code surface strip (other half)
         p.fillRect(QRect(stripMargin + stripWidth / 2 + 2, y, stripWidth / 2 - 2, stripHeight),
                    m_palette.surfaceCode());
+
+        // Name label at the bottom
+        QFont nameFont = font();
+        nameFont.setPointSize(6);
+        p.setFont(nameFont);
+        // Use text color from the palette itself for contrast against its background
+        p.setPen(m_palette.text());
+        QRect nameRect(stripMargin, 30, stripWidth, 18);
+        p.drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter,
+                   p.fontMetrics().elidedText(m_palette.name, Qt::ElideRight, stripWidth));
 
         // Draw border
         if (m_selected) {
@@ -189,7 +199,7 @@ void PalettePickerWidget::rebuildGrid()
     // Add [+] button at the end of the grid
     auto *addButton = new QToolButton(this);
     addButton->setText(QStringLiteral("+"));
-    addButton->setFixedSize(60, 40);
+    addButton->setFixedSize(75, 52);
     addButton->setCursor(Qt::PointingHandCursor);
     addButton->setToolTip(QStringLiteral("Create new palette"));
     connect(addButton, &QToolButton::clicked, this, &PalettePickerWidget::createRequested);

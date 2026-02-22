@@ -1,10 +1,10 @@
 /*
- * typographytheme.cpp — Typography axis of the two-axis theme system
+ * typeset.cpp — Typography axis of the three-axis theme system
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "typographytheme.h"
+#include "typeset.h"
 #include "fontdegradationmap.h"
 
 #include <QJsonArray>
@@ -14,7 +14,7 @@
 // hersheyFamilyFor
 // ---------------------------------------------------------------------------
 
-QString TypographyTheme::hersheyFamilyFor(const QString &ttfFamily) const
+QString TypeSet::hersheyFamilyFor(const QString &ttfFamily) const
 {
     if (ttfFamily.compare(body.family, Qt::CaseInsensitive) == 0)
         return body.hersheyFamily;
@@ -96,34 +96,32 @@ static QJsonObject stripColorsFromStyleBlock(const QJsonObject &block)
 // fromJson / toJson
 // ---------------------------------------------------------------------------
 
-TypographyTheme TypographyTheme::fromJson(const QJsonObject &obj)
+TypeSet TypeSet::fromJson(const QJsonObject &obj)
 {
-    TypographyTheme theme;
+    TypeSet ts;
 
-    theme.id          = obj.value(QLatin1String("id")).toString();
-    theme.name        = obj.value(QLatin1String("name")).toString();
-    theme.description = obj.value(QLatin1String("description")).toString();
-    theme.version     = obj.value(QLatin1String("version")).toInt(1);
-    theme.hersheyMode = obj.value(QLatin1String("hersheyMode")).toBool(false);
+    ts.id          = obj.value(QLatin1String("id")).toString();
+    ts.name        = obj.value(QLatin1String("name")).toString();
+    ts.description = obj.value(QLatin1String("description")).toString();
+    ts.version     = obj.value(QLatin1String("version")).toInt(1);
+    ts.hersheyMode = obj.value(QLatin1String("hersheyMode")).toBool(false);
 
-    // Font roles — stored under "fonts" (new format)
+    // Font roles — stored under "fonts"
     QJsonObject fonts = obj.value(QLatin1String("fonts")).toObject();
-    theme.body    = fontRoleFromJson(fonts.value(QLatin1String("body")).toObject());
-    theme.heading = fontRoleFromJson(fonts.value(QLatin1String("heading")).toObject());
-    theme.mono    = fontRoleFromJson(fonts.value(QLatin1String("mono")).toObject());
+    ts.body    = fontRoleFromJson(fonts.value(QLatin1String("body")).toObject());
+    ts.heading = fontRoleFromJson(fonts.value(QLatin1String("heading")).toObject());
+    ts.mono    = fontRoleFromJson(fonts.value(QLatin1String("mono")).toObject());
 
     // Style override blocks
-    theme.paragraphStyles = obj.value(QLatin1String("paragraphStyles")).toObject();
-    theme.characterStyles = obj.value(QLatin1String("characterStyles")).toObject();
-    theme.tableStyles     = obj.value(QLatin1String("tableStyles")).toObject();
-    theme.footnoteStyle   = obj.value(QLatin1String("footnoteStyle")).toObject();
-    theme.masterPages     = obj.value(QLatin1String("masterPages")).toObject();
-    theme.pageLayout      = obj.value(QLatin1String("pageLayout")).toObject();
+    ts.paragraphStyles = obj.value(QLatin1String("paragraphStyles")).toObject();
+    ts.characterStyles = obj.value(QLatin1String("characterStyles")).toObject();
+    ts.tableStyles     = obj.value(QLatin1String("tableStyles")).toObject();
+    ts.footnoteStyle   = obj.value(QLatin1String("footnoteStyle")).toObject();
 
-    return theme;
+    return ts;
 }
 
-QJsonObject TypographyTheme::toJson() const
+QJsonObject TypeSet::toJson() const
 {
     QJsonObject obj;
 
@@ -131,7 +129,7 @@ QJsonObject TypographyTheme::toJson() const
         obj[QLatin1String("id")] = id;
     obj[QLatin1String("name")]    = name;
     obj[QLatin1String("version")] = version;
-    obj[QLatin1String("type")]    = QStringLiteral("typographyTheme");
+    obj[QLatin1String("type")]    = QStringLiteral("typeSet");
 
     if (!description.isEmpty())
         obj[QLatin1String("description")] = description;
@@ -154,10 +152,6 @@ QJsonObject TypographyTheme::toJson() const
         obj[QLatin1String("tableStyles")] = stripColorsFromStyleBlock(tableStyles);
     if (!footnoteStyle.isEmpty())
         obj[QLatin1String("footnoteStyle")] = footnoteStyle;
-    if (!masterPages.isEmpty())
-        obj[QLatin1String("masterPages")] = masterPages;
-    if (!pageLayout.isEmpty())
-        obj[QLatin1String("pageLayout")] = pageLayout;
 
     return obj;
 }
