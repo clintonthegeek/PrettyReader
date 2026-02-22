@@ -5,6 +5,10 @@
  * Uses CIDFont Type 2 + Identity-H encoding for text,
  * DCTDecode/FlateDecode for images.
  *
+ * Page content rendering is delegated to PdfBoxRenderer; this class
+ * handles the overall PDF document structure, font/image embedding,
+ * and resource management.
+ *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -17,6 +21,7 @@
 #include "hersheyfont.h"
 #include "layoutengine.h"
 #include "pagelayout.h"
+#include "pdfboxrenderer.h"
 #include "pdfwriter.h"
 #include "pdfexportoptions.h"
 
@@ -40,48 +45,14 @@ public:
     void setExportOptions(const PdfExportOptions &opts) { m_exportOptions = opts; }
 
 private:
-    // Page content rendering
+    // Page content rendering (delegates to PdfBoxRenderer)
     QByteArray renderPage(const Layout::Page &page,
                           const PageLayout &pageLayout,
                           const Pdf::ResourceDict &resources);
-    void renderBlockBox(const Layout::BlockBox &box, QByteArray &stream,
-                        qreal originX, qreal originY, qreal pageHeight);
-    void renderTableBox(const Layout::TableBox &box, QByteArray &stream,
-                        qreal originX, qreal originY, qreal pageHeight);
-    void renderFootnoteSectionBox(const Layout::FootnoteSectionBox &box,
-                                  QByteArray &stream,
-                                  qreal originX, qreal originY, qreal pageHeight);
-    void renderGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
-                        qreal x, qreal y);
-    void renderGlyphBoxAsPath(const Layout::GlyphBox &gbox, QByteArray &stream,
-                              qreal x, qreal y);
-    void renderHersheyGlyphBox(const Layout::GlyphBox &gbox, QByteArray &stream,
-                               qreal x, qreal y);
-    void renderTtfGlyphBoxAsXObject(const Layout::GlyphBox &gbox, QByteArray &stream,
-                                     qreal x, qreal y);
-    void renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
-                        qreal x, qreal y);
-    void dispatchGlyphRendering(const Layout::GlyphBox &gbox, QByteArray &stream,
-                                qreal x, qreal y);
-    void renderGlyphDecorations(const Layout::GlyphBox &gbox, QByteArray &stream,
-                                qreal x, qreal y, qreal endX);
-    void renderLineBox(const Layout::LineBox &line, QByteArray &stream,
-                       qreal originX, qreal originY, qreal pageHeight,
-                       qreal availWidth);
-
-    // Markdown copy mode: per-word ActualText encoding
-    static QByteArray toUtf16BeHex(const QString &text);
 
     // Link annotations: collected per-page during rendering
-    struct LinkAnnotation {
-        QRectF rect;      // PDF coordinates (bottom-up)
-        QString href;
-    };
-    QList<QList<LinkAnnotation>> m_pageAnnotations; // indexed by page number
+    QList<QList<PdfLinkAnnotation>> m_pageAnnotations; // indexed by page number
     int m_currentPageIndex = 0;
-
-    void collectLinkRect(qreal x, qreal y, qreal width, qreal ascent,
-                         qreal descent, const QString &href);
 
     // Font embedding
     struct EmbeddedFont {
@@ -90,7 +61,7 @@ private:
         FontFace *face = nullptr;
     };
     QList<EmbeddedFont> m_embeddedFonts;
-    QHash<FontFace *, int> m_fontIndex; // face → index in m_embeddedFonts
+    QHash<FontFace *, int> m_fontIndex; // face -> index in m_embeddedFonts
 
     QByteArray pdfFontName(FontFace *face);
     int ensureFontRegistered(FontFace *face);
@@ -141,11 +112,9 @@ private:
                                    uint glyphId, bool bold);
 
     QList<EmbeddedImage> m_embeddedImages;
-    QHash<QString, int> m_imageIndex; // imageId → index in m_embeddedImages
+    QHash<QString, int> m_imageIndex; // imageId -> index in m_embeddedImages
     int ensureImageRegistered(const QString &imageId, const QImage &image);
     void embedImages(Pdf::Writer &writer);
-    void renderImageBlock(const Layout::BlockBox &box, QByteArray &stream,
-                          qreal originX, qreal originY);
 
     // PDF Outline / Bookmarks
     struct OutlineEntry {
@@ -171,7 +140,6 @@ private:
     QString m_title;
     qreal m_maxJustifyGap = 14.0;
     PdfExportOptions m_exportOptions;
-    bool m_codeBlockLines = false; // true while rendering code block lines
     bool m_hasHersheyGlyphs = false;
     Pdf::Writer *m_writer = nullptr;           // set during generate(), null otherwise
     Pdf::ResourceDict *m_resources = nullptr;  // set during generate(), null otherwise
