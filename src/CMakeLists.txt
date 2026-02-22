@@ -82,6 +82,9 @@ add_library(PrettyReaderCore STATIC
     pdf/pdfwriter.h
     pdf/pdfgenerator.cpp
     pdf/pdfgenerator.h
+    # Rendering base class
+    render/boxtreerenderer.cpp
+    render/boxtreerenderer.h
     # Widgets
     widgets/pagelayoutwidget.cpp
     widgets/pagelayoutwidget.h
@@ -129,6 +132,7 @@ target_include_directories(PrettyReaderCore
         ${CMAKE_CURRENT_SOURCE_DIR}/font
         ${CMAKE_CURRENT_SOURCE_DIR}/layout
         ${CMAKE_CURRENT_SOURCE_DIR}/pdf
+        ${CMAKE_CURRENT_SOURCE_DIR}/render
         ${CMAKE_CURRENT_BINARY_DIR}
 )
 
