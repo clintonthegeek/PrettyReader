@@ -1,6 +1,8 @@
 #include "styledockwidget.h"
+#include "fontpairingeditordialog.h"
 #include "fontpairingpickerwidget.h"
 #include "footnoteconfigwidget.h"
+#include "paletteeditordialog.h"
 #include "palettepickerwidget.h"
 #include "stylepropertieseditor.h"
 #include "tablestylepropertieseditor.h"
@@ -119,6 +121,46 @@ void StyleDockWidget::buildUI()
         if (m_showPreviewsCheck->isChecked())
             m_treeModel->refresh();
         Q_EMIT styleOverrideChanged();
+    });
+
+    // --- [+] button: create new palette ---
+    connect(m_palettePicker, &PalettePickerWidget::createRequested,
+            this, [this]() {
+        PaletteEditorDialog dlg(this);
+        if (dlg.exec() == QDialog::Accepted) {
+            ColorPalette pal = dlg.colorPalette();
+            QString id = m_paletteManager->savePalette(pal);
+            m_palettePicker->setCurrentPaletteId(id);
+            // Apply the new palette to the current theme
+            if (m_themeComposer && m_editingStyles) {
+                m_themeComposer->setColorPalette(m_paletteManager->palette(id));
+                m_themeComposer->compose(m_editingStyles);
+                m_treeModel->setStyleManager(m_editingStyles);
+                if (m_showPreviewsCheck->isChecked())
+                    m_treeModel->refresh();
+                Q_EMIT styleOverrideChanged();
+            }
+        }
+    });
+
+    // --- [+] button: create new font pairing ---
+    connect(m_pairingPicker, &FontPairingPickerWidget::createRequested,
+            this, [this]() {
+        FontPairingEditorDialog dlg(this);
+        if (dlg.exec() == QDialog::Accepted) {
+            FontPairing fp = dlg.fontPairing();
+            QString id = m_pairingManager->savePairing(fp);
+            m_pairingPicker->setCurrentPairingId(id);
+            // Apply the new pairing to the current theme
+            if (m_themeComposer && m_editingStyles) {
+                m_themeComposer->setFontPairing(m_pairingManager->pairing(id));
+                m_themeComposer->compose(m_editingStyles);
+                m_treeModel->setStyleManager(m_editingStyles);
+                if (m_showPreviewsCheck->isChecked())
+                    m_treeModel->refresh();
+                Q_EMIT styleOverrideChanged();
+            }
+        }
     });
 
     // --- Style Tree (stretches to fill available space) ---
