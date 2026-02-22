@@ -414,8 +414,10 @@ void PdfBoxRenderer::collectLink(const QRectF &rect, const QString &href)
 
     // Convert from layout coordinates to PDF coordinates.
     // rect is in layout space: (x, baselineY - ascent, width, ascent + descent)
+    // Link annotations use absolute page coordinates (not affected by CTM),
+    // so we must add m_originX manually.
     PdfLinkAnnotation annot;
-    annot.rect = QRectF(rect.x(),
+    annot.rect = QRectF(m_originX + rect.x(),
                          pdfY(rect.y() + rect.height()), // bottom in PDF
                          rect.width(),
                          rect.height());

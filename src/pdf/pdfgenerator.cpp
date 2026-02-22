@@ -396,9 +396,17 @@ QByteArray PdfGenerator::renderPage(const Layout::Page &page,
     renderer.setEmbeddedFontsRef(
         reinterpret_cast<const QList<::EmbeddedFont> *>(&m_embeddedFonts));
 
+    // Translate to content origin: the layout engine produces x-coordinates
+    // relative to the content area (starting at 0). The CTM translation
+    // offsets all rendering by the left margin. Y-flip is handled per-primitive
+    // by PdfBoxRenderer::pdfY().
+    stream += "q\n1 0 0 1 " + pdfCoord(originX) + " 0 cm\n";
+
     // Render all page elements through PdfBoxRenderer
     for (const auto &elem : page.elements)
         renderer.renderElement(elem);
+
+    stream += "Q\n";
 
     // Collect link annotations from renderer
     for (const auto &link : renderer.linkAnnotations())
