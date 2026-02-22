@@ -63,7 +63,7 @@
     </entry>
     <entry name="UseWebView" type="Bool">
       <label>Use continuous web view instead of paginated print view.</label>
-      <default>false</default>
+      <default>true</default>
     </entry>
   </group>
 
