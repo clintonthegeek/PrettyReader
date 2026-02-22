@@ -1,0 +1,12 @@
+{
+    "id": "noto-source-family",
+    "name": "Noto Serif + Source Sans 3 + Source Code Pro",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "Adobe's editorial family paired with Noto Serif",
+    "roles": {
+        "body": { "family": "Noto Serif", "hersheyFamily": "Hershey Serif" },
+        "heading": { "family": "Source Sans 3", "hersheyFamily": "Hershey Sans" },
+        "mono": { "family": "Source Code Pro", "hersheyFamily": "Hershey Roman" }
+    }
+}

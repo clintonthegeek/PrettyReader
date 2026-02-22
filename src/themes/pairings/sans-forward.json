@@ -1,0 +1,12 @@
+{
+    "id": "sans-forward",
+    "name": "Inter + Noto Sans + Hack",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "All sans-serif: modern UI aesthetic for reading",
+    "roles": {
+        "body": { "family": "Inter", "hersheyFamily": "Hershey Sans" },
+        "heading": { "family": "Noto Sans", "hersheyFamily": "Hershey Sans" },
+        "mono": { "family": "Hack", "hersheyFamily": "Hershey Roman" }
+    }
+}

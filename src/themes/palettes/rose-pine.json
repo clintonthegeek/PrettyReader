@@ -1,0 +1,22 @@
+{
+    "id": "rose-pine",
+    "name": "Rose Pine",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "All natural pine, faux fur, and a bit of soho vibes",
+    "colors": {
+        "text": "#E0DEF4",
+        "headingText": "#EBBCBA",
+        "blockquoteText": "#9CCFD8",
+        "linkText": "#C4A7E7",
+        "codeText": "#31748F",
+        "surfaceCode": "#1F1D2E",
+        "surfaceInlineCode": "#26233A",
+        "surfaceTableHeader": "#403D52",
+        "surfaceTableAlt": "#21202E",
+        "pageBackground": "#191724",
+        "borderOuter": "#524F67",
+        "borderInner": "#403D52",
+        "borderHeaderBottom": "#C4A7E7"
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "id": "gruvbox-dark",
+    "name": "Gruvbox Dark",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Retro groove with warm earth tones by Pavel Pertsev",
+    "colors": {
+        "text": "#EBDBB2",
+        "headingText": "#FABD2F",
+        "blockquoteText": "#8EC07C",
+        "linkText": "#83A598",
+        "codeText": "#B8BB26",
+        "surfaceCode": "#3C3836",
+        "surfaceInlineCode": "#504945",
+        "surfaceTableHeader": "#665C54",
+        "surfaceTableAlt": "#32302F",
+        "pageBackground": "#282828",
+        "borderOuter": "#928374",
+        "borderInner": "#504945",
+        "borderHeaderBottom": "#FABD2F"
+    }
+}

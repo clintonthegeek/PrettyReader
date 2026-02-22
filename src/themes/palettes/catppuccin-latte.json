@@ -1,0 +1,22 @@
+{
+    "id": "catppuccin-latte",
+    "name": "Catppuccin Latte",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Warm off-white with vibrant pastels from Catppuccin",
+    "colors": {
+        "text": "#4C4F69",
+        "headingText": "#8839EF",
+        "blockquoteText": "#40A02B",
+        "linkText": "#1E66F5",
+        "codeText": "#179299",
+        "surfaceCode": "#CCD0DA",
+        "surfaceInlineCode": "#BCC0CC",
+        "surfaceTableHeader": "#ACB0BE",
+        "surfaceTableAlt": "#E6E9EF",
+        "pageBackground": "#EFF1F5",
+        "borderOuter": "#9CA0B0",
+        "borderInner": "#BCC0CC",
+        "borderHeaderBottom": "#8839EF"
+    }
+}

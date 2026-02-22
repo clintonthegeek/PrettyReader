@@ -1,0 +1,22 @@
+{
+    "id": "nord",
+    "name": "Nord",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Arctic blue-grey tones by Arctic Ice Studio",
+    "colors": {
+        "text": "#D8DEE9",
+        "headingText": "#ECEFF4",
+        "blockquoteText": "#81A1C1",
+        "linkText": "#88C0D0",
+        "codeText": "#A3BE8C",
+        "surfaceCode": "#3B4252",
+        "surfaceInlineCode": "#434C5E",
+        "surfaceTableHeader": "#4C566A",
+        "surfaceTableAlt": "#353B49",
+        "pageBackground": "#2E3440",
+        "borderOuter": "#4C566A",
+        "borderInner": "#3B4252",
+        "borderHeaderBottom": "#88C0D0"
+    }
+}

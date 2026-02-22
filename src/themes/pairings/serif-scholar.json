@@ -1,0 +1,12 @@
+{
+    "id": "serif-scholar",
+    "name": "Georgia + Noto Serif + Source Code Pro",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "All serif: old-world scholarly reading experience",
+    "roles": {
+        "body": { "family": "Georgia", "hersheyFamily": "Hershey Serif" },
+        "heading": { "family": "Noto Serif", "hersheyFamily": "Hershey Serif" },
+        "mono": { "family": "Source Code Pro", "hersheyFamily": "Hershey Roman" }
+    }
+}

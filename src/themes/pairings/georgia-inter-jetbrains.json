@@ -1,0 +1,12 @@
+{
+    "id": "georgia-inter-jetbrains",
+    "name": "Georgia + Inter + JetBrains Mono",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "Contemporary pairing mixing classic and modern",
+    "roles": {
+        "body": { "family": "Georgia", "hersheyFamily": "Hershey Serif" },
+        "heading": { "family": "Inter", "hersheyFamily": "Hershey Sans" },
+        "mono": { "family": "JetBrains Mono", "hersheyFamily": "Hershey Roman" }
+    }
+}

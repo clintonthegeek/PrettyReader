@@ -1,0 +1,12 @@
+{
+    "id": "fira-family",
+    "name": "Fira Sans + Fira Code",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "Mozilla's humanist sans family, all-sans reading experience",
+    "roles": {
+        "body": { "family": "Fira Sans", "hersheyFamily": "Hershey Sans" },
+        "heading": { "family": "Fira Sans", "hersheyFamily": "Hershey Sans" },
+        "mono": { "family": "Fira Code", "hersheyFamily": "Hershey Roman" }
+    }
+}

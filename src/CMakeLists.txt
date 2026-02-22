@@ -189,6 +189,21 @@ qt_add_resources(PrettyReaderCore "palettes"
         themes/palettes/solarized-light.json
         themes/palettes/solarized-dark.json
         themes/palettes/dracula.json
+        themes/palettes/nord.json
+        themes/palettes/catppuccin-mocha.json
+        themes/palettes/catppuccin-latte.json
+        themes/palettes/gruvbox-dark.json
+        themes/palettes/gruvbox-light.json
+        themes/palettes/tokyo-night.json
+        themes/palettes/rose-pine.json
+        themes/palettes/rose-pine-dawn.json
+        themes/palettes/one-dark.json
+        themes/palettes/one-light.json
+        themes/palettes/everforest-dark.json
+        themes/palettes/everforest-light.json
+        themes/palettes/flexoki-dark.json
+        themes/palettes/flexoki-light.json
+        themes/palettes/github-light.json
 )
 
 # Bundle font pairing JSON files as Qt resources
@@ -199,6 +214,18 @@ qt_add_resources(PrettyReaderCore "pairings"
         themes/pairings/noto-serif-sans-jetbrains.json
         themes/pairings/noto-serif-source-code.json
         themes/pairings/hershey-serif-sans-roman.json
+        themes/pairings/liberation-serif-sans-mono.json
+        themes/pairings/dejavu-family.json
+        themes/pairings/georgia-trebuchet-courier.json
+        themes/pairings/georgia-inter-jetbrains.json
+        themes/pairings/noto-source-family.json
+        themes/pairings/ubuntu-family.json
+        themes/pairings/fira-family.json
+        themes/pairings/typewriter.json
+        themes/pairings/sans-forward.json
+        themes/pairings/serif-scholar.json
+        themes/pairings/inverted-contrast.json
+        themes/pairings/libertine-biolinum-hack.json
 )
 
 # Bundle theme preset JSON files as Qt resources

@@ -1,0 +1,22 @@
+{
+    "id": "everforest-light",
+    "name": "Everforest Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Warm cream with forest green accents for gentle reading",
+    "colors": {
+        "text": "#5C6A72",
+        "headingText": "#B57614",
+        "blockquoteText": "#427B58",
+        "linkText": "#076678",
+        "codeText": "#66800B",
+        "surfaceCode": "#F4F0D9",
+        "surfaceInlineCode": "#EFEBD4",
+        "surfaceTableHeader": "#E6E2CC",
+        "surfaceTableAlt": "#F8F5E4",
+        "pageBackground": "#FDF6E3",
+        "borderOuter": "#BEC5B2",
+        "borderInner": "#EFEBD4",
+        "borderHeaderBottom": "#B57614"
+    }
+}

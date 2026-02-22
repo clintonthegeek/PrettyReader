@@ -1,0 +1,22 @@
+{
+    "id": "gruvbox-light",
+    "name": "Gruvbox Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Warm parchment with amber and forest green accents",
+    "colors": {
+        "text": "#3C3836",
+        "headingText": "#B57614",
+        "blockquoteText": "#427B58",
+        "linkText": "#076678",
+        "codeText": "#79740E",
+        "surfaceCode": "#EBDBB2",
+        "surfaceInlineCode": "#D5C4A1",
+        "surfaceTableHeader": "#BDAE93",
+        "surfaceTableAlt": "#F2E5BC",
+        "pageBackground": "#FBF1C7",
+        "borderOuter": "#928374",
+        "borderInner": "#D5C4A1",
+        "borderHeaderBottom": "#B57614"
+    }
+}

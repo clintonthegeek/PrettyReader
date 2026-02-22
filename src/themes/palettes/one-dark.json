@@ -1,0 +1,22 @@
+{
+    "id": "one-dark",
+    "name": "One Dark",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Atom's iconic warm charcoal theme",
+    "colors": {
+        "text": "#ABB2BF",
+        "headingText": "#E5C07B",
+        "blockquoteText": "#98C379",
+        "linkText": "#61AFEF",
+        "codeText": "#56B6C2",
+        "surfaceCode": "#21252B",
+        "surfaceInlineCode": "#2C313C",
+        "surfaceTableHeader": "#3E4451",
+        "surfaceTableAlt": "#2A2E38",
+        "pageBackground": "#282C34",
+        "borderOuter": "#7F848E",
+        "borderInner": "#3E4451",
+        "borderHeaderBottom": "#61AFEF"
+    }
+}

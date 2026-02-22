@@ -1,0 +1,12 @@
+{
+    "id": "inverted-contrast",
+    "name": "Noto Sans + Noto Serif + JetBrains Mono",
+    "version": 1,
+    "type": "fontPairing",
+    "description": "Sans body with serif headings, flipping the convention",
+    "roles": {
+        "body": { "family": "Noto Sans", "hersheyFamily": "Hershey Sans" },
+        "heading": { "family": "Noto Serif", "hersheyFamily": "Hershey Serif" },
+        "mono": { "family": "JetBrains Mono", "hersheyFamily": "Hershey Roman" }
+    }
+}

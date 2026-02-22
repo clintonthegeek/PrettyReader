@@ -1,0 +1,22 @@
+{
+    "id": "flexoki-light",
+    "name": "Flexoki Light",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Paper-like palette designed for reading by Steph Ango",
+    "colors": {
+        "text": "#6F6E69",
+        "headingText": "#205EA6",
+        "blockquoteText": "#24837B",
+        "linkText": "#5E409D",
+        "codeText": "#66800B",
+        "surfaceCode": "#E6E4D9",
+        "surfaceInlineCode": "#DAD8CE",
+        "surfaceTableHeader": "#CECDC3",
+        "surfaceTableAlt": "#F2F0E5",
+        "pageBackground": "#FFFCF0",
+        "borderOuter": "#B7B5AC",
+        "borderInner": "#DAD8CE",
+        "borderHeaderBottom": "#205EA6"
+    }
+}

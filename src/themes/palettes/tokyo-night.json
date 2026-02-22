@@ -1,0 +1,22 @@
+{
+    "id": "tokyo-night",
+    "name": "Tokyo Night Storm",
+    "version": 1,
+    "type": "colorPalette",
+    "description": "Neon lights of downtown Tokyo at night by Enkia",
+    "colors": {
+        "text": "#C0CAF5",
+        "headingText": "#7AA2F7",
+        "blockquoteText": "#9ECE6A",
+        "linkText": "#7DCFFF",
+        "codeText": "#73DACA",
+        "surfaceCode": "#1F2335",
+        "surfaceInlineCode": "#292E42",
+        "surfaceTableHeader": "#3B4261",
+        "surfaceTableAlt": "#1D202F",
+        "pageBackground": "#24283B",
+        "borderOuter": "#545C7E",
+        "borderInner": "#3B4261",
+        "borderHeaderBottom": "#3D59A1"
+    }
+}
