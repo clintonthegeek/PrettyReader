@@ -1126,7 +1126,7 @@ BlockBox Engine::layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth)
 {
     BlockBox box;
     box.type = BlockBox::CodeBlockType;
-    box.width = availWidth;
+    box.width = availWidth - 24.0; // subtract left + right margins (12pt each)
     box.padding = cb.padding;
     box.background = cb.background;
     box.borderColor = QColor(0xe1, 0xe4, 0xe8);
