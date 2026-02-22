@@ -31,6 +31,11 @@ struct ViewState
     bool valid = false;
 };
 
+struct HeadingPosition {
+    int page = 0;
+    qreal yOffset = 0; // page-local, points from top of content area
+};
+
 class DocumentView : public QGraphicsView
 {
     Q_OBJECT
@@ -65,6 +70,7 @@ public:
     // Navigation
     void goToPage(int page);
     void scrollToPosition(int page, qreal yOffset);
+    void setHeadingPositions(const QList<HeadingPosition> &positions);
     void previousPage();
     void nextPage();
     int currentPage() const { return m_currentPage; }
@@ -116,6 +122,7 @@ Q_SIGNALS:
     void viewModeChanged(ViewMode mode);
     void statusHintChanged(const QString &hint);  // A7: hover hints
     void codeBlockLanguageChanged();
+    void currentHeadingChanged(int index);
 
 protected:
     void wheelEvent(QWheelEvent *event) override;
@@ -201,6 +208,8 @@ private:
     QList<Layout::CodeBlockRegion> m_codeBlockRegions;
     QHash<QString, QString> m_codeBlockLanguageOverrides; // trimmed code -> language
     bool m_wordSelection = false; // set by double-click, cleared by mouse press
+    QList<HeadingPosition> m_headingPositions;
+    int m_currentHeading = -1;
 
     static constexpr qreal kPageGap = 12.0;
     static constexpr qreal kSceneMargin = 40.0;

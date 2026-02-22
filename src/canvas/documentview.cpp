@@ -661,6 +661,12 @@ void DocumentView::scrollToPosition(int page, qreal yOffset)
     Q_EMIT currentPageChanged(page);
 }
 
+void DocumentView::setHeadingPositions(const QList<HeadingPosition> &positions)
+{
+    m_headingPositions = positions;
+    m_currentHeading = -1;
+}
+
 void DocumentView::previousPage()
 {
     if (m_currentPage > 0)
