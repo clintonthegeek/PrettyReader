@@ -233,6 +233,8 @@ private:
     int m_currentHeading = -1;
 
     static constexpr qreal kPageGap = 12.0;
+
+public:
     static constexpr qreal kSceneMargin = 40.0;
 };
 

@@ -3,12 +3,14 @@
 
 #include <KXmlGuiWindow>
 
+class QAction;
 class QCloseEvent;
 class QLabel;
 class QSlider;
 class QSplitter;
 class QSpinBox;
 class QTabWidget;
+class KActionMenu;
 class KRecentFilesAction;
 class FileBrowserDock;
 class FontManager;
@@ -54,6 +56,7 @@ private slots:
     void onToggleSourceMode();
     void showPreferences();
     void onSettingsChanged();
+    void onRenderModeChanged();
 
 private:
     void setupActions();
@@ -91,6 +94,11 @@ private:
     // PDF rendering pipeline (Phase 4)
     FontManager *m_fontManager = nullptr;
     TextShaper *m_textShaper = nullptr;
+
+    // Render mode (Print vs Web)
+    QAction *m_webViewAction = nullptr;
+    QAction *m_printViewAction = nullptr;
+    KActionMenu *m_pageArrangementMenu = nullptr;
 };
 
 #endif // PRETTYREADER_MAINWINDOW_H

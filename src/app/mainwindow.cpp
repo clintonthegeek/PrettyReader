@@ -348,6 +348,34 @@ void MainWindow::setupActions()
     fitPage->setIcon(QIcon::fromTheme(QStringLiteral("zoom-fit-page")));
     connect(fitPage, &QAction::triggered, this, &MainWindow::onFitPage);
 
+    // View > Render Mode (Print vs Web)
+    auto *renderModeGroup = new QActionGroup(this);
+    renderModeGroup->setExclusive(true);
+
+    m_printViewAction = ac->addAction(QStringLiteral("view_print_mode"));
+    m_printViewAction->setText(i18n("&Print View"));
+    m_printViewAction->setIcon(QIcon::fromTheme(QStringLiteral("document-print-preview")));
+    m_printViewAction->setCheckable(true);
+    m_printViewAction->setChecked(!PrettyReaderSettings::self()->useWebView());
+    m_printViewAction->setActionGroup(renderModeGroup);
+    connect(m_printViewAction, &QAction::triggered, this, [this]() {
+        PrettyReaderSettings::self()->setUseWebView(false);
+        PrettyReaderSettings::self()->save();
+        onRenderModeChanged();
+    });
+
+    m_webViewAction = ac->addAction(QStringLiteral("view_web_mode"));
+    m_webViewAction->setText(i18n("&Web View"));
+    m_webViewAction->setIcon(QIcon::fromTheme(QStringLiteral("text-html")));
+    m_webViewAction->setCheckable(true);
+    m_webViewAction->setChecked(PrettyReaderSettings::self()->useWebView());
+    m_webViewAction->setActionGroup(renderModeGroup);
+    connect(m_webViewAction, &QAction::triggered, this, [this]() {
+        PrettyReaderSettings::self()->setUseWebView(true);
+        PrettyReaderSettings::self()->save();
+        onRenderModeChanged();
+    });
+
     // View > Mode (exclusive action group)
     auto *viewModeGroup = new QActionGroup(this);
     viewModeGroup->setExclusive(true);
@@ -418,6 +446,7 @@ void MainWindow::setupActions()
         QIcon::fromTheme(QStringLiteral("view-list-details")),
         i18n("Page &Arrangement"), this);
     ac->addAction(QStringLiteral("view_page_arrangement"), arrangementMenu);
+    m_pageArrangementMenu = arrangementMenu;
     arrangementMenu->addAction(continuous);
     arrangementMenu->addAction(singlePage);
     arrangementMenu->addAction(facingPages);
@@ -959,6 +988,21 @@ void MainWindow::onSettingsChanged()
     rebuildCurrentDocument();
 }
 
+void MainWindow::onRenderModeChanged()
+{
+    bool webMode = PrettyReaderSettings::self()->useWebView();
+
+    // Enable/disable page arrangement (not meaningful in web mode)
+    if (m_pageArrangementMenu)
+        m_pageArrangementMenu->setEnabled(!webMode);
+
+    auto *view = currentDocumentView();
+    if (view)
+        view->setRenderMode(webMode ? DocumentView::WebMode : DocumentView::PrintMode);
+
+    rebuildCurrentDocument();
+}
+
 void MainWindow::saveSession()
 {
     KConfigGroup group(KSharedConfig::openConfig(),
@@ -1056,7 +1100,7 @@ void MainWindow::rebuildCurrentDocument()
     QFileInfo fi(filePath);
 
     if (PrettyReaderSettings::self()->usePdfRenderer()) {
-        // --- New PDF rendering pipeline ---
+        // --- New rendering pipeline (shared content building) ---
         ContentBuilder contentBuilder;
         contentBuilder.setBasePath(fi.absolutePath());
         contentBuilder.setStyleManager(styleManager);
@@ -1075,41 +1119,31 @@ void MainWindow::rebuildCurrentDocument()
         Layout::Engine layoutEngine(m_fontManager, m_textShaper);
         layoutEngine.setHyphenateJustifiedText(
             PrettyReaderSettings::self()->hyphenateJustifiedText());
-        Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
 
-        PdfGenerator pdfGen(m_fontManager);
-        pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
-        QByteArray pdf = pdfGen.generate(layoutResult, pl, fi.baseName());
+        if (PrettyReaderSettings::self()->useWebView()) {
+            // --- Web view pipeline ---
+            qreal availWidth = view->viewport()->width() - 2 * DocumentView::kSceneMargin;
+            qreal zoomFactor = view->zoomPercent() / 100.0;
+            if (zoomFactor > 0)
+                availWidth /= zoomFactor;
+            if (availWidth < 200)
+                availWidth = 200;
 
-        // Clear legacy document if switching pipelines
-        QTextDocument *oldDoc = view->document();
-        if (oldDoc) {
-            view->setDocument(nullptr);
-            delete oldDoc;
-        }
+            Layout::ContinuousLayoutResult webResult =
+                layoutEngine.layoutContinuous(contentDoc, availWidth);
 
-        view->setPdfData(pdf);
-        view->setSourceData(contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
-                            layoutResult.codeBlockRegions);
-        view->restoreViewState(state);
-        view->setDocumentInfo(fi.fileName(), fi.baseName());
-
-        // Build TOC directly from content model + source map
-        m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
-
-        // Pass heading positions to view for scroll-sync
-        {
+            // Build heading positions (absolute y from source map)
             QList<HeadingPosition> headingPositions;
             for (const auto &block : contentDoc.blocks) {
                 const auto *heading = std::get_if<Content::Heading>(&block);
                 if (!heading || heading->level < 1 || heading->level > 6)
                     continue;
                 HeadingPosition hp;
+                hp.page = 0;
                 if (heading->source.startLine > 0) {
-                    for (const auto &entry : layoutResult.sourceMap) {
+                    for (const auto &entry : webResult.sourceMap) {
                         if (entry.startLine == heading->source.startLine
                             && entry.endLine == heading->source.endLine) {
-                            hp.page = entry.pageNumber;
                             hp.yOffset = entry.rect.top();
                             break;
                         }
@@ -1117,10 +1151,75 @@ void MainWindow::rebuildCurrentDocument()
                 }
                 headingPositions.append(hp);
             }
+
+            // TOC from content model
+            m_tocWidget->buildFromContentModel(contentDoc, webResult.sourceMap);
+
+            view->setWebFontManager(m_fontManager);
+            view->setWebContent(std::move(webResult));
+            view->setRenderMode(DocumentView::WebMode);
+            view->restoreViewState(state);
+            view->setDocumentInfo(fi.fileName(), fi.baseName());
+
             view->setHeadingPositions(headingPositions);
             connect(view, &DocumentView::currentHeadingChanged,
                     m_tocWidget, &TocWidget::highlightHeading,
                     Qt::UniqueConnection);
+
+            // Wire debounced relayout
+            connect(view, &DocumentView::webRelayoutRequested,
+                    this, &MainWindow::rebuildCurrentDocument,
+                    Qt::UniqueConnection);
+        } else {
+            // --- PDF rendering pipeline ---
+            Layout::LayoutResult layoutResult = layoutEngine.layout(contentDoc, pl);
+
+            PdfGenerator pdfGen(m_fontManager);
+            pdfGen.setMaxJustifyGap(PrettyReaderSettings::self()->maxJustifyGap());
+            QByteArray pdf = pdfGen.generate(layoutResult, pl, fi.baseName());
+
+            // Clear legacy document if switching pipelines
+            QTextDocument *oldDoc = view->document();
+            if (oldDoc) {
+                view->setDocument(nullptr);
+                delete oldDoc;
+            }
+
+            view->setPdfData(pdf);
+            view->setSourceData(contentBuilder.processedMarkdown(), layoutResult.sourceMap, contentDoc,
+                                layoutResult.codeBlockRegions);
+            view->setRenderMode(DocumentView::PrintMode);
+            view->restoreViewState(state);
+            view->setDocumentInfo(fi.fileName(), fi.baseName());
+
+            // Build TOC directly from content model + source map
+            m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+
+            // Pass heading positions to view for scroll-sync
+            {
+                QList<HeadingPosition> headingPositions;
+                for (const auto &block : contentDoc.blocks) {
+                    const auto *heading = std::get_if<Content::Heading>(&block);
+                    if (!heading || heading->level < 1 || heading->level > 6)
+                        continue;
+                    HeadingPosition hp;
+                    if (heading->source.startLine > 0) {
+                        for (const auto &entry : layoutResult.sourceMap) {
+                            if (entry.startLine == heading->source.startLine
+                                && entry.endLine == heading->source.endLine) {
+                                hp.page = entry.pageNumber;
+                                hp.yOffset = entry.rect.top();
+                                break;
+                            }
+                        }
+                    }
+                    headingPositions.append(hp);
+                }
+                view->setHeadingPositions(headingPositions);
+                connect(view, &DocumentView::currentHeadingChanged,
+                        m_tocWidget, &TocWidget::highlightHeading,
+                        Qt::UniqueConnection);
+            }
         }
     } else {
         // --- Legacy QTextDocument pipeline ---
