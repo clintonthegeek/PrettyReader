@@ -754,12 +754,10 @@ void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
     m_scene->addItem(m_webViewItem);
 
     m_webViewItem->setLayoutResult(std::move(result));
-    m_webViewItem->setPos(kSceneMargin, kSceneMargin);
+    m_webViewItem->setPos(0, 0);
 
-    // Lock scene width to viewport so hand-drag can't scroll horizontally
-    qreal viewW = viewport()->width();
-    qreal sceneW = qMax(viewW, m_webViewItem->boundingRect().width() + kSceneMargin * 2);
-    qreal sceneH = m_webViewItem->boundingRect().height() + kSceneMargin * 2;
+    qreal sceneW = m_webViewItem->boundingRect().width();
+    qreal sceneH = m_webViewItem->boundingRect().height();
     m_scene->setSceneRect(0, 0, sceneW, sceneH);
 
     setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -768,7 +766,7 @@ void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
     // Restore scroll position to the current heading after relayout
     if (m_currentHeading >= 0 && m_currentHeading < m_headingPositions.size()) {
         qreal headingY = m_headingPositions[m_currentHeading].yOffset;
-        qreal sceneY = headingY + kSceneMargin;
+        qreal sceneY = headingY;
         centerOn(0, sceneY);
     }
 }
@@ -797,6 +795,9 @@ void DocumentView::resizeEvent(QResizeEvent *event)
 
 void DocumentView::scrollContentsBy(int dx, int dy)
 {
+    // Web mode: suppress horizontal scrolling entirely, like a browser
+    if (m_renderMode == WebMode)
+        dx = 0;
     QGraphicsView::scrollContentsBy(dx, dy);
     updateCurrentPage();
 }
@@ -1744,8 +1745,8 @@ void DocumentView::updateCurrentPage()
         qreal headingSceneY = 0;
         bool found = false;
         if (m_renderMode == WebMode && m_webViewItem) {
-            // Web mode: heading yOffset is absolute, add scene margin
-            headingSceneY = hp.yOffset + kSceneMargin;
+            // Web mode: heading yOffset is absolute within the item
+            headingSceneY = hp.yOffset;
             found = true;
         } else {
             for (auto *item : m_pdfPageItems) {
