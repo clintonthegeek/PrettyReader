@@ -128,6 +128,10 @@ add_library(PrettyReaderCore STATIC
     widgets/pdfexportdialog.h
     widgets/documenttab.cpp
     widgets/documenttab.h
+    widgets/palettepickerwidget.cpp
+    widgets/palettepickerwidget.h
+    widgets/fontpairingpickerwidget.cpp
+    widgets/fontpairingpickerwidget.h
 )
 
 target_include_directories(PrettyReaderCore
