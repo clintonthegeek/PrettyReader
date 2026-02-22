@@ -3,7 +3,7 @@
  *
  * Maps semantic color roles (text, headings, backgrounds, borders)
  * to QColor values.  Used as one of the two independent axes of the
- * theme system (the other being FontPairing).
+ * theme system (the other being TypographyTheme).
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */

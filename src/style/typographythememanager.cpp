@@ -1,10 +1,10 @@
 /*
- * fontpairingmanager.cpp — Discovery/loading/saving for font pairings
+ * typographythememanager.cpp — Discovery/loading/saving for typography themes
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "fontpairingmanager.h"
+#include "typographythememanager.h"
 
 #include <QDir>
 #include <QFile>
@@ -14,26 +14,26 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 
-FontPairingManager::FontPairingManager(QObject *parent)
+TypographyThemeManager::TypographyThemeManager(QObject *parent)
     : QObject(parent)
 {
-    discoverPairings();
+    discoverThemes();
 }
 
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
 
-static QString userPairingsDir()
+static QString userThemesDir()
 {
     return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-           + QLatin1String("/pairings");
+           + QLatin1String("/typography");
 }
 
-void FontPairingManager::discoverPairings()
+void TypographyThemeManager::discoverThemes()
 {
-    // Built-in pairings bundled as Qt resources
-    QDir resourceDir(QStringLiteral(":/pairings"));
+    // Built-in themes bundled as Qt resources
+    QDir resourceDir(QStringLiteral(":/typography"));
     const QStringList entries = resourceDir.entryList(
         {QStringLiteral("*.json")}, QDir::Files);
 
@@ -48,7 +48,8 @@ void FontPairingManager::discoverPairings()
             continue;
 
         QJsonObject root = doc.object();
-        if (root.value(QLatin1String("type")).toString() != QLatin1String("fontPairing"))
+        if (root.value(QLatin1String("type")).toString()
+            != QLatin1String("typographyTheme"))
             continue;
 
         QString id = root.value(QLatin1String("id")).toString();
@@ -56,11 +57,11 @@ void FontPairingManager::discoverPairings()
             id = QFileInfo(entry).completeBaseName();
         QString name = root.value(QLatin1String("name")).toString(id);
 
-        m_pairings.append({id, name, path, true});
+        m_themes.append({id, name, path, true});
     }
 
-    // User pairings from XDG data directory
-    QDir dir(userPairingsDir());
+    // User themes from XDG data directory
+    QDir dir(userThemesDir());
     if (dir.exists()) {
         const QStringList userEntries = dir.entryList(
             {QStringLiteral("*.json")}, QDir::Files);
@@ -75,7 +76,8 @@ void FontPairingManager::discoverPairings()
                 continue;
 
             QJsonObject root = doc.object();
-            if (root.value(QLatin1String("type")).toString() != QLatin1String("fontPairing"))
+            if (root.value(QLatin1String("type")).toString()
+                != QLatin1String("typographyTheme"))
                 continue;
 
             QString id = root.value(QLatin1String("id")).toString();
@@ -84,14 +86,14 @@ void FontPairingManager::discoverPairings()
 
             // Skip if a built-in already owns this ID
             bool alreadyKnown = false;
-            for (const auto &existing : m_pairings) {
+            for (const auto &existing : m_themes) {
                 if (existing.id == id) { alreadyKnown = true; break; }
             }
             if (alreadyKnown)
                 continue;
 
             QString name = root.value(QLatin1String("name")).toString(id);
-            m_pairings.append({id, name, path, false});
+            m_themes.append({id, name, path, false});
         }
     }
 }
@@ -100,28 +102,28 @@ void FontPairingManager::discoverPairings()
 // Accessors
 // ---------------------------------------------------------------------------
 
-QStringList FontPairingManager::availablePairings() const
+QStringList TypographyThemeManager::availableThemes() const
 {
     QStringList ids;
-    for (const auto &p : m_pairings)
-        ids.append(p.id);
+    for (const auto &t : m_themes)
+        ids.append(t.id);
     return ids;
 }
 
-QString FontPairingManager::pairingName(const QString &id) const
+QString TypographyThemeManager::themeName(const QString &id) const
 {
-    for (const auto &p : m_pairings) {
-        if (p.id == id)
-            return p.name;
+    for (const auto &t : m_themes) {
+        if (t.id == id)
+            return t.name;
     }
     return id;
 }
 
-FontPairing FontPairingManager::pairing(const QString &id) const
+TypographyTheme TypographyThemeManager::theme(const QString &id) const
 {
-    for (const auto &p : m_pairings) {
-        if (p.id == id) {
-            QFile file(p.path);
+    for (const auto &t : m_themes) {
+        if (t.id == id) {
+            QFile file(t.path);
             if (!file.open(QIODevice::ReadOnly))
                 return {};
 
@@ -129,17 +131,17 @@ FontPairing FontPairingManager::pairing(const QString &id) const
             if (doc.isNull())
                 return {};
 
-            return FontPairing::fromJson(doc.object());
+            return TypographyTheme::fromJson(doc.object());
         }
     }
     return {};
 }
 
-bool FontPairingManager::isBuiltin(const QString &id) const
+bool TypographyThemeManager::isBuiltin(const QString &id) const
 {
-    for (const auto &p : m_pairings) {
-        if (p.id == id)
-            return p.builtin;
+    for (const auto &t : m_themes) {
+        if (t.id == id)
+            return t.builtin;
     }
     return false;
 }
@@ -148,18 +150,18 @@ bool FontPairingManager::isBuiltin(const QString &id) const
 // Save / Delete
 // ---------------------------------------------------------------------------
 
-QString FontPairingManager::savePairing(const FontPairing &pairing)
+QString TypographyThemeManager::saveTheme(const TypographyTheme &theme)
 {
-    QString dir = userPairingsDir();
+    QString dir = userThemesDir();
     QDir().mkpath(dir);
 
-    QString id = pairing.id;
+    QString id = theme.id;
     if (id.isEmpty()) {
-        QString base = pairing.name.toLower().replace(
+        QString base = theme.name.toLower().replace(
             QRegularExpression(QStringLiteral("[^a-z0-9]+")),
             QStringLiteral("-"));
         if (base.isEmpty())
-            base = QStringLiteral("pairing");
+            base = QStringLiteral("theme");
         id = base;
         // Ensure filename uniqueness
         QString path = dir + QLatin1Char('/') + id + QLatin1String(".json");
@@ -170,11 +172,11 @@ QString FontPairingManager::savePairing(const FontPairing &pairing)
         }
     }
 
-    // Check if we are overwriting an existing user pairing
+    // Check if we are overwriting an existing user theme
     bool found = false;
-    for (auto &p : m_pairings) {
-        if (p.id == id) {
-            if (p.builtin)
+    for (auto &t : m_themes) {
+        if (t.id == id) {
+            if (t.builtin)
                 return {}; // cannot overwrite built-in
             found = true;
             break;
@@ -183,8 +185,7 @@ QString FontPairingManager::savePairing(const FontPairing &pairing)
 
     QString path = dir + QLatin1Char('/') + id + QLatin1String(".json");
 
-    // Build JSON via the value class serialization
-    FontPairing toSave = pairing;
+    TypographyTheme toSave = theme;
     toSave.id = id;
     QJsonDocument doc(toSave.toJson());
 
@@ -196,33 +197,33 @@ QString FontPairingManager::savePairing(const FontPairing &pairing)
     file.close();
 
     if (!found) {
-        m_pairings.append({id, toSave.name, path, false});
+        m_themes.append({id, toSave.name, path, false});
     } else {
-        for (auto &p : m_pairings) {
-            if (p.id == id) {
-                p.name = toSave.name;
-                p.path = path;
+        for (auto &t : m_themes) {
+            if (t.id == id) {
+                t.name = toSave.name;
+                t.path = path;
                 break;
             }
         }
     }
 
-    Q_EMIT pairingsChanged();
+    Q_EMIT themesChanged();
     return id;
 }
 
-bool FontPairingManager::deletePairing(const QString &id)
+bool TypographyThemeManager::deleteTheme(const QString &id)
 {
-    for (int i = 0; i < m_pairings.size(); ++i) {
-        if (m_pairings[i].id == id) {
-            if (m_pairings[i].builtin)
-                return false; // cannot delete built-in
+    for (int i = 0; i < m_themes.size(); ++i) {
+        if (m_themes[i].id == id) {
+            if (m_themes[i].builtin)
+                return false;
 
-            if (!QFile::remove(m_pairings[i].path))
-                qWarning("FontPairingManager: failed to remove %s",
-                         qPrintable(m_pairings[i].path));
-            m_pairings.removeAt(i);
-            Q_EMIT pairingsChanged();
+            if (!QFile::remove(m_themes[i].path))
+                qWarning("TypographyThemeManager: failed to remove %s",
+                         qPrintable(m_themes[i].path));
+            m_themes.removeAt(i);
+            Q_EMIT themesChanged();
             return true;
         }
     }

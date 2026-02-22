@@ -5,11 +5,9 @@
 
 #include <QWidget>
 
-class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QSpinBox;
-class KColorButton;
 
 class TableStylePropertiesEditor : public QWidget
 {
@@ -32,7 +30,6 @@ private:
 
     struct BorderRow {
         QDoubleSpinBox *widthSpin = nullptr;
-        KColorButton *colorBtn = nullptr;
         QComboBox *styleCombo = nullptr;
     };
     BorderRow createBorderRow(const QString &label, QWidget *parent);
@@ -41,17 +38,6 @@ private:
     BorderRow m_outerBorder;
     BorderRow m_innerBorder;
     BorderRow m_headerBottomBorder;
-
-    // Colors
-    QCheckBox *m_headerBgCheck = nullptr;
-    KColorButton *m_headerBgBtn = nullptr;
-    QCheckBox *m_headerFgCheck = nullptr;
-    KColorButton *m_headerFgBtn = nullptr;
-    QCheckBox *m_bodyBgCheck = nullptr;
-    KColorButton *m_bodyBgBtn = nullptr;
-    QCheckBox *m_altRowCheck = nullptr;
-    KColorButton *m_altRowBtn = nullptr;
-    QSpinBox *m_altFreqSpin = nullptr;
 
     // Cell padding
     QDoubleSpinBox *m_padTopSpin = nullptr;

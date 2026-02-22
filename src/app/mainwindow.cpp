@@ -27,7 +27,9 @@
 #include "stylemanager.h"
 #include "styledockwidget.h"
 #include "themepickerdock.h"
-#include "fontpairingmanager.h"
+#include "typographytheme.h"
+#include "typographythememanager.h"
+#include "colorpalette.h"
 #include "palettemanager.h"
 #include "themecomposer.h"
 #include "thememanager.h"
@@ -111,7 +113,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_themeManager = new ThemeManager(this);
     m_paletteManager = new PaletteManager(this);
-    m_pairingManager = new FontPairingManager(this);
+    m_typographyThemeManager = new TypographyThemeManager(this);
     m_themeComposer = new ThemeComposer(m_themeManager, this);
     m_metadataStore = new MetadataStore(this);
 
@@ -203,10 +205,21 @@ MainWindow::MainWindow(QWidget *parent)
     setMinimumSize(800, 600);
     resize(1200, 800);
 
-    // Load the first theme so the style tree is populated on startup
-    QStringList themes = m_themeManager->availableThemes();
-    if (!themes.isEmpty()) {
-        onThemeChanged(themes.first());
+    // Load default typography theme + color palette so the style tree is populated
+    {
+        QStringList typoThemes = m_typographyThemeManager->availableThemes();
+        if (!typoThemes.isEmpty()) {
+            TypographyTheme theme = m_typographyThemeManager->theme(
+                typoThemes.contains(QStringLiteral("default")) ? QStringLiteral("default") : typoThemes.first());
+            m_themeComposer->setTypographyTheme(theme);
+        }
+        QStringList palettes = m_paletteManager->availablePalettes();
+        if (!palettes.isEmpty()) {
+            ColorPalette palette = m_paletteManager->palette(
+                palettes.contains(QStringLiteral("default-light")) ? QStringLiteral("default-light") : palettes.first());
+            m_themeComposer->setColorPalette(palette);
+        }
+        onCompositionApplied();
     }
 
     restoreSession();
@@ -284,7 +297,7 @@ void MainWindow::setupSidebars()
 
     // 1. Theme Picker (first panel)
     m_themePickerDock = new ThemePickerDock(
-        m_themeManager, m_paletteManager, m_pairingManager, m_themeComposer, this);
+        m_themeManager, m_paletteManager, m_typographyThemeManager, m_themeComposer, this);
     auto *themeView = new ToolView(i18n("Theme"), m_themePickerDock);
     m_themePickerTabId = m_rightSidebar->addPanel(
         themeView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Theme"));
@@ -310,8 +323,6 @@ void MainWindow::setupSidebars()
     });
 
     // Wire signals
-    connect(m_themePickerDock, &ThemePickerDock::themeChanged,
-            this, &MainWindow::onThemeChanged);
     connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
             this, &MainWindow::onCompositionApplied);
     connect(m_styleDockWidget, &StyleDockWidget::styleOverrideChanged,
@@ -702,9 +713,7 @@ void MainWindow::onFileExportPdf()
             styleManager = editingSm->clone(this);
         } else {
             styleManager = new StyleManager(this);
-            QString themeId = m_themePickerDock->currentThemeId();
-            if (!m_themeManager->loadTheme(themeId, styleManager))
-                m_themeManager->loadDefaults(styleManager);
+            m_themeComposer->compose(styleManager);
         }
 
         QFileInfo fi(filePath);
@@ -923,43 +932,26 @@ void MainWindow::onFileClose()
     }
 }
 
-void MainWindow::onThemeChanged(const QString &themeId)
-{
-    // Load theme into a new StyleManager and hand it to the dock
-    auto *sm = new StyleManager(this);
-    if (!m_themeManager->loadTheme(themeId, sm))
-        m_themeManager->loadDefaults(sm);
-    m_styleDockWidget->populateFromStyleManager(sm);
-    delete sm;
-
-    // Sync pickers to match the loaded theme
-    m_themePickerDock->syncPickersFromComposer();
-
-    // Re-apply page layout from theme (updates widget + view + background)
-    PageLayout pl = m_themeManager->themePageLayout();
-    m_pageLayoutWidget->setPageLayout(pl);
-    auto *view = currentDocumentView();
-    if (view)
-        view->setPageLayout(pl);
-
-    rebuildCurrentDocument();
-}
-
 void MainWindow::onCompositionApplied()
 {
     // ThemePickerDock already called compose() on the editing styles
     m_styleDockWidget->refreshTreeModel();
 
+    // Pick up page layout from theme manager (applyStyleOverrides may have set it)
+    PageLayout pl = m_themeManager->themePageLayout();
+    // If the theme didn't specify a page layout, start from the current one
+    if (pl.pageSizeId == QPageSize::A4 && pl.margins.isNull())
+        pl = m_pageLayoutWidget->currentPageLayout();
+
     // Update page background from palette
     QColor pageBg = m_themeComposer->currentPalette().pageBackground();
-    if (pageBg.isValid()) {
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+    if (pageBg.isValid())
         pl.pageBackground = pageBg;
-        m_pageLayoutWidget->setPageLayout(pl);
-        auto *view = currentDocumentView();
-        if (view)
-            view->setPageLayout(pl);
-    }
+
+    m_pageLayoutWidget->setPageLayout(pl);
+    auto *view = currentDocumentView();
+    if (view)
+        view->setPageLayout(pl);
 
     rebuildCurrentDocument();
 }
@@ -1054,7 +1046,7 @@ void MainWindow::showPreferences()
     if (KConfigDialog::showDialog(QStringLiteral("settings")))
         return;
 
-    auto *dialog = new PrettyReaderConfigDialog(this, m_themeManager);
+    auto *dialog = new PrettyReaderConfigDialog(this);
     connect(dialog, &KConfigDialog::settingsChanged,
             this, &MainWindow::onSettingsChanged);
     dialog->show();
@@ -1117,6 +1109,11 @@ void MainWindow::saveSession()
     }
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
+
+    // Save current typography theme + color scheme
+    group.writeEntry("TypographyTheme", m_themePickerDock->currentTypographyThemeId());
+    group.writeEntry("ColorScheme", m_themePickerDock->currentColorSchemeId());
+
     group.sync();
 }
 
@@ -1159,6 +1156,28 @@ void MainWindow::restoreSession()
             splitterSizes[2] = 250;
         m_splitter->setSizes(splitterSizes);
     }
+
+    // Restore typography theme + color scheme
+    QString typoId = group.readEntry("TypographyTheme", QStringLiteral("default"));
+    QString colorId = group.readEntry("ColorScheme", QStringLiteral("default-light"));
+
+    bool changed = false;
+    TypographyTheme theme = m_typographyThemeManager->theme(typoId);
+    if (!theme.id.isEmpty()) {
+        m_themeComposer->setTypographyTheme(theme);
+        changed = true;
+    }
+
+    ColorPalette palette = m_paletteManager->palette(colorId);
+    if (!palette.id.isEmpty()) {
+        m_themeComposer->setColorPalette(palette);
+        changed = true;
+    }
+
+    m_themePickerDock->syncPickersFromComposer();
+
+    if (changed)
+        onCompositionApplied();
 }
 
 void MainWindow::rebuildCurrentDocument()
@@ -1190,9 +1209,7 @@ void MainWindow::rebuildCurrentDocument()
         styleManager = editingSm->clone(this);
     } else {
         styleManager = new StyleManager(this);
-        QString themeId = m_themePickerDock->currentThemeId();
-        if (!m_themeManager->loadTheme(themeId, styleManager))
-            m_themeManager->loadDefaults(styleManager);
+        m_themeComposer->compose(styleManager);
     }
 
     auto *view = tab->documentView();
@@ -1244,6 +1261,7 @@ void MainWindow::rebuildCurrentDocument()
                     continue;
                 HeadingPosition hp;
                 hp.page = 0;
+                hp.sourceLine = heading->source.startLine;
                 if (heading->source.startLine > 0) {
                     for (const auto &entry : webResult.sourceMap) {
                         if (entry.startLine == heading->source.startLine
@@ -1308,6 +1326,7 @@ void MainWindow::rebuildCurrentDocument()
                     if (!heading || heading->level < 1 || heading->level > 6)
                         continue;
                     HeadingPosition hp;
+                    hp.sourceLine = heading->source.startLine;
                     if (heading->source.startLine > 0) {
                         for (const auto &entry : layoutResult.sourceMap) {
                             if (entry.startLine == heading->source.startLine
@@ -1387,9 +1406,7 @@ void MainWindow::openFile(const QUrl &url)
         styleManager = editingSm->clone(this);
     } else {
         styleManager = new StyleManager(this);
-        QString themeId = m_themePickerDock->currentThemeId();
-        if (!m_themeManager->loadTheme(themeId, styleManager))
-            m_themeManager->loadDefaults(styleManager);
+        m_themeComposer->compose(styleManager);
     }
 
     auto *tab = new DocumentTab(this);
@@ -1458,6 +1475,7 @@ void MainWindow::openFile(const QUrl &url)
                 if (!heading || heading->level < 1 || heading->level > 6)
                     continue;
                 HeadingPosition hp;
+                hp.sourceLine = heading->source.startLine;
                 if (heading->source.startLine > 0) {
                     for (const auto &entry : layoutResult.sourceMap) {
                         if (entry.startLine == heading->source.startLine

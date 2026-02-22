@@ -1,14 +1,14 @@
 /*
- * fontpairingeditordialog.h — Editor dialog for font pairings
+ * typographythemeeditordialog.h — Editor dialog for typography themes
  *
- * Allows creating/editing a FontPairing with TTF/OTF family and
+ * Allows creating/editing a TypographyTheme with TTF/OTF family and
  * Hershey fallback selection for Body, Heading, and Mono roles.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#ifndef PRETTYREADER_FONTPAIRINGEDITORDIALOG_H
-#define PRETTYREADER_FONTPAIRINGEDITORDIALOG_H
+#ifndef PRETTYREADER_TYPOGRAPHYTHEMEEDITORDIALOG_H
+#define PRETTYREADER_TYPOGRAPHYTHEMEEDITORDIALOG_H
 
 #include <QDialog>
 
@@ -17,17 +17,17 @@ class QDialogButtonBox;
 class QFontComboBox;
 class QLabel;
 class QLineEdit;
-struct FontPairing;
+class TypographyTheme;
 
-class FontPairingEditorDialog : public QDialog
+class TypographyThemeEditorDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit FontPairingEditorDialog(QWidget *parent = nullptr);
+    explicit TypographyThemeEditorDialog(QWidget *parent = nullptr);
 
-    void setFontPairing(const FontPairing &fp);
-    FontPairing fontPairing() const;
+    void setTypographyTheme(const TypographyTheme &theme);
+    TypographyTheme typographyTheme() const;
 
 private:
     void buildUI();
@@ -53,4 +53,4 @@ private:
     QDialogButtonBox *m_buttonBox = nullptr;
 };
 
-#endif // PRETTYREADER_FONTPAIRINGEDITORDIALOG_H
+#endif // PRETTYREADER_TYPOGRAPHYTHEMEEDITORDIALOG_H

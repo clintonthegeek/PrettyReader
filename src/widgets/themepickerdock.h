@@ -4,15 +4,13 @@
 #include <QWidget>
 #include <functional>
 
-class QComboBox;
-class QPushButton;
-class FontPairingManager;
-class FontPairingPickerWidget;
 class PaletteManager;
 class PalettePickerWidget;
 class StyleManager;
 class ThemeComposer;
 class ThemeManager;
+class TypographyThemeManager;
+class TypographyThemePickerWidget;
 struct PageLayout;
 
 class ThemePickerDock : public QWidget
@@ -22,34 +20,31 @@ class ThemePickerDock : public QWidget
 public:
     explicit ThemePickerDock(ThemeManager *themeManager,
                              PaletteManager *paletteManager,
-                             FontPairingManager *pairingManager,
+                             TypographyThemeManager *typographyThemeManager,
                              ThemeComposer *themeComposer,
                              QWidget *parent = nullptr);
-
-    QString currentThemeId() const;
-    void setCurrentThemeId(const QString &id);
-
-    // Called after a theme loads to sync picker highlights from composer state
-    void syncPickersFromComposer();
 
     // Provider callbacks for data this dock doesn't own
     void setStyleManagerProvider(std::function<StyleManager *()> provider);
     void setPageLayoutProvider(std::function<PageLayout()> provider);
 
-signals:
-    void themeChanged(const QString &themeId);
-    void compositionApplied(); // palette or pairing changed, compose() done
+    // Sync picker highlights from composer state
+    void syncPickersFromComposer();
 
-private slots:
-    void onThemeComboChanged(int index);
+    // Current selections (for save/restore)
+    QString currentTypographyThemeId() const;
+    QString currentColorSchemeId() const;
+    void setCurrentTypographyThemeId(const QString &id);
+    void setCurrentColorSchemeId(const QString &id);
+
+Q_SIGNALS:
+    void compositionApplied(); // typography or palette changed, compose() done
+
+private Q_SLOTS:
+    void onTypographyThemeSelected(const QString &id);
     void onPaletteSelected(const QString &id);
-    void onPairingSelected(const QString &id);
     void onCreatePalette();
-    void onCreatePairing();
-    void onNewTheme();
-    void onSaveTheme();
-    void onDeleteTheme();
-    void onThemesChanged();
+    void onCreateTypographyTheme();
 
 private:
     void buildUI();
@@ -57,20 +52,14 @@ private:
 
     ThemeManager *m_themeManager;
     PaletteManager *m_paletteManager;
-    FontPairingManager *m_pairingManager;
+    TypographyThemeManager *m_typographyThemeManager;
     ThemeComposer *m_themeComposer;
     std::function<StyleManager *()> m_styleManagerProvider;
     std::function<PageLayout()> m_pageLayoutProvider;
 
-    // Theme section
-    QComboBox *m_themeCombo = nullptr;
-    QPushButton *m_newBtn = nullptr;
-    QPushButton *m_saveBtn = nullptr;
-    QPushButton *m_deleteBtn = nullptr;
-
-    // Palette & font pairing pickers
+    // Pickers
+    TypographyThemePickerWidget *m_typographyPicker = nullptr;
     PalettePickerWidget *m_palettePicker = nullptr;
-    FontPairingPickerWidget *m_pairingPicker = nullptr;
 };
 
 #endif // PRETTYREADER_THEMEPICKERDOCK_H

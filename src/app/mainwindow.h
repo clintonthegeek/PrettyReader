@@ -14,7 +14,7 @@ class KActionMenu;
 class KRecentFilesAction;
 class FileBrowserDock;
 class FontManager;
-class FontPairingManager;
+class TypographyThemeManager;
 class MetadataStore;
 class PageLayoutWidget;
 class PaletteManager;
@@ -50,7 +50,7 @@ private slots:
     void onFileExportRtf();
     void onFilePrint();
     void onFileClose();
-    void onThemeChanged(const QString &themeId);
+    // onThemeChanged removed — composition is handled by onCompositionApplied()
     void onCompositionApplied();
     void onStyleOverrideChanged();
     void onPageLayoutChanged();
@@ -92,7 +92,7 @@ private:
     KRecentFilesAction *m_recentFilesAction = nullptr;
     ThemeManager *m_themeManager = nullptr;
     PaletteManager *m_paletteManager = nullptr;
-    FontPairingManager *m_pairingManager = nullptr;
+    TypographyThemeManager *m_typographyThemeManager = nullptr;
     ThemeComposer *m_themeComposer = nullptr;
     MetadataStore *m_metadataStore = nullptr;
     Hyphenator *m_hyphenator = nullptr;

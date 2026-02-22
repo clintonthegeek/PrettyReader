@@ -1,5 +1,5 @@
 /*
- * themecomposer.cpp — Compose ColorPalette + FontPairing into a StyleManager
+ * themecomposer.cpp — Compose ColorPalette + TypographyTheme into a StyleManager
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -25,12 +25,17 @@ void ThemeComposer::setColorPalette(const ColorPalette &palette)
     }
 }
 
-void ThemeComposer::setFontPairing(const FontPairing &pairing)
+void ThemeComposer::setTypographyTheme(const TypographyTheme &theme)
 {
-    if (!(m_pairing == pairing)) {
-        m_pairing = pairing;
+    if (!(m_typographyTheme == theme)) {
+        m_typographyTheme = theme;
         Q_EMIT compositionChanged();
     }
+}
+
+QString ThemeComposer::hersheyFamilyFor(const QString &ttfFamily) const
+{
+    return m_typographyTheme.hersheyFamilyFor(ttfFamily);
 }
 
 void ThemeComposer::compose(StyleManager *target)
@@ -41,42 +46,58 @@ void ThemeComposer::compose(StyleManager *target)
     // 1. Load hardcoded defaults to establish the style hierarchy
     m_themeManager->loadDefaults(target);
 
-    // 2. Apply font pairing (font families)
-    applyFontPairing(target);
+    // 2. Apply typography theme (fonts + style overrides)
+    applyTypographyTheme(target);
 
-    // 3. Apply color palette (foreground/background colors)
+    // 3. Apply color palette (foreground/background colors) — always last
     applyColorPalette(target);
 
     // 4. Ensure parent hierarchy is intact after all modifications
     m_themeManager->assignDefaultParents(target);
 }
 
-void ThemeComposer::applyFontPairing(StyleManager *target)
+void ThemeComposer::applyTypographyTheme(StyleManager *target)
 {
-    // Body font → Default Paragraph Style + Default Character Style
-    if (!m_pairing.body.family.isEmpty()) {
+    // First, apply the font families from the typography theme
+    if (!m_typographyTheme.body.family.isEmpty()) {
         ParagraphStyle *dps = target->paragraphStyle(QStringLiteral("Default Paragraph Style"));
         if (dps)
-            dps->setFontFamily(m_pairing.body.family);
+            dps->setFontFamily(m_typographyTheme.body.family);
 
         CharacterStyle *dcs = target->characterStyle(QStringLiteral("Default Character Style"));
         if (dcs)
-            dcs->setFontFamily(m_pairing.body.family);
+            dcs->setFontFamily(m_typographyTheme.body.family);
     }
 
-    // Heading font → Heading paragraph style
-    if (!m_pairing.heading.family.isEmpty()) {
+    if (!m_typographyTheme.heading.family.isEmpty()) {
         ParagraphStyle *heading = target->paragraphStyle(QStringLiteral("Heading"));
         if (heading)
-            heading->setFontFamily(m_pairing.heading.family);
+            heading->setFontFamily(m_typographyTheme.heading.family);
     }
 
-    // Mono font → Code character style
-    if (!m_pairing.mono.family.isEmpty()) {
+    if (!m_typographyTheme.mono.family.isEmpty()) {
         CharacterStyle *code = target->characterStyle(QStringLiteral("Code"));
         if (code)
-            code->setFontFamily(m_pairing.mono.family);
+            code->setFontFamily(m_typographyTheme.mono.family);
     }
+
+    // Then, apply the style override blocks via ThemeManager
+    // Build a root JSON object matching what applyStyleOverrides() expects
+    QJsonObject root;
+    if (!m_typographyTheme.paragraphStyles.isEmpty())
+        root[QStringLiteral("paragraphStyles")] = m_typographyTheme.paragraphStyles;
+    if (!m_typographyTheme.characterStyles.isEmpty())
+        root[QStringLiteral("characterStyles")] = m_typographyTheme.characterStyles;
+    if (!m_typographyTheme.tableStyles.isEmpty())
+        root[QStringLiteral("tableStyles")] = m_typographyTheme.tableStyles;
+    if (!m_typographyTheme.footnoteStyle.isEmpty())
+        root[QStringLiteral("footnoteStyle")] = m_typographyTheme.footnoteStyle;
+    if (!m_typographyTheme.masterPages.isEmpty())
+        root[QStringLiteral("masterPages")] = m_typographyTheme.masterPages;
+    if (!m_typographyTheme.pageLayout.isEmpty())
+        root[QStringLiteral("pageLayout")] = m_typographyTheme.pageLayout;
+
+    m_themeManager->applyStyleOverrides(root, target);
 }
 
 void ThemeComposer::applyColorPalette(StyleManager *target)

@@ -6,113 +6,22 @@
 #include "footnotestyle.h"
 #include "fontfeatures.h"
 #include "masterpage.h"
-#include "colorpalette.h"
-#include "fontpairing.h"
-#include "palettemanager.h"
-#include "fontpairingmanager.h"
-#include "themecomposer.h"
 
 #include <QColor>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QFont>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QMarginsF>
 #include <QPageSize>
-#include <QRegularExpression>
-#include <QStandardPaths>
-#include <QUuid>
 
 ThemeManager::ThemeManager(QObject *parent)
     : QObject(parent)
 {
-    registerBuiltinThemes();
 }
 
-void ThemeManager::registerBuiltinThemes()
-{
-    // Built-in themes bundled as Qt resources
-    QDir resourceDir(QStringLiteral(":/themes"));
-    const QStringList entries = resourceDir.entryList(
-        {QStringLiteral("*.json")}, QDir::Files);
-
-    for (const QString &entry : entries) {
-        QString path = resourceDir.filePath(entry);
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-            continue;
-
-        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-        if (doc.isNull())
-            continue;
-
-        QJsonObject root = doc.object();
-        QString id = QFileInfo(entry).completeBaseName();
-        QString name = root.value(QLatin1String("name")).toString(id);
-
-        m_themes.append({id, name, path});
-    }
-
-    // User themes from XDG data directory
-    QString userDir = QStandardPaths::writableLocation(
-        QStandardPaths::AppDataLocation) + QLatin1String("/themes");
-    QDir dir(userDir);
-    if (dir.exists()) {
-        const QStringList userEntries = dir.entryList(
-            {QStringLiteral("*.json")}, QDir::Files);
-        for (const QString &entry : userEntries) {
-            QString path = dir.filePath(entry);
-            QFile file(path);
-            if (!file.open(QIODevice::ReadOnly))
-                continue;
-            QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-            if (doc.isNull())
-                continue;
-            QJsonObject root = doc.object();
-            QString id = QFileInfo(entry).completeBaseName();
-            QString name = root.value(QLatin1String("name")).toString(id);
-            m_themes.append({id, name, path});
-        }
-    }
-}
-
-QStringList ThemeManager::availableThemes() const
-{
-    QStringList ids;
-    for (const auto &t : m_themes)
-        ids.append(t.id);
-    return ids;
-}
-
-QString ThemeManager::themeName(const QString &themeId) const
-{
-    for (const auto &t : m_themes) {
-        if (t.id == themeId)
-            return t.name;
-    }
-    return themeId;
-}
-
-bool ThemeManager::isBuiltinTheme(const QString &themeId) const
-{
-    for (const auto &t : m_themes) {
-        if (t.id == themeId)
-            return t.path.startsWith(QLatin1String(":/"));
-    }
-    return false;
-}
-
-bool ThemeManager::loadTheme(const QString &themeId, StyleManager *sm)
-{
-    for (const auto &t : m_themes) {
-        if (t.id == themeId)
-            return loadThemeFromJson(t.path, sm);
-    }
-    return false;
-}
+// ---------------------------------------------------------------------------
+// Helper parsers
+// ---------------------------------------------------------------------------
 
 static QFont::Weight parseWeight(const QString &w)
 {
@@ -133,86 +42,9 @@ static Qt::Alignment parseAlignment(const QString &a)
     return Qt::AlignLeft;
 }
 
-bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return false;
-
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (doc.isNull())
-        return false;
-
-    QJsonObject root = doc.object();
-
-    // Apply paragraph, character, and table styles + page layout + footnote
-    applyStyleOverrides(root, sm);
-
-    // Assign default parents to styles that don't have one
-    assignDefaultParents(sm);
-
-    return true;
-}
-
-bool ThemeManager::loadPreset(const QString &path,
-                              PaletteManager *paletteMgr,
-                              FontPairingManager *pairingMgr,
-                              StyleManager *sm)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly))
-        return false;
-
-    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-    if (doc.isNull())
-        return false;
-
-    QJsonObject root = doc.object();
-
-    // Verify this is a preset file
-    QString type = root.value(QLatin1String("type")).toString();
-    if (type != QLatin1String("themePreset"))
-        return false;
-
-    // Load palette and pairing by ID
-    QString paletteId = root.value(QLatin1String("paletteId")).toString();
-    QString pairingId = root.value(QLatin1String("pairingId")).toString();
-
-    ColorPalette palette;
-    if (paletteMgr && !paletteId.isEmpty())
-        palette = paletteMgr->palette(paletteId);
-
-    FontPairing pairing;
-    if (pairingMgr && !pairingId.isEmpty())
-        pairing = pairingMgr->pairing(pairingId);
-
-    // Compose palette + pairing into the StyleManager
-    ThemeComposer composer(this);
-    composer.setColorPalette(palette);
-    composer.setFontPairing(pairing);
-    composer.compose(sm);
-
-    // Apply style overrides on top (from "styleOverrides" section)
-    if (root.contains(QLatin1String("styleOverrides"))) {
-        QJsonObject overrides = root.value(QLatin1String("styleOverrides")).toObject();
-        applyStyleOverrides(overrides, sm);
-    }
-
-    // Apply page layout, master pages, and footnote style from root level
-    applyStyleOverrides(root, sm);
-
-    // Apply palette's pageBackground AFTER root-level overrides, because
-    // applyStyleOverrides() resets m_themePageLayout when a pageLayout key
-    // is present and the preset's pageLayout may not specify pageBackground.
-    QColor pageBg = palette.pageBackground();
-    if (pageBg.isValid())
-        m_themePageLayout.pageBackground = pageBg;
-
-    // Ensure hierarchy after overrides
-    assignDefaultParents(sm);
-
-    return true;
-}
+// ---------------------------------------------------------------------------
+// applyStyleOverrides — parse a JSON root into a StyleManager
+// ---------------------------------------------------------------------------
 
 void ThemeManager::applyStyleOverrides(const QJsonObject &root, StyleManager *sm)
 {
@@ -221,7 +53,6 @@ void ThemeManager::applyStyleOverrides(const QJsonObject &root, StyleManager *sm
     for (auto it = paraStyles.begin(); it != paraStyles.end(); ++it) {
         QJsonObject props = it.value().toObject();
 
-        // If this style already exists, get it and modify; otherwise create new
         ParagraphStyle *existing = sm->paragraphStyle(it.key());
         ParagraphStyle style = existing ? *existing : ParagraphStyle(it.key());
 
@@ -496,16 +327,20 @@ void ThemeManager::applyStyleOverrides(const QJsonObject &root, StyleManager *sm
     }
 }
 
+// ---------------------------------------------------------------------------
+// assignDefaultParents — ensure style hierarchy is intact
+// ---------------------------------------------------------------------------
+
 void ThemeManager::assignDefaultParents(StyleManager *sm)
 {
     // Default paragraph hierarchy:
     //   Default Paragraph Style
-    //   ├── Body Text
-    //   │   ├── Block Quotation, List Item, Table Cell
-    //   ├── Heading
-    //   │   ├── Heading 1-6
-    //   ├── Code Block
-    //   └── Table Header
+    //   +-- Body Text
+    //   |   +-- Block Quotation, List Item, Table Cell
+    //   +-- Heading
+    //   |   +-- Heading 1-6
+    //   +-- Code Block
+    //   +-- Table Header
 
     // Ensure abstract parent styles exist
     if (!sm->paragraphStyle(QStringLiteral("Default Paragraph Style"))) {
@@ -558,7 +393,6 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
         QString styleName = QString::fromLatin1(def.styleName);
         ParagraphStyle *s = sm->paragraphStyle(styleName);
         if (!s) {
-            // Create stub paragraph style
             ParagraphStyle stub(styleName);
             stub.setParentStyleName(QString::fromLatin1(def.parentName));
             sm->addParagraphStyle(stub);
@@ -574,15 +408,14 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
 
     // Default character hierarchy:
     //   Default Character Style
-    //   ├── Emphasis, Strong, StrongEmphasis, Strikethrough, Subscript, Superscript
-    //   ├── Code
-    //   │   └── InlineCode
-    //   ├── Link
-    //   ├── Emoji, MathInline
+    //   +-- Emphasis, Strong, StrongEmphasis, Strikethrough, Subscript, Superscript
+    //   +-- Code
+    //   |   +-- InlineCode
+    //   +-- Link
+    //   +-- Emoji, MathInline
 
     if (!sm->characterStyle(QStringLiteral("Default Character Style"))) {
         CharacterStyle dcs(QStringLiteral("Default Character Style"));
-        // Copy from DefaultText if it exists
         CharacterStyle *dt = sm->characterStyle(QStringLiteral("DefaultText"));
         if (dt) {
             if (dt->hasFontFamily()) dcs.setFontFamily(dt->fontFamily());
@@ -596,7 +429,6 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
         sm->addCharacterStyle(dcs);
     }
 
-    // Ensure "Code" character style exists (shared monospace base)
     if (!sm->characterStyle(QStringLiteral("Code"))) {
         CharacterStyle code(QStringLiteral("Code"));
         code.setParentStyleName(QStringLiteral("Default Character Style"));
@@ -624,7 +456,6 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
         QString styleName = QString::fromLatin1(def.styleName);
         CharacterStyle *s = sm->characterStyle(styleName);
         if (!s) {
-            // Create stub character style
             CharacterStyle stub(styleName);
             stub.setParentStyleName(QString::fromLatin1(def.parentName));
             sm->addCharacterStyle(stub);
@@ -634,13 +465,15 @@ void ThemeManager::assignDefaultParents(StyleManager *sm)
     }
 }
 
+// ---------------------------------------------------------------------------
+// resolveAllStyles — flatten style hierarchy for rendering
+// ---------------------------------------------------------------------------
+
 void ThemeManager::resolveAllStyles(StyleManager *sm)
 {
-    // Resolve all paragraph styles through their parent chain
     QStringList paraNames = sm->paragraphStyleNames();
     for (const QString &name : paraNames) {
         ParagraphStyle resolved = sm->resolvedParagraphStyle(name);
-        // Preserve the original parent name and heading level
         ParagraphStyle *orig = sm->paragraphStyle(name);
         if (orig) {
             resolved.setParentStyleName(orig->parentStyleName());
@@ -650,7 +483,6 @@ void ThemeManager::resolveAllStyles(StyleManager *sm)
         sm->addParagraphStyle(resolved);
     }
 
-    // Resolve all character styles through their parent chain
     QStringList charNames = sm->characterStyleNames();
     for (const QString &name : charNames) {
         CharacterStyle resolved = sm->resolvedCharacterStyle(name);
@@ -662,10 +494,12 @@ void ThemeManager::resolveAllStyles(StyleManager *sm)
     }
 }
 
+// ---------------------------------------------------------------------------
+// loadDefaults — hardcoded style hierarchy
+// ---------------------------------------------------------------------------
+
 void ThemeManager::loadDefaults(StyleManager *sm)
 {
-    // Hardcoded defaults if no theme file is available
-
     // Abstract parent styles
     ParagraphStyle dps(QStringLiteral("Default Paragraph Style"));
     dps.setFontFamily(QStringLiteral("Noto Serif"));
@@ -748,545 +582,4 @@ void ThemeManager::loadDefaults(StyleManager *sm)
     link.setForeground(QColor(0x03, 0x66, 0xd6));
     link.setFontUnderline(true);
     sm->addCharacterStyle(link);
-
-}
-
-// --- Theme management (M22) ---
-
-static QString userThemesDir()
-{
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-           + QLatin1String("/themes");
-}
-
-QString ThemeManager::saveTheme(const QString &name, StyleManager *sm, const PageLayout &layout)
-{
-    QString dir = userThemesDir();
-    QDir().mkpath(dir);
-
-    // Generate a unique ID
-    QString id = name.toLower().replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")),
-                                        QStringLiteral("-"));
-    if (id.isEmpty())
-        id = QStringLiteral("theme");
-
-    // Ensure uniqueness
-    QString path = dir + QLatin1Char('/') + id + QLatin1String(".json");
-    int suffix = 1;
-    while (QFile::exists(path)) {
-        id = name.toLower().replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")),
-                                    QStringLiteral("-"))
-             + QStringLiteral("-") + QString::number(suffix++);
-        path = dir + QLatin1Char('/') + id + QLatin1String(".json");
-    }
-
-    QJsonDocument doc = serializeTheme(name, sm, layout);
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly))
-        return {};
-
-    file.write(doc.toJson(QJsonDocument::Indented));
-    file.close();
-
-    m_themes.append({id, name, path});
-    Q_EMIT themesChanged();
-    return id;
-}
-
-bool ThemeManager::saveThemeAs(const QString &themeId, StyleManager *sm, const PageLayout &layout)
-{
-    // Find existing theme
-    for (auto &t : m_themes) {
-        if (t.id == themeId) {
-            if (t.path.startsWith(QLatin1String(":/")))
-                return false; // cannot overwrite built-in
-
-            QJsonDocument doc = serializeTheme(t.name, sm, layout);
-            QFile file(t.path);
-            if (!file.open(QIODevice::WriteOnly))
-                return false;
-            file.write(doc.toJson(QJsonDocument::Indented));
-            file.close();
-
-            Q_EMIT themesChanged();
-            return true;
-        }
-    }
-    return false;
-}
-
-bool ThemeManager::deleteTheme(const QString &themeId)
-{
-    for (int i = 0; i < m_themes.size(); ++i) {
-        if (m_themes[i].id == themeId) {
-            if (m_themes[i].path.startsWith(QLatin1String(":/")))
-                return false; // cannot delete built-in
-
-            QFile::remove(m_themes[i].path);
-            m_themes.removeAt(i);
-            Q_EMIT themesChanged();
-            return true;
-        }
-    }
-    return false;
-}
-
-bool ThemeManager::renameTheme(const QString &themeId, const QString &newName)
-{
-    for (auto &t : m_themes) {
-        if (t.id == themeId) {
-            if (t.path.startsWith(QLatin1String(":/")))
-                return false;
-
-            // Read, modify name, rewrite
-            QFile file(t.path);
-            if (!file.open(QIODevice::ReadOnly))
-                return false;
-            QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-            file.close();
-
-            QJsonObject root = doc.object();
-            root[QLatin1String("name")] = newName;
-            doc.setObject(root);
-
-            if (!file.open(QIODevice::WriteOnly))
-                return false;
-            file.write(doc.toJson(QJsonDocument::Indented));
-            file.close();
-
-            t.name = newName;
-            Q_EMIT themesChanged();
-            return true;
-        }
-    }
-    return false;
-}
-
-// --- Serialization ---
-
-static QString weightToString(QFont::Weight w)
-{
-    if (w == QFont::Bold)
-        return QStringLiteral("bold");
-    if (w == QFont::Normal)
-        return {};
-    return QString::number(static_cast<int>(w));
-}
-
-static QString alignmentToString(Qt::Alignment a)
-{
-    if (a == Qt::AlignCenter || a == Qt::AlignHCenter)
-        return QStringLiteral("center");
-    if (a == Qt::AlignRight)
-        return QStringLiteral("right");
-    if (a == Qt::AlignJustify)
-        return QStringLiteral("justify");
-    return QStringLiteral("left");
-}
-
-QJsonObject ThemeManager::serializeParagraphStyle(const ParagraphStyle &style)
-{
-    QJsonObject obj;
-    if (!style.parentStyleName().isEmpty())
-        obj[QLatin1String("parent")] = style.parentStyleName();
-    if (style.hasFontFamily())
-        obj[QLatin1String("fontFamily")] = style.fontFamily();
-    if (style.hasFontSize())
-        obj[QLatin1String("fontSize")] = style.fontSize();
-    if (style.hasFontWeight()) {
-        QString ws = weightToString(style.fontWeight());
-        if (!ws.isEmpty())
-            obj[QLatin1String("fontWeight")] = ws;
-    }
-    if (style.hasFontItalic())
-        obj[QLatin1String("fontItalic")] = style.fontItalic();
-    if (style.hasForeground())
-        obj[QLatin1String("foreground")] = style.foreground().name();
-    if (style.hasBackground())
-        obj[QLatin1String("background")] = style.background().name();
-    if (style.hasAlignment())
-        obj[QLatin1String("alignment")] = alignmentToString(style.alignment());
-    if (style.hasSpaceBefore())
-        obj[QLatin1String("spaceBefore")] = style.spaceBefore();
-    if (style.hasSpaceAfter())
-        obj[QLatin1String("spaceAfter")] = style.spaceAfter();
-    if (style.hasLineHeight())
-        obj[QLatin1String("lineHeightPercent")] = style.lineHeightPercent();
-    if (style.hasFirstLineIndent())
-        obj[QLatin1String("firstLineIndent")] = style.firstLineIndent();
-    if (style.hasWordSpacing())
-        obj[QLatin1String("wordSpacing")] = style.wordSpacing();
-    if (style.hasLeftMargin())
-        obj[QLatin1String("leftMargin")] = style.leftMargin();
-    if (style.hasRightMargin())
-        obj[QLatin1String("rightMargin")] = style.rightMargin();
-    if (style.hasFontFeatures()) {
-        QStringList features = FontFeatures::toStringList(style.fontFeatures());
-        QJsonArray arr;
-        for (const QString &f : features)
-            arr.append(f);
-        obj[QLatin1String("fontFeatures")] = arr;
-    }
-    if (style.hasBaseCharacterStyle())
-        obj[QLatin1String("baseCharacterStyle")] = style.baseCharacterStyleName();
-    return obj;
-}
-
-QJsonObject ThemeManager::serializeCharacterStyle(const CharacterStyle &style)
-{
-    QJsonObject obj;
-    if (!style.parentStyleName().isEmpty())
-        obj[QLatin1String("parent")] = style.parentStyleName();
-    if (style.hasFontFamily())
-        obj[QLatin1String("fontFamily")] = style.fontFamily();
-    if (style.hasFontSize())
-        obj[QLatin1String("fontSize")] = style.fontSize();
-    if (style.hasFontWeight()) {
-        QString ws = weightToString(style.fontWeight());
-        if (!ws.isEmpty())
-            obj[QLatin1String("fontWeight")] = ws;
-    }
-    if (style.hasFontItalic())
-        obj[QLatin1String("fontItalic")] = style.fontItalic();
-    if (style.hasFontUnderline())
-        obj[QLatin1String("underline")] = style.fontUnderline();
-    if (style.hasFontStrikeOut())
-        obj[QLatin1String("strikeOut")] = style.fontStrikeOut();
-    if (style.hasForeground())
-        obj[QLatin1String("foreground")] = style.foreground().name();
-    if (style.hasBackground())
-        obj[QLatin1String("background")] = style.background().name();
-    if (style.hasLetterSpacing())
-        obj[QLatin1String("letterSpacing")] = style.letterSpacing();
-    if (style.hasFontFeatures()) {
-        QStringList features = FontFeatures::toStringList(style.fontFeatures());
-        QJsonArray arr;
-        for (const QString &f : features)
-            arr.append(f);
-        obj[QLatin1String("fontFeatures")] = arr;
-    }
-    return obj;
-}
-
-QJsonObject ThemeManager::serializeTableStyle(const TableStyle &style)
-{
-    QJsonObject obj;
-    obj[QLatin1String("borderCollapse")] = style.borderCollapse();
-
-    QJsonObject padding;
-    padding[QLatin1String("top")]    = style.cellPadding().top();
-    padding[QLatin1String("bottom")] = style.cellPadding().bottom();
-    padding[QLatin1String("left")]   = style.cellPadding().left();
-    padding[QLatin1String("right")]  = style.cellPadding().right();
-    obj[QLatin1String("cellPadding")] = padding;
-
-    if (style.hasHeaderBackground())
-        obj[QLatin1String("headerBackground")] = style.headerBackground().name();
-    if (style.hasHeaderForeground())
-        obj[QLatin1String("headerForeground")] = style.headerForeground().name();
-    if (style.hasBodyBackground())
-        obj[QLatin1String("bodyBackground")] = style.bodyBackground().name();
-    if (style.hasAlternateRowColor())
-        obj[QLatin1String("alternateRowColor")] = style.alternateRowColor().name();
-    if (style.alternateFrequency() != 1)
-        obj[QLatin1String("alternateFrequency")] = style.alternateFrequency();
-
-    auto serializeBorder = [](const TableStyle::Border &b) {
-        QJsonObject bObj;
-        bObj[QLatin1String("width")] = b.width;
-        bObj[QLatin1String("color")] = b.color.name();
-        return bObj;
-    };
-
-    obj[QLatin1String("outerBorder")] = serializeBorder(style.outerBorder());
-    obj[QLatin1String("innerBorder")] = serializeBorder(style.innerBorder());
-    obj[QLatin1String("headerBottomBorder")] = serializeBorder(style.headerBottomBorder());
-
-    if (!style.headerParagraphStyle().isEmpty())
-        obj[QLatin1String("headerParagraphStyle")] = style.headerParagraphStyle();
-    if (!style.bodyParagraphStyle().isEmpty())
-        obj[QLatin1String("bodyParagraphStyle")] = style.bodyParagraphStyle();
-
-    return obj;
-}
-
-QJsonObject ThemeManager::serializeMasterPage(const MasterPage &mp)
-{
-    QJsonObject obj;
-
-    if (mp.headerEnabled >= 0)
-        obj[QLatin1String("headerEnabled")] = (mp.headerEnabled != 0);
-    if (mp.footerEnabled >= 0)
-        obj[QLatin1String("footerEnabled")] = (mp.footerEnabled != 0);
-    if (mp.hasHeaderLeft)
-        obj[QLatin1String("headerLeft")] = mp.headerLeft;
-    if (mp.hasHeaderCenter)
-        obj[QLatin1String("headerCenter")] = mp.headerCenter;
-    if (mp.hasHeaderRight)
-        obj[QLatin1String("headerRight")] = mp.headerRight;
-    if (mp.hasFooterLeft)
-        obj[QLatin1String("footerLeft")] = mp.footerLeft;
-    if (mp.hasFooterCenter)
-        obj[QLatin1String("footerCenter")] = mp.footerCenter;
-    if (mp.hasFooterRight)
-        obj[QLatin1String("footerRight")] = mp.footerRight;
-
-    if (mp.marginTop >= 0 || mp.marginBottom >= 0
-        || mp.marginLeft >= 0 || mp.marginRight >= 0) {
-        QJsonObject m;
-        if (mp.marginTop >= 0)    m[QLatin1String("top")]    = mp.marginTop;
-        if (mp.marginBottom >= 0) m[QLatin1String("bottom")] = mp.marginBottom;
-        if (mp.marginLeft >= 0)   m[QLatin1String("left")]   = mp.marginLeft;
-        if (mp.marginRight >= 0)  m[QLatin1String("right")]  = mp.marginRight;
-        obj[QLatin1String("margins")] = m;
-    }
-
-    return obj;
-}
-
-QJsonObject ThemeManager::serializePageLayout(const PageLayout &layout)
-{
-    QJsonObject obj;
-
-    // Page size
-    switch (layout.pageSizeId) {
-    case QPageSize::Letter: obj[QLatin1String("pageSize")] = QStringLiteral("Letter"); break;
-    case QPageSize::A5:     obj[QLatin1String("pageSize")] = QStringLiteral("A5");     break;
-    case QPageSize::Legal:  obj[QLatin1String("pageSize")] = QStringLiteral("Legal");  break;
-    case QPageSize::B5:     obj[QLatin1String("pageSize")] = QStringLiteral("B5");     break;
-    default:                obj[QLatin1String("pageSize")] = QStringLiteral("A4");     break;
-    }
-
-    obj[QLatin1String("orientation")] = (layout.orientation == QPageLayout::Landscape)
-        ? QStringLiteral("landscape") : QStringLiteral("portrait");
-
-    QJsonObject margins;
-    margins[QLatin1String("left")]   = layout.margins.left();
-    margins[QLatin1String("top")]    = layout.margins.top();
-    margins[QLatin1String("right")]  = layout.margins.right();
-    margins[QLatin1String("bottom")] = layout.margins.bottom();
-    obj[QLatin1String("margins")] = margins;
-
-    // Header config
-    QJsonObject header;
-    header[QLatin1String("enabled")] = layout.headerEnabled;
-    header[QLatin1String("left")]    = layout.headerLeft;
-    header[QLatin1String("center")]  = layout.headerCenter;
-    header[QLatin1String("right")]   = layout.headerRight;
-    obj[QLatin1String("header")] = header;
-
-    // Footer config
-    QJsonObject footer;
-    footer[QLatin1String("enabled")] = layout.footerEnabled;
-    footer[QLatin1String("left")]    = layout.footerLeft;
-    footer[QLatin1String("center")]  = layout.footerCenter;
-    footer[QLatin1String("right")]   = layout.footerRight;
-    obj[QLatin1String("footer")] = footer;
-
-    if (layout.pageBackground != Qt::white)
-        obj[QLatin1String("pageBackground")] = layout.pageBackground.name();
-
-    return obj;
-}
-
-QJsonObject ThemeManager::serializeFootnoteStyle(const FootnoteStyle &style)
-{
-    QJsonObject obj;
-
-    auto formatStr = [](FootnoteStyle::NumberFormat f) -> QString {
-        switch (f) {
-        case FootnoteStyle::RomanLower: return QStringLiteral("roman_lower");
-        case FootnoteStyle::RomanUpper: return QStringLiteral("roman_upper");
-        case FootnoteStyle::AlphaLower: return QStringLiteral("alpha_lower");
-        case FootnoteStyle::AlphaUpper: return QStringLiteral("alpha_upper");
-        case FootnoteStyle::Asterisk:   return QStringLiteral("asterisk");
-        default:                         return QStringLiteral("arabic");
-        }
-    };
-
-    obj[QLatin1String("format")] = formatStr(style.format);
-    obj[QLatin1String("startNumber")] = style.startNumber;
-    obj[QLatin1String("restart")] = (style.restart == FootnoteStyle::PerPage)
-        ? QStringLiteral("per_page") : QStringLiteral("per_document");
-    if (!style.prefix.isEmpty())
-        obj[QLatin1String("prefix")] = style.prefix;
-    if (!style.suffix.isEmpty())
-        obj[QLatin1String("suffix")] = style.suffix;
-    obj[QLatin1String("superscriptRef")] = style.superscriptRef;
-    obj[QLatin1String("superscriptNote")] = style.superscriptNote;
-    obj[QLatin1String("asEndnotes")] = style.asEndnotes;
-    obj[QLatin1String("showSeparator")] = style.showSeparator;
-    obj[QLatin1String("separatorWidth")] = style.separatorWidth;
-    obj[QLatin1String("separatorLength")] = style.separatorLength;
-
-    return obj;
-}
-
-QJsonDocument ThemeManager::serializeTheme(const QString &name, StyleManager *sm,
-                                            const PageLayout &layout)
-{
-    QJsonObject root;
-    root[QLatin1String("name")] = name;
-    root[QLatin1String("version")] = 1;
-
-    // Paragraph styles
-    QJsonObject paraObj;
-    const auto &paraStyles = sm->paragraphStyles();
-    for (auto it = paraStyles.begin(); it != paraStyles.end(); ++it) {
-        paraObj[it.key()] = serializeParagraphStyle(it.value());
-    }
-    root[QLatin1String("paragraphStyles")] = paraObj;
-
-    // Character styles
-    QJsonObject charObj;
-    const auto &charStyles = sm->characterStyles();
-    for (auto it = charStyles.begin(); it != charStyles.end(); ++it) {
-        charObj[it.key()] = serializeCharacterStyle(it.value());
-    }
-    root[QLatin1String("characterStyles")] = charObj;
-
-    // Table styles
-    QStringList tsNames = sm->tableStyleNames();
-    if (!tsNames.isEmpty()) {
-        QJsonObject tsObj;
-        for (const QString &name : tsNames) {
-            const TableStyle *ts = sm->tableStyle(name);
-            if (ts)
-                tsObj[name] = serializeTableStyle(*ts);
-        }
-        root[QLatin1String("tableStyles")] = tsObj;
-    }
-
-    // Page layout
-    root[QLatin1String("pageLayout")] = serializePageLayout(layout);
-
-    // Master pages
-    if (!layout.masterPages.isEmpty()) {
-        QJsonObject mpObj;
-        for (auto it = layout.masterPages.begin(); it != layout.masterPages.end(); ++it) {
-            if (!it.value().isDefault())
-                mpObj[it.key()] = serializeMasterPage(it.value());
-        }
-        if (!mpObj.isEmpty())
-            root[QLatin1String("masterPages")] = mpObj;
-    }
-
-    // Footnote style
-    root[QLatin1String("footnoteStyle")] = serializeFootnoteStyle(sm->footnoteStyle());
-
-    return QJsonDocument(root);
-}
-
-// --- Legacy extraction ---
-
-ColorPalette ThemeManager::extractPalette(const StyleManager *sm, const PageLayout &layout)
-{
-    ColorPalette palette;
-    palette.id   = QStringLiteral("extracted");
-    palette.name = QStringLiteral("Extracted from theme");
-
-    const auto &paraStyles = sm->paragraphStyles();
-    const auto &charStyles = sm->characterStyles();
-
-    // text ← Default Paragraph Style.foreground
-    {
-        auto it = paraStyles.find(QStringLiteral("Default Paragraph Style"));
-        if (it != paraStyles.end() && it->hasForeground())
-            palette.colors[QStringLiteral("text")] = it->foreground();
-    }
-
-    // headingText ← Heading.foreground
-    {
-        auto it = paraStyles.find(QStringLiteral("Heading"));
-        if (it != paraStyles.end() && it->hasForeground())
-            palette.colors[QStringLiteral("headingText")] = it->foreground();
-    }
-
-    // blockquoteText ← BlockQuote.foreground
-    {
-        auto it = paraStyles.find(QStringLiteral("BlockQuote"));
-        if (it != paraStyles.end() && it->hasForeground())
-            palette.colors[QStringLiteral("blockquoteText")] = it->foreground();
-    }
-
-    // surfaceCode ← CodeBlock.background
-    {
-        auto it = paraStyles.find(QStringLiteral("CodeBlock"));
-        if (it != paraStyles.end() && it->hasBackground())
-            palette.colors[QStringLiteral("surfaceCode")] = it->background();
-    }
-
-    // linkText ← Link.foreground
-    {
-        auto it = charStyles.find(QStringLiteral("Link"));
-        if (it != charStyles.end() && it->hasForeground())
-            palette.colors[QStringLiteral("linkText")] = it->foreground();
-    }
-
-    // codeText ← InlineCode.foreground, surfaceInlineCode ← InlineCode.background
-    {
-        auto it = charStyles.find(QStringLiteral("InlineCode"));
-        if (it != charStyles.end()) {
-            if (it->hasForeground())
-                palette.colors[QStringLiteral("codeText")] = it->foreground();
-            if (it->hasBackground())
-                palette.colors[QStringLiteral("surfaceInlineCode")] = it->background();
-        }
-    }
-
-    // Table style colors
-    {
-        const auto &tableStyles = sm->tableStyles();
-        auto it = tableStyles.find(QStringLiteral("Default"));
-        if (it != tableStyles.end()) {
-            if (it->hasHeaderBackground())
-                palette.colors[QStringLiteral("surfaceTableHeader")] = it->headerBackground();
-            if (it->hasAlternateRowColor())
-                palette.colors[QStringLiteral("surfaceTableAlt")] = it->alternateRowColor();
-            if (it->hasOuterBorder())
-                palette.colors[QStringLiteral("borderOuter")] = it->outerBorder().color;
-            if (it->hasInnerBorder())
-                palette.colors[QStringLiteral("borderInner")] = it->innerBorder().color;
-            if (it->hasHeaderBottomBorder())
-                palette.colors[QStringLiteral("borderHeaderBottom")] = it->headerBottomBorder().color;
-        }
-    }
-
-    // pageBackground ← PageLayout.pageBackground
-    palette.colors[QStringLiteral("pageBackground")] = layout.pageBackground;
-
-    return palette;
-}
-
-FontPairing ThemeManager::extractFontPairing(const StyleManager *sm)
-{
-    FontPairing pairing;
-    pairing.id   = QStringLiteral("extracted");
-    pairing.name = QStringLiteral("Extracted from theme");
-
-    const auto &paraStyles = sm->paragraphStyles();
-
-    // body ← Default Paragraph Style.fontFamily
-    {
-        auto it = paraStyles.find(QStringLiteral("Default Paragraph Style"));
-        if (it != paraStyles.end() && it->hasFontFamily())
-            pairing.body.family = it->fontFamily();
-    }
-
-    // heading ← Heading.fontFamily
-    {
-        auto it = paraStyles.find(QStringLiteral("Heading"));
-        if (it != paraStyles.end() && it->hasFontFamily())
-            pairing.heading.family = it->fontFamily();
-    }
-
-    // mono ← Code.fontFamily (character style)
-    {
-        const auto &charStyles = sm->characterStyles();
-        auto it = charStyles.find(QStringLiteral("Code"));
-        if (it != charStyles.end() && it->hasFontFamily())
-            pairing.mono.family = it->fontFamily();
-    }
-
-    return pairing;
 }

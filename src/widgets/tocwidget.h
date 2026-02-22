@@ -1,6 +1,7 @@
 #ifndef PRETTYREADER_TOCWIDGET_H
 #define PRETTYREADER_TOCWIDGET_H
 
+#include <QHash>
 #include <QWidget>
 
 #include "contentmodel.h"
@@ -21,7 +22,7 @@ public:
     void buildFromContentModel(const Content::Document &doc,
                                const QList<Layout::SourceMapEntry> &sourceMap);
     void clear();
-    void highlightHeading(int index);
+    void highlightHeading(int sourceLine);
 
 Q_SIGNALS:
     void headingClicked(int blockNumber);
@@ -32,7 +33,7 @@ private Q_SLOTS:
 
 private:
     QTreeWidget *m_treeWidget = nullptr;
-    QList<QTreeWidgetItem *> m_flatHeadingItems;
+    QHash<int, QTreeWidgetItem *> m_headingsByLine; // keyed by source startLine
 };
 
 #endif // PRETTYREADER_TOCWIDGET_H

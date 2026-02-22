@@ -48,8 +48,6 @@ add_library(PrettyReaderCore STATIC
     style/styletreemodel.h
     style/colorpalette.cpp
     style/colorpalette.h
-    style/fontpairing.cpp
-    style/fontpairing.h
     style/fontdegradationmap.cpp
     style/fontdegradationmap.h
     style/thememanager.cpp
@@ -58,8 +56,10 @@ add_library(PrettyReaderCore STATIC
     style/themecomposer.h
     style/palettemanager.cpp
     style/palettemanager.h
-    style/fontpairingmanager.cpp
-    style/fontpairingmanager.h
+    style/typographytheme.cpp
+    style/typographytheme.h
+    style/typographythememanager.cpp
+    style/typographythememanager.h
     typography/hyphenator.cpp
     typography/hyphenator.h
     typography/shortwords.cpp
@@ -130,12 +130,12 @@ add_library(PrettyReaderCore STATIC
     widgets/documenttab.h
     widgets/palettepickerwidget.cpp
     widgets/palettepickerwidget.h
-    widgets/fontpairingpickerwidget.cpp
-    widgets/fontpairingpickerwidget.h
     widgets/paletteeditordialog.cpp
     widgets/paletteeditordialog.h
-    widgets/fontpairingeditordialog.cpp
-    widgets/fontpairingeditordialog.h
+    widgets/typographythemepickerwidget.cpp
+    widgets/typographythemepickerwidget.h
+    widgets/typographythemeeditordialog.cpp
+    widgets/typographythemeeditordialog.h
     widgets/themepickerdock.cpp
     widgets/themepickerdock.h
 )
@@ -206,36 +206,26 @@ qt_add_resources(PrettyReaderCore "palettes"
         themes/palettes/github-light.json
 )
 
-# Bundle font pairing JSON files as Qt resources
-qt_add_resources(PrettyReaderCore "pairings"
-    PREFIX "/pairings"
-    BASE themes/pairings
+# Bundle typography theme JSON files as Qt resources
+qt_add_resources(PrettyReaderCore "typography"
+    PREFIX "/typography"
+    BASE themes/typography
     FILES
-        themes/pairings/noto-serif-sans-jetbrains.json
-        themes/pairings/noto-serif-source-code.json
-        themes/pairings/hershey-serif-sans-roman.json
-        themes/pairings/liberation-serif-sans-mono.json
-        themes/pairings/dejavu-family.json
-        themes/pairings/georgia-trebuchet-courier.json
-        themes/pairings/georgia-inter-jetbrains.json
-        themes/pairings/noto-source-family.json
-        themes/pairings/ubuntu-family.json
-        themes/pairings/fira-family.json
-        themes/pairings/typewriter.json
-        themes/pairings/sans-forward.json
-        themes/pairings/serif-scholar.json
-        themes/pairings/inverted-contrast.json
-        themes/pairings/libertine-biolinum-hack.json
-)
-
-# Bundle theme preset JSON files as Qt resources
-qt_add_resources(PrettyReaderCore "presets"
-    PREFIX "/presets"
-    BASE themes/presets
-    FILES
-        themes/presets/default.json
-        themes/presets/academic.json
-        themes/presets/hershey.json
+        themes/typography/default.json
+        themes/typography/academic.json
+        themes/typography/hershey.json
+        themes/typography/georgia-trebuchet-courier.json
+        themes/typography/georgia-inter-jetbrains.json
+        themes/typography/noto-source-family.json
+        themes/typography/ubuntu-family.json
+        themes/typography/fira-family.json
+        themes/typography/liberation-serif-sans-mono.json
+        themes/typography/dejavu-family.json
+        themes/typography/typewriter.json
+        themes/typography/sans-forward.json
+        themes/typography/serif-scholar.json
+        themes/typography/inverted-contrast.json
+        themes/typography/libertine-biolinum-hack.json
 )
 
 # Bundle hyphenation dictionaries as Qt resources

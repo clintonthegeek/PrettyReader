@@ -352,6 +352,13 @@ QByteArray PdfGenerator::renderPage(const Layout::Page &page,
     qreal pageWidth = pageSize.width();
     qreal pageHeight = pageSize.height();
 
+    // Page background fill (theme color)
+    if (pageLayout.pageBackground.isValid()
+        && pageLayout.pageBackground != Qt::white) {
+        stream += colorOperator(pageLayout.pageBackground, true);
+        stream += "0 0 " + pdfCoord(pageWidth) + " " + pdfCoord(pageHeight) + " re f\n";
+    }
+
     // Calculate content area
     qreal marginLeft = pageLayout.margins.left() * 72.0 / 25.4;
     qreal marginTop = pageLayout.margins.top() * 72.0 / 25.4;

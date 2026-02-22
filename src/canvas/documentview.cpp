@@ -52,6 +52,7 @@ DocumentView::DocumentView(QWidget *parent)
     connect(&m_relayoutTimer, &QTimer::timeout, this, [this]() {
         Q_EMIT webRelayoutRequested();
     });
+
 }
 
 DocumentView::~DocumentView()
@@ -550,15 +551,18 @@ void DocumentView::setPageLayout(const PageLayout &layout)
 void DocumentView::setZoomPercent(int percent)
 {
     percent = qBound(25, percent, 400);
+    if (percent == m_currentZoom)
+        return;
+
     qreal factor = percent / 100.0;
     resetTransform();
     scale(factor, factor);
     m_currentZoom = percent;
 
     if (m_renderMode == WebMode) {
-        // Web mode: scale immediately, debounced relayout at new effective width
-        m_relayoutTimer.start();
+        // Web mode: scale + immediate relayout (no debounce — zoom is discrete)
         Q_EMIT zoomChanged(percent);
+        Q_EMIT webRelayoutRequested();
         return;
     }
 
@@ -689,7 +693,7 @@ void DocumentView::scrollToPosition(int page, qreal yOffset)
 void DocumentView::setHeadingPositions(const QList<HeadingPosition> &positions)
 {
     m_headingPositions = positions;
-    m_currentHeading = -1;
+    m_currentHeadingLine = -1;
 }
 
 void DocumentView::previousPage()
@@ -764,10 +768,13 @@ void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     // Restore scroll position to the current heading after relayout
-    if (m_currentHeading >= 0 && m_currentHeading < m_headingPositions.size()) {
-        qreal headingY = m_headingPositions[m_currentHeading].yOffset;
-        qreal sceneY = headingY;
-        centerOn(0, sceneY);
+    if (m_currentHeadingLine > 0) {
+        for (const auto &hp : m_headingPositions) {
+            if (hp.sourceLine == m_currentHeadingLine) {
+                centerOn(0, hp.yOffset);
+                break;
+            }
+        }
     }
 }
 
@@ -788,7 +795,8 @@ void DocumentView::wheelEvent(QWheelEvent *event)
 void DocumentView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
-    if (m_renderMode == WebMode) {
+    if (m_renderMode == WebMode
+        && event->size().width() != event->oldSize().width()) {
         m_relayoutTimer.start();
     }
 }
@@ -896,10 +904,15 @@ void DocumentView::mouseReleaseEvent(QMouseEvent *event)
         m_middleZooming = false;
         setCursor(Qt::ArrowCursor);
 
-        // Now trigger crisp Poppler re-render at the final zoom level
-        qreal scaleFactor = m_currentZoom / 100.0;
-        for (auto *item : m_pdfPageItems)
-            item->setZoomFactor(scaleFactor);
+        if (m_renderMode == WebMode) {
+            // Web mode: reflow content at the final zoom level
+            Q_EMIT webRelayoutRequested();
+        } else {
+            // Print mode: crisp Poppler re-render at the final zoom level
+            qreal scaleFactor = m_currentZoom / 100.0;
+            for (auto *item : m_pdfPageItems)
+                item->setZoomFactor(scaleFactor);
+        }
 
         event->accept();
     } else if (event->button() == Qt::LeftButton && m_cursorMode == SelectionTool) {
@@ -1769,8 +1782,11 @@ void DocumentView::updateCurrentPage()
     if (bestHeading == -1 && !m_headingPositions.isEmpty())
         bestHeading = 0;
 
-    if (bestHeading != m_currentHeading) {
-        m_currentHeading = bestHeading;
-        Q_EMIT currentHeadingChanged(bestHeading);
+    int sourceLine = (bestHeading >= 0 && bestHeading < m_headingPositions.size())
+                         ? m_headingPositions[bestHeading].sourceLine
+                         : -1;
+    if (sourceLine != m_currentHeadingLine) {
+        m_currentHeadingLine = sourceLine;
+        Q_EMIT currentHeadingChanged(sourceLine);
     }
 }

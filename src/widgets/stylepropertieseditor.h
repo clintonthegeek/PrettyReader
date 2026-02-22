@@ -8,7 +8,6 @@
 #include <QWidget>
 
 class QCheckBox;
-class KColorButton;
 class QComboBox;
 class QDoubleSpinBox;
 class QFontComboBox;
@@ -68,9 +67,6 @@ private:
     // TODO: implement underline and strikethrough functionality
     QToolButton *m_underlineBtn = nullptr;
     QToolButton *m_strikeBtn = nullptr;
-    KColorButton *m_fgColorBtn = nullptr;
-    KColorButton *m_bgColorBtn = nullptr;
-
     // Font features section
     QGroupBox *m_fontFeaturesGroup = nullptr;
     QCheckBox *m_ligaturesCheck = nullptr;
@@ -99,8 +95,6 @@ private:
     PropIndicator m_fontInd;
     PropIndicator m_fontStyleInd;
     PropIndicator m_sizeInd;
-    PropIndicator m_fgInd;
-    PropIndicator m_bgInd;
     PropIndicator m_alignInd;
     PropIndicator m_spaceBeforeInd;
     PropIndicator m_spaceAfterInd;
@@ -121,8 +115,6 @@ private:
         bool fontItalic = false;
         bool fontUnderline = false;
         bool fontStrikeOut = false;
-        bool foreground = false;
-        bool background = false;
         bool alignment = false;
         bool spaceBefore = false;
         bool spaceAfter = false;

@@ -6,10 +6,6 @@
   <kcfgfile name="prettyreaderrc"/>
 
   <group name="General">
-    <entry name="DefaultTheme" type="String">
-      <label>Default display theme for new documents.</label>
-      <default>default</default>
-    </entry>
     <entry name="RememberPerFileSettings" type="Bool">
       <default>true</default>
     </entry>

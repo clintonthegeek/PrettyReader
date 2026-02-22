@@ -3,8 +3,8 @@
  *
  * Provides a static lookup table that maps common TTF/OTF font family
  * names to their closest Hershey vector-font counterpart.  Used as a
- * fallback when FontPairing does not contain an explicit mapping for
- * a given family.
+ * fallback when the TypographyTheme does not contain an explicit mapping
+ * for a given family.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */

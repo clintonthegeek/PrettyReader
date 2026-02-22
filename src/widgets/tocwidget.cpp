@@ -25,7 +25,7 @@ TocWidget::TocWidget(QWidget *parent)
 void TocWidget::buildFromDocument(QTextDocument *document)
 {
     m_treeWidget->clear();
-    m_flatHeadingItems.clear();
+    m_headingsByLine.clear();
     if (!document)
         return;
 
@@ -75,7 +75,7 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
                                        const QList<Layout::SourceMapEntry> &sourceMap)
 {
     m_treeWidget->clear();
-    m_flatHeadingItems.clear();
+    m_headingsByLine.clear();
 
     QTreeWidgetItem *parents[7] = {};
 
@@ -141,7 +141,8 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
         }
 
         parents[level] = item;
-        m_flatHeadingItems.append(item);
+        if (heading->source.startLine > 0)
+            m_headingsByLine.insert(heading->source.startLine, item);
         for (int i = level + 1; i <= 6; ++i)
             parents[i] = nullptr;
     }
@@ -152,7 +153,7 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
 void TocWidget::clear()
 {
     m_treeWidget->clear();
-    m_flatHeadingItems.clear();
+    m_headingsByLine.clear();
 }
 
 void TocWidget::onItemClicked(QTreeWidgetItem *item, int column)
@@ -175,15 +176,15 @@ void TocWidget::onItemClicked(QTreeWidgetItem *item, int column)
         Q_EMIT headingClicked(blockNumber);
 }
 
-void TocWidget::highlightHeading(int index)
+void TocWidget::highlightHeading(int sourceLine)
 {
-    if (index < 0 || index >= m_flatHeadingItems.size()) {
-        m_treeWidget->setCurrentItem(nullptr);
-        return;
-    }
-    // Block signals to prevent onItemClicked → headingNavigate feedback loop
+    auto it = m_headingsByLine.find(sourceLine);
+    QTreeWidgetItem *target = (it != m_headingsByLine.end()) ? *it : nullptr;
+    if (m_treeWidget->currentItem() == target)
+        return; // already highlighted — no redundant work
     m_treeWidget->blockSignals(true);
-    m_treeWidget->setCurrentItem(m_flatHeadingItems[index]);
-    m_treeWidget->scrollToItem(m_flatHeadingItems[index]);
+    m_treeWidget->setCurrentItem(target);
+    if (target)
+        m_treeWidget->scrollToItem(target);
     m_treeWidget->blockSignals(false);
 }

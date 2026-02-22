@@ -37,6 +37,7 @@ struct ViewState
 struct HeadingPosition {
     int page = 0;
     qreal yOffset = 0; // page-local, points from top of content area
+    int sourceLine = 0; // stable identifier from Content::SourceRange::startLine
 };
 
 class DocumentView : public QGraphicsView
@@ -230,7 +231,7 @@ private:
     QHash<QString, QString> m_codeBlockLanguageOverrides; // trimmed code -> language
     bool m_wordSelection = false; // set by double-click, cleared by mouse press
     QList<HeadingPosition> m_headingPositions;
-    int m_currentHeading = -1;
+    int m_currentHeadingLine = -1; // source line of current heading (stable ID)
 
     static constexpr qreal kPageGap = 12.0;
 

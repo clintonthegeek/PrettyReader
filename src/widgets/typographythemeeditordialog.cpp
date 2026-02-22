@@ -1,11 +1,11 @@
 /*
- * fontpairingeditordialog.cpp — Editor dialog for font pairings
+ * typographythemeeditordialog.cpp — Editor dialog for typography themes
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "fontpairingeditordialog.h"
-#include "fontpairing.h"
+#include "typographythemeeditordialog.h"
+#include "typographytheme.h"
 #include "hersheyfont.h"
 
 #include <QComboBox>
@@ -21,17 +21,16 @@
 
 static const QString s_sampleText = QStringLiteral("The quick brown fox jumps over the lazy dog.");
 
-FontPairingEditorDialog::FontPairingEditorDialog(QWidget *parent)
+TypographyThemeEditorDialog::TypographyThemeEditorDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle(tr("Edit Font Pairing"));
+    setWindowTitle(tr("Edit Typography Theme"));
     resize(550, 400);
     buildUI();
 }
 
-void FontPairingEditorDialog::buildUI()
+void TypographyThemeEditorDialog::buildUI()
 {
-    // Ensure Hershey fonts are available
     HersheyFontRegistry::instance().ensureLoaded();
     const QStringList hersheyFamilies = HersheyFontRegistry::instance().familyNames();
 
@@ -40,7 +39,7 @@ void FontPairingEditorDialog::buildUI()
     // --- Name field ---
     auto *nameLayout = new QFormLayout;
     m_nameEdit = new QLineEdit;
-    m_nameEdit->setPlaceholderText(tr("e.g. My Custom Pairing"));
+    m_nameEdit->setPlaceholderText(tr("e.g. My Custom Theme"));
     nameLayout->addRow(tr("Name:"), m_nameEdit);
     mainLayout->addLayout(nameLayout);
 
@@ -72,13 +71,11 @@ void FontPairingEditorDialog::buildUI()
         preview->setMargin(4);
         groupLayout->addWidget(preview);
 
-        // Live preview update
         connect(fontCombo, &QFontComboBox::currentFontChanged,
                 this, [this, preview, fontCombo]() {
             updatePreview(preview, fontCombo);
         });
 
-        // Initialize preview
         updatePreview(preview, fontCombo);
 
         return group;
@@ -106,49 +103,49 @@ void FontPairingEditorDialog::buildUI()
     connect(m_buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
 }
 
-void FontPairingEditorDialog::updatePreview(QLabel *preview, QFontComboBox *fontCombo)
+void TypographyThemeEditorDialog::updatePreview(QLabel *preview, QFontComboBox *fontCombo)
 {
     QFont previewFont = fontCombo->currentFont();
     previewFont.setPointSize(13);
     preview->setFont(previewFont);
 }
 
-void FontPairingEditorDialog::setFontPairing(const FontPairing &fp)
+void TypographyThemeEditorDialog::setTypographyTheme(const TypographyTheme &theme)
 {
-    m_nameEdit->setText(fp.name);
+    m_nameEdit->setText(theme.name);
 
     // Body
-    m_bodyFontCombo->setCurrentFont(QFont(fp.body.family));
-    int idx = m_bodyHersheyCombo->findText(fp.body.hersheyFamily);
+    m_bodyFontCombo->setCurrentFont(QFont(theme.body.family));
+    int idx = m_bodyHersheyCombo->findText(theme.body.hersheyFamily);
     if (idx >= 0)
         m_bodyHersheyCombo->setCurrentIndex(idx);
 
     // Heading
-    m_headingFontCombo->setCurrentFont(QFont(fp.heading.family));
-    idx = m_headingHersheyCombo->findText(fp.heading.hersheyFamily);
+    m_headingFontCombo->setCurrentFont(QFont(theme.heading.family));
+    idx = m_headingHersheyCombo->findText(theme.heading.hersheyFamily);
     if (idx >= 0)
         m_headingHersheyCombo->setCurrentIndex(idx);
 
     // Mono
-    m_monoFontCombo->setCurrentFont(QFont(fp.mono.family));
-    idx = m_monoHersheyCombo->findText(fp.mono.hersheyFamily);
+    m_monoFontCombo->setCurrentFont(QFont(theme.mono.family));
+    idx = m_monoHersheyCombo->findText(theme.mono.hersheyFamily);
     if (idx >= 0)
         m_monoHersheyCombo->setCurrentIndex(idx);
 }
 
-FontPairing FontPairingEditorDialog::fontPairing() const
+TypographyTheme TypographyThemeEditorDialog::typographyTheme() const
 {
-    FontPairing fp;
-    fp.name = m_nameEdit->text().trimmed();
+    TypographyTheme theme;
+    theme.name = m_nameEdit->text().trimmed();
 
-    fp.body.family = m_bodyFontCombo->currentFont().family();
-    fp.body.hersheyFamily = m_bodyHersheyCombo->currentText();
+    theme.body.family = m_bodyFontCombo->currentFont().family();
+    theme.body.hersheyFamily = m_bodyHersheyCombo->currentText();
 
-    fp.heading.family = m_headingFontCombo->currentFont().family();
-    fp.heading.hersheyFamily = m_headingHersheyCombo->currentText();
+    theme.heading.family = m_headingFontCombo->currentFont().family();
+    theme.heading.hersheyFamily = m_headingHersheyCombo->currentText();
 
-    fp.mono.family = m_monoFontCombo->currentFont().family();
-    fp.mono.hersheyFamily = m_monoHersheyCombo->currentText();
+    theme.mono.family = m_monoFontCombo->currentFont().family();
+    theme.mono.hersheyFamily = m_monoHersheyCombo->currentText();
 
-    return fp;
+    return theme;
 }

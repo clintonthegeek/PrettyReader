@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "fontpairingpickerwidget.h"
+#include "typographythemepickerwidget.h"
 
 #include <QFont>
 #include <QGridLayout>
@@ -11,28 +11,28 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-#include "fontpairing.h"
-#include "fontpairingmanager.h"
+#include "typographytheme.h"
+#include "typographythememanager.h"
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// FontPairingCell — renders three text samples in the respective fonts
+// TypographyThemeCell — renders three text samples in the respective fonts
 // ---------------------------------------------------------------------------
-class FontPairingCell : public QWidget
+class TypographyThemeCell : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit FontPairingCell(const FontPairing &pairing, bool selected,
-                             QWidget *parent = nullptr)
+    explicit TypographyThemeCell(const TypographyTheme &theme, bool selected,
+                                  QWidget *parent = nullptr)
         : QWidget(parent)
-        , m_pairing(pairing)
+        , m_theme(theme)
         , m_selected(selected)
     {
         setFixedSize(120, 50);
         setCursor(Qt::PointingHandCursor);
-        setToolTip(pairing.name);
+        setToolTip(theme.name);
     }
 
     void setSelected(bool selected)
@@ -43,7 +43,7 @@ public:
         }
     }
 
-    QString pairingId() const { return m_pairing.id; }
+    QString themeId() const { return m_theme.id; }
 
 Q_SIGNALS:
     void clicked(const QString &id);
@@ -55,31 +55,29 @@ protected:
         p.setRenderHint(QPainter::TextAntialiasing, true);
 
         const QRect r = rect();
-
-        // White background
         p.fillRect(r, Qt::white);
 
         const int textMargin = 4;
         const int fontSize = 9;
 
         // Body font: render the body family name
-        QFont bodyFont(m_pairing.body.family, fontSize);
+        QFont bodyFont(m_theme.body.family, fontSize);
         p.setFont(bodyFont);
         p.setPen(Qt::black);
         p.drawText(QRect(textMargin, 2, r.width() - 2 * textMargin, 14),
                    Qt::AlignLeft | Qt::AlignVCenter,
-                   m_pairing.body.family);
+                   m_theme.body.family);
 
         // Heading font: render the heading family name
-        QFont headingFont(m_pairing.heading.family, fontSize);
+        QFont headingFont(m_theme.heading.family, fontSize);
         headingFont.setBold(true);
         p.setFont(headingFont);
         p.drawText(QRect(textMargin, 17, r.width() - 2 * textMargin, 14),
                    Qt::AlignLeft | Qt::AlignVCenter,
-                   m_pairing.heading.family);
+                   m_theme.heading.family);
 
         // Mono font: render "mono"
-        QFont monoFont(m_pairing.mono.family, fontSize - 1);
+        QFont monoFont(m_theme.mono.family, fontSize - 1);
         p.setFont(monoFont);
         p.setPen(QColor(100, 100, 100));
         p.drawText(QRect(textMargin, 32, r.width() - 2 * textMargin, 14),
@@ -101,22 +99,22 @@ protected:
     void mousePressEvent(QMouseEvent *event) override
     {
         if (event->button() == Qt::LeftButton)
-            Q_EMIT clicked(m_pairing.id);
+            Q_EMIT clicked(m_theme.id);
         QWidget::mousePressEvent(event);
     }
 
 private:
-    FontPairing m_pairing;
+    TypographyTheme m_theme;
     bool m_selected = false;
 };
 
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// FontPairingPickerWidget
+// TypographyThemePickerWidget
 // ---------------------------------------------------------------------------
 
-FontPairingPickerWidget::FontPairingPickerWidget(FontPairingManager *manager, QWidget *parent)
+TypographyThemePickerWidget::TypographyThemePickerWidget(TypographyThemeManager *manager, QWidget *parent)
     : QWidget(parent)
     , m_manager(manager)
 {
@@ -124,7 +122,7 @@ FontPairingPickerWidget::FontPairingPickerWidget(FontPairingManager *manager, QW
     outerLayout->setContentsMargins(0, 0, 0, 0);
     outerLayout->setSpacing(4);
 
-    auto *header = new QLabel(QStringLiteral("Font Pairings"), this);
+    auto *header = new QLabel(QStringLiteral("Typography"), this);
     QFont headerFont = header->font();
     headerFont.setBold(true);
     header->setFont(headerFont);
@@ -141,30 +139,28 @@ FontPairingPickerWidget::FontPairingPickerWidget(FontPairingManager *manager, QW
 
     rebuildGrid();
 
-    connect(m_manager, &FontPairingManager::pairingsChanged,
-            this, &FontPairingPickerWidget::refresh);
+    connect(m_manager, &TypographyThemeManager::themesChanged,
+            this, &TypographyThemePickerWidget::refresh);
 }
 
-void FontPairingPickerWidget::setCurrentPairingId(const QString &id)
+void TypographyThemePickerWidget::setCurrentThemeId(const QString &id)
 {
     if (m_currentId == id)
         return;
     m_currentId = id;
 
-    // Update selection state on all cells
-    auto cells = findChildren<FontPairingCell *>();
+    auto cells = findChildren<TypographyThemeCell *>();
     for (auto *cell : cells)
-        cell->setSelected(cell->pairingId() == m_currentId);
+        cell->setSelected(cell->themeId() == m_currentId);
 }
 
-void FontPairingPickerWidget::refresh()
+void TypographyThemePickerWidget::refresh()
 {
     rebuildGrid();
 }
 
-void FontPairingPickerWidget::rebuildGrid()
+void TypographyThemePickerWidget::rebuildGrid()
 {
-    // Remove all existing items from the grid
     while (QLayoutItem *item = m_gridLayout->takeAt(0)) {
         delete item->widget();
         delete item;
@@ -173,18 +169,18 @@ void FontPairingPickerWidget::rebuildGrid()
     if (!m_manager)
         return;
 
-    const QStringList ids = m_manager->availablePairings();
+    const QStringList ids = m_manager->availableThemes();
     const int columns = 2;
 
     int row = 0;
     int col = 0;
     for (const QString &id : ids) {
-        FontPairing fp = m_manager->pairing(id);
+        TypographyTheme theme = m_manager->theme(id);
         bool selected = (id == m_currentId);
-        auto *cell = new FontPairingCell(fp, selected, this);
-        connect(cell, &FontPairingCell::clicked, this, [this](const QString &id) {
-            setCurrentPairingId(id);
-            Q_EMIT pairingSelected(id);
+        auto *cell = new TypographyThemeCell(theme, selected, this);
+        connect(cell, &TypographyThemeCell::clicked, this, [this](const QString &clickedId) {
+            setCurrentThemeId(clickedId);
+            Q_EMIT themeSelected(clickedId);
         });
         m_gridLayout->addWidget(cell, row, col);
         ++col;
@@ -199,9 +195,9 @@ void FontPairingPickerWidget::rebuildGrid()
     addButton->setText(QStringLiteral("+"));
     addButton->setFixedSize(120, 50);
     addButton->setCursor(Qt::PointingHandCursor);
-    addButton->setToolTip(QStringLiteral("Create new font pairing"));
-    connect(addButton, &QToolButton::clicked, this, &FontPairingPickerWidget::createRequested);
+    addButton->setToolTip(QStringLiteral("Create new typography theme"));
+    connect(addButton, &QToolButton::clicked, this, &TypographyThemePickerWidget::createRequested);
     m_gridLayout->addWidget(addButton, row, col);
 }
 
-#include "fontpairingpickerwidget.moc"
+#include "typographythemepickerwidget.moc"
