@@ -724,6 +724,12 @@ void DocumentView::setRenderMode(RenderMode mode)
     if (m_renderMode == mode)
         return;
     m_renderMode = mode;
+
+    if (mode == WebMode)
+        setBackgroundBrush(QBrush(m_pageLayout.pageBackground));
+    else
+        setBackgroundBrush(QBrush(QColor(0x3c, 0x3c, 0x3c)));
+
     Q_EMIT renderModeChanged(mode);
 }
 
