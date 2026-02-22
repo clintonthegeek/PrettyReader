@@ -137,6 +137,111 @@ LayoutResult Engine::layout(const Content::Document &doc, const PageLayout &page
     return result;
 }
 
+// --- Continuous (web-view) layout ---
+
+ContinuousLayoutResult Engine::layoutContinuous(const Content::Document &doc, qreal availWidth)
+{
+    ContinuousLayoutResult result;
+    result.contentWidth = availWidth;
+
+    // Phase 1: layout all blocks into page elements (identical to layout())
+    QList<PageElement> elements;
+
+    for (const auto &block : doc.blocks) {
+        std::visit([&](const auto &b) {
+            using T = std::decay_t<decltype(b)>;
+            if constexpr (std::is_same_v<T, Content::Paragraph>) {
+                // Detect image-only paragraphs (single InlineImage inline)
+                if (b.inlines.size() == 1
+                    && std::holds_alternative<Content::InlineImage>(b.inlines.first())) {
+                    const auto &img = std::get<Content::InlineImage>(b.inlines.first());
+                    if (!img.resolvedImageData.isEmpty()) {
+                        elements.append(layoutImage(img, availWidth));
+                    }
+                } else {
+                    elements.append(layoutParagraph(b, availWidth));
+                }
+            } else if constexpr (std::is_same_v<T, Content::Heading>) {
+                elements.append(layoutHeading(b, availWidth));
+            } else if constexpr (std::is_same_v<T, Content::CodeBlock>) {
+                elements.append(layoutCodeBlock(b, availWidth));
+            } else if constexpr (std::is_same_v<T, Content::BlockQuote>) {
+                auto bqElements = layoutBlockQuote(b, availWidth);
+                elements.append(bqElements);
+            } else if constexpr (std::is_same_v<T, Content::List>) {
+                auto listElements = layoutList(b, availWidth);
+                elements.append(listElements);
+            } else if constexpr (std::is_same_v<T, Content::Table>) {
+                elements.append(layoutTable(b, availWidth));
+            } else if constexpr (std::is_same_v<T, Content::HorizontalRule>) {
+                elements.append(layoutHorizontalRule(b, availWidth));
+            } else if constexpr (std::is_same_v<T, Content::FootnoteSection>) {
+                elements.append(layoutFootnoteSection(b, availWidth));
+            }
+        }, block);
+    }
+
+    // Phase 2: simple vertical stacking (no page breaks, no splitting)
+    qreal y = 0;
+
+    for (auto &element : elements) {
+        std::visit([&](auto &e) {
+            using T = std::decay_t<decltype(e)>;
+            if constexpr (std::is_same_v<T, BlockBox>) {
+                y += e.spaceBefore;
+                e.y = y;
+                y += e.height + e.spaceAfter;
+
+                // Build source map entry
+                if (e.source.startLine > 0) {
+                    SourceMapEntry entry;
+                    entry.pageNumber = 0;
+                    entry.rect = QRectF(e.x, e.y, e.width, e.height);
+                    entry.startLine = e.source.startLine;
+                    entry.endLine = e.source.endLine;
+                    result.sourceMap.append(entry);
+
+                    // Code block hit regions
+                    if (e.type == BlockBox::CodeBlockType) {
+                        CodeBlockRegion region;
+                        region.pageNumber = 0;
+                        region.rect = QRectF(
+                            e.x - e.padding,
+                            e.y - e.padding,
+                            e.width + e.padding * 2,
+                            e.height + e.padding * 2);
+                        region.startLine = e.source.startLine;
+                        region.endLine = e.source.endLine;
+                        result.codeBlockRegions.append(region);
+                    }
+                }
+            } else if constexpr (std::is_same_v<T, TableBox>) {
+                e.y = y;
+                y += e.height;
+
+                // Build source map entry
+                if (e.source.startLine > 0) {
+                    SourceMapEntry entry;
+                    entry.pageNumber = 0;
+                    entry.rect = QRectF(e.x, e.y, e.width, e.height);
+                    entry.startLine = e.source.startLine;
+                    entry.endLine = e.source.endLine;
+                    result.sourceMap.append(entry);
+                }
+            } else if constexpr (std::is_same_v<T, FootnoteSectionBox>) {
+                y += 20.0; // spaceBefore for footnote sections
+                e.y = y;
+                y += e.height;
+            }
+        }, element);
+    }
+
+    result.elements = std::move(elements);
+    result.totalHeight = y;
+
+    return result;
+}
+
 // --- Inline text collection and shaping ---
 
 namespace {

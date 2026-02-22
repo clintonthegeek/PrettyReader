@@ -252,6 +252,14 @@ struct LayoutResult {
     QList<CodeBlockRegion> codeBlockRegions;
 };
 
+struct ContinuousLayoutResult {
+    QList<PageElement> elements;       // each with absolute y position set
+    qreal totalHeight = 0;
+    qreal contentWidth = 0;
+    QList<SourceMapEntry> sourceMap;   // pageNumber always 0, absolute rects
+    QList<CodeBlockRegion> codeBlockRegions;
+};
+
 // --- Layout Engine ---
 
 class Engine {
@@ -259,6 +267,7 @@ public:
     Engine(FontManager *fontManager, TextShaper *textShaper);
 
     LayoutResult layout(const Content::Document &doc, const PageLayout &pageLayout);
+    ContinuousLayoutResult layoutContinuous(const Content::Document &doc, qreal availWidth);
 
     void setHyphenateJustifiedText(bool enabled) { m_hyphenateJustifiedText = enabled; }
     void setMarkdownDecorations(bool enabled) { m_markdownDecorations = enabled; }
