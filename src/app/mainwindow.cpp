@@ -1096,6 +1096,32 @@ void MainWindow::rebuildCurrentDocument()
 
         // Build TOC directly from content model + source map
         m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+
+        // Pass heading positions to view for scroll-sync
+        {
+            QList<HeadingPosition> headingPositions;
+            for (const auto &block : contentDoc.blocks) {
+                const auto *heading = std::get_if<Content::Heading>(&block);
+                if (!heading || heading->level < 1 || heading->level > 6)
+                    continue;
+                HeadingPosition hp;
+                if (heading->source.startLine > 0) {
+                    for (const auto &entry : layoutResult.sourceMap) {
+                        if (entry.startLine == heading->source.startLine
+                            && entry.endLine == heading->source.endLine) {
+                            hp.page = entry.pageNumber;
+                            hp.yOffset = entry.rect.top();
+                            break;
+                        }
+                    }
+                }
+                headingPositions.append(hp);
+            }
+            view->setHeadingPositions(headingPositions);
+            connect(view, &DocumentView::currentHeadingChanged,
+                    m_tocWidget, &TocWidget::highlightHeading,
+                    Qt::UniqueConnection);
+        }
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
@@ -1213,6 +1239,32 @@ void MainWindow::openFile(const QUrl &url)
 
         // Build TOC from content model (PDF mode)
         m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+
+        // Pass heading positions to view for scroll-sync
+        {
+            QList<HeadingPosition> headingPositions;
+            for (const auto &block : contentDoc.blocks) {
+                const auto *heading = std::get_if<Content::Heading>(&block);
+                if (!heading || heading->level < 1 || heading->level > 6)
+                    continue;
+                HeadingPosition hp;
+                if (heading->source.startLine > 0) {
+                    for (const auto &entry : layoutResult.sourceMap) {
+                        if (entry.startLine == heading->source.startLine
+                            && entry.endLine == heading->source.endLine) {
+                            hp.page = entry.pageNumber;
+                            hp.yOffset = entry.rect.top();
+                            break;
+                        }
+                    }
+                }
+                headingPositions.append(hp);
+            }
+            tab->documentView()->setHeadingPositions(headingPositions);
+            connect(tab->documentView(), &DocumentView::currentHeadingChanged,
+                    m_tocWidget, &TocWidget::highlightHeading,
+                    Qt::UniqueConnection);
+        }
     } else {
         // --- Legacy QTextDocument pipeline ---
         auto *doc = new QTextDocument(this);
