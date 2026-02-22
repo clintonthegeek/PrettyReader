@@ -145,9 +145,6 @@ bool ThemeManager::loadThemeFromJson(const QString &path, StyleManager *sm)
 
     QJsonObject root = doc.object();
 
-    // Hershey stroke font mode
-    sm->setHersheyMode(root.value(QLatin1String("hersheyMode")).toBool(false));
-
     // Apply paragraph, character, and table styles + page layout + footnote
     applyStyleOverrides(root, sm);
 
@@ -188,10 +185,6 @@ bool ThemeManager::loadPreset(const QString &path,
     FontPairing pairing;
     if (pairingMgr && !pairingId.isEmpty())
         pairing = pairingMgr->pairing(pairingId);
-
-    // Hershey mode: true if pairingId contains "hershey"
-    sm->setHersheyMode(root.value(QLatin1String("hersheyMode")).toBool(
-        pairingId.contains(QLatin1String("hershey"), Qt::CaseInsensitive)));
 
     // Compose palette + pairing into the StyleManager
     ThemeComposer composer(this);
@@ -1135,9 +1128,6 @@ QJsonDocument ThemeManager::serializeTheme(const QString &name, StyleManager *sm
     QJsonObject root;
     root[QLatin1String("name")] = name;
     root[QLatin1String("version")] = 1;
-
-    if (sm->hersheyMode())
-        root[QLatin1String("hersheyMode")] = true;
 
     // Paragraph styles
     QJsonObject paraObj;
