@@ -191,11 +191,6 @@ void HersheyFont::computeMetrics()
     m_descent = static_cast<int>(std::ceil(-minY)); // minY is negative
     m_unitsPerEm = m_ascent + m_descent;
 
-    // Debug: print metrics and space advance
-    int spaceAdv = advanceWidth(U' ');
-    qDebug() << "[HERSHEY]" << m_name << "ascent=" << m_ascent << "descent=" << m_descent
-             << "upm=" << m_unitsPerEm << "spaceAdvRaw=" << spaceAdv
-             << "glyphs=" << m_glyphs.size();
 }
 
 // ===========================================================================
@@ -226,8 +221,6 @@ void HersheyFontRegistry::ensureLoaded()
             delete font;
         }
     }
-
-    qDebug() << "HersheyFontRegistry: loaded" << m_fonts.size() << "fonts";
 
     // -------------------------------------------------------------------
     // Family mapping table

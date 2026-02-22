@@ -81,18 +81,6 @@ qreal computeAdjustmentRatio(const QList<Item> &items,
                               int start, int end,
                               qreal lineWidth);
 
-struct BlendedSpacing {
-    qreal extraWordSpacing = 0;
-    qreal extraLetterSpacing = 0;
-};
-
-BlendedSpacing computeBlendedSpacing(qreal adjustmentRatio,
-                                      qreal naturalWordGlueWidth,
-                                      int wordGapCount,
-                                      int charCount,
-                                      qreal fontSize,
-                                      const Config &config);
-
 } // namespace LineBreaking
 
 #endif // PRETTYREADER_LINEBREAKER_H

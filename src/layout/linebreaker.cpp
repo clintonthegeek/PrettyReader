@@ -6,7 +6,7 @@
 
 #include <cmath>
 #include <limits>
-#include <QDebug>
+
 
 namespace LineBreaking {
 
@@ -423,18 +423,13 @@ BreakResult findBreaks(const QList<Item> &items,
 
     // Build the breakpoint list (skip the seed node at index 0 since it
     // represents the start-of-paragraph, not an actual line break)
-    qDebug() << "[KP] === Breakpoint output ===" << breakNodeIndices.size() - 1 << "lines";
     for (int k = 1; k < breakNodeIndices.size(); ++k) {
         const Node &nd = nodes[breakNodeIndices[k]];
         const Node &prev = nodes[breakNodeIndices[k - 1]];
 
-        // Recompute adjustment ratio for this line
         int lineStart = prev.itemIndex;
         int lineEnd = nd.itemIndex;
         qreal lw = lineWidthForLine(lineWidths, prev.lineNumber);
-
-        // Use prefix sums for the recompute, but fall back to the direct
-        // function for correctness
         qreal r = computeAdjustmentRatio(items, lineStart, lineEnd, lw);
 
         Breakpoint bp;
@@ -443,16 +438,6 @@ BreakResult findBreaks(const QList<Item> &items,
         bp.fitness = fitnessClassFromRatio(r);
         bp.totalDemerits = nd.totalDemerits;
         result.breaks.append(bp);
-
-        // Debug: dump line content
-        qreal contentW = 0, glueW = 0, stretchW = 0;
-        for (int ii = lineStart; ii < lineEnd; ++ii) {
-            if (items[ii].type == Item::BoxType) contentW += items[ii].box.width;
-            else if (items[ii].type == Item::GlueType) { glueW += items[ii].glue.width; stretchW += items[ii].glue.stretch; }
-        }
-        qDebug() << "[KP]   Line" << k << ": items[" << lineStart << ".." << lineEnd << ")"
-                 << "lineWidth=" << lw << "boxW=" << contentW << "glueW=" << glueW
-                 << "stretch=" << stretchW << "r=" << r << "fitness=" << bp.fitness;
     }
 
     return result;
@@ -471,18 +456,13 @@ BreakResult findBreaksTiered(const QList<Item> &items,
         return result;
     }
 
-    qDebug() << "[KP] findBreaksTiered:" << items.size() << "items, lineWidths=" << lineWidths;
-
     // Tier 1: strict tolerance
     {
         Config cfg = baseConfig;
         cfg.tolerance = 1.0;
         auto result = findBreaks(items, lineWidths, cfg);
-        if (result.optimal && !result.breaks.isEmpty()) {
-            qDebug() << "[KP] Tier 1 (tol=1.0) succeeded:" << result.breaks.size() << "breaks";
+        if (result.optimal && !result.breaks.isEmpty())
             return result;
-        }
-        qDebug() << "[KP] Tier 1 (tol=1.0) failed, trying tier 2";
     }
 
     // Tier 2: relaxed tolerance
@@ -490,11 +470,8 @@ BreakResult findBreaksTiered(const QList<Item> &items,
         Config cfg = baseConfig;
         cfg.tolerance = 2.0;
         auto result = findBreaks(items, lineWidths, cfg);
-        if (result.optimal && !result.breaks.isEmpty()) {
-            qDebug() << "[KP] Tier 2 (tol=2.0) succeeded:" << result.breaks.size() << "breaks";
+        if (result.optimal && !result.breaks.isEmpty())
             return result;
-        }
-        qDebug() << "[KP] Tier 2 (tol=2.0) failed, trying tier 3";
     }
 
     // Tier 3: emergency tolerance
@@ -502,75 +479,14 @@ BreakResult findBreaksTiered(const QList<Item> &items,
         Config cfg = baseConfig;
         cfg.tolerance = baseConfig.looseTolerance;
         auto result = findBreaks(items, lineWidths, cfg);
-        if (!result.breaks.isEmpty()) {
-            qDebug() << "[KP] Tier 3 (tol=" << baseConfig.looseTolerance << ") succeeded:" << result.breaks.size() << "breaks, optimal=" << result.optimal;
+        if (!result.breaks.isEmpty())
             return result;
-        }
-        qDebug() << "[KP] Tier 3 failed too";
     }
 
-    // Tier 4: give up — return non-optimal empty result to trigger greedy fallback
-    qDebug() << "[KP] ALL TIERS FAILED — falling back to greedy";
+    // All tiers failed — return non-optimal empty result to trigger greedy fallback
     BreakResult result;
     result.optimal = false;
     return result;
-}
-
-// ---------------------------------------------------------------------------
-// computeBlendedSpacing
-// ---------------------------------------------------------------------------
-BlendedSpacing computeBlendedSpacing(qreal adjustmentRatio,
-                                      qreal naturalWordGlueWidth,
-                                      int wordGapCount,
-                                      int charCount,
-                                      qreal fontSize,
-                                      const Config &config)
-{
-    BlendedSpacing spacing;
-
-    if (wordGapCount <= 0 || std::abs(adjustmentRatio) < 1e-10)
-        return spacing;
-
-    // Compute total slack based on how much the word glue would flex
-    qreal totalSlack = 0;
-    if (adjustmentRatio > 0) {
-        // Stretching: glue stretch is typically 0.5 * natural width
-        totalSlack = adjustmentRatio * (naturalWordGlueWidth * 0.5) * wordGapCount;
-    } else {
-        // Shrinking: glue shrink is typically 0.33 * natural width
-        totalSlack = adjustmentRatio * (naturalWordGlueWidth * 0.33) * wordGapCount;
-    }
-
-    // Split: 2/3 to word spacing, 1/3 to letter spacing
-    qreal wordSlack = totalSlack * (2.0 / 3.0);
-    qreal letterSlack = totalSlack * (1.0 / 3.0);
-
-    // Letter spacing per character
-    qreal letterSpacingPerChar = 0;
-    if (charCount > 0)
-        letterSpacingPerChar = letterSlack / charCount;
-
-    // Clamp letter spacing
-    qreal minLS = config.minLetterSpacingFraction * fontSize;
-    qreal maxLS = config.maxLetterSpacingFraction * fontSize;
-    qreal clampedLS = qBound(minLS, letterSpacingPerChar, maxLS);
-
-    // Compute actual letter slack after clamping
-    qreal actualLetterSlack = clampedLS * charCount;
-
-    // Remainder goes to word spacing
-    qreal remainderSlack = letterSlack - actualLetterSlack;
-    qreal totalWordSlack = wordSlack + remainderSlack;
-
-    spacing.extraWordSpacing = totalWordSlack / wordGapCount;
-    spacing.extraLetterSpacing = clampedLS;
-
-    qDebug() << "[KP] blendedSpacing: r=" << adjustmentRatio << "glueW=" << naturalWordGlueWidth
-             << "gaps=" << wordGapCount << "chars=" << charCount << "fontSize=" << fontSize
-             << "totalSlack=" << totalSlack << "extraWord=" << spacing.extraWordSpacing
-             << "extraLetter=" << spacing.extraLetterSpacing;
-
-    return spacing;
 }
 
 } // namespace LineBreaking

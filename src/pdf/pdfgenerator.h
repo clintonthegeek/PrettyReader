@@ -61,6 +61,10 @@ private:
                                      qreal x, qreal y);
     void renderCheckbox(const Layout::GlyphBox &gbox, QByteArray &stream,
                         qreal x, qreal y);
+    void dispatchGlyphRendering(const Layout::GlyphBox &gbox, QByteArray &stream,
+                                qreal x, qreal y);
+    void renderGlyphDecorations(const Layout::GlyphBox &gbox, QByteArray &stream,
+                                qreal x, qreal y, qreal endX);
     void renderLineBox(const Layout::LineBox &line, QByteArray &stream,
                        qreal originX, qreal originY, qreal pageHeight,
                        qreal availWidth);
@@ -168,7 +172,7 @@ private:
     qreal m_maxJustifyGap = 14.0;
     PdfExportOptions m_exportOptions;
     bool m_codeBlockLines = false; // true while rendering code block lines
-    bool m_hersheyMode = false;
+    bool m_hasHersheyGlyphs = false;
     Pdf::Writer *m_writer = nullptr;           // set during generate(), null otherwise
     Pdf::ResourceDict *m_resources = nullptr;  // set during generate(), null otherwise
 };
