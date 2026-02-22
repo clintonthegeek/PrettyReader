@@ -7,13 +7,16 @@
 #include <QSet>
 #include <QString>
 #include <QTextDocument>
+#include <QTimer>
 
 #include "layoutengine.h"
 #include "pagelayout.h"
 
+class FontManager;
 class PageItem;
 class PdfPageItem;
 class RenderCache;
+class WebViewItem;
 
 namespace Poppler { class Document; }
 
@@ -106,12 +109,22 @@ public:
     enum ViewMode { Continuous, SinglePage, FacingPages, FacingPagesFirstAlone, ContinuousFacing, ContinuousFacingFirstAlone };
     Q_ENUM(ViewMode)
 
+    // Render modes: paginated PDF vs continuous web-style
+    enum RenderMode { PrintMode, WebMode };
+    Q_ENUM(RenderMode)
+
     void setViewMode(ViewMode mode);
     ViewMode viewMode() const { return m_viewMode; }
 
     // Legacy compatibility
     void setContinuousMode(bool continuous);
     bool isContinuous() const { return m_viewMode == Continuous || m_viewMode == ContinuousFacing || m_viewMode == ContinuousFacingFirstAlone; }
+
+    // Web view mode
+    void setRenderMode(RenderMode mode);
+    RenderMode renderMode() const { return m_renderMode; }
+    void setWebContent(Layout::ContinuousLayoutResult &&result);
+    void setWebFontManager(FontManager *fm) { m_webFontManager = fm; }
 
     bool isPdfMode() const { return m_pdfMode; }
     QByteArray pdfData() const { return m_pdfData; }
@@ -123,6 +136,8 @@ Q_SIGNALS:
     void statusHintChanged(const QString &hint);  // A7: hover hints
     void codeBlockLanguageChanged();
     void currentHeadingChanged(int index);
+    void renderModeChanged(RenderMode mode);
+    void webRelayoutRequested();
 
 protected:
     void wheelEvent(QWheelEvent *event) override;
@@ -180,6 +195,12 @@ private:
     Poppler::Document *m_popplerDoc = nullptr;
     RenderCache *m_renderCache = nullptr;
     QList<PdfPageItem *> m_pdfPageItems;
+
+    // Web view rendering
+    RenderMode m_renderMode = PrintMode;
+    WebViewItem *m_webViewItem = nullptr;
+    QTimer m_relayoutTimer;
+    FontManager *m_webFontManager = nullptr;
 
     // Middle-mouse smooth zoom (Okular pattern)
     bool m_middleZooming = false;

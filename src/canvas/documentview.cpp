@@ -2,6 +2,7 @@
 #include "pageitem.h"
 #include "pdfpageitem.h"
 #include "rendercache.h"
+#include "webviewitem.h"
 #include "pagelayout.h"
 #include "contentrtfexporter.h"
 #include "languagepickerdialog.h"
@@ -43,6 +44,13 @@ DocumentView::DocumentView(QWidget *parent)
     m_renderCache = new RenderCache(this);
     connect(m_renderCache, &RenderCache::pixmapReady,
             this, &DocumentView::onPixmapReady);
+
+    // Web view relayout debounce timer
+    m_relayoutTimer.setSingleShot(true);
+    m_relayoutTimer.setInterval(200);
+    connect(&m_relayoutTimer, &QTimer::timeout, this, [this]() {
+        Q_EMIT webRelayoutRequested();
+    });
 }
 
 DocumentView::~DocumentView()
@@ -699,6 +707,37 @@ void DocumentView::setContinuousMode(bool continuous)
     setViewMode(continuous ? Continuous : SinglePage);
 }
 
+// --- Render mode ---
+
+void DocumentView::setRenderMode(RenderMode mode)
+{
+    if (m_renderMode == mode)
+        return;
+    m_renderMode = mode;
+    Q_EMIT renderModeChanged(mode);
+}
+
+void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
+{
+    m_scene->clear();
+    m_pageItems.clear();
+    m_pdfPageItems.clear();
+    m_webViewItem = nullptr;
+
+    m_webViewItem = new WebViewItem(m_webFontManager);
+    m_scene->addItem(m_webViewItem);
+
+    m_webViewItem->setLayoutResult(std::move(result));
+    m_webViewItem->setPos(kSceneMargin, kSceneMargin);
+
+    qreal sceneW = m_webViewItem->boundingRect().width() + kSceneMargin * 2;
+    qreal sceneH = m_webViewItem->boundingRect().height() + kSceneMargin * 2;
+    m_scene->setSceneRect(0, 0, sceneW, sceneH);
+
+    setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
 // --- Events ---
 
 void DocumentView::wheelEvent(QWheelEvent *event)
@@ -716,6 +755,9 @@ void DocumentView::wheelEvent(QWheelEvent *event)
 void DocumentView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
+    if (m_renderMode == WebMode) {
+        m_relayoutTimer.start(); // restart 200ms debounce
+    }
 }
 
 void DocumentView::scrollContentsBy(int dx, int dy)
