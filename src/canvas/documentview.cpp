@@ -727,6 +727,8 @@ void DocumentView::setRenderMode(RenderMode mode)
 
 void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
 {
+    Q_ASSERT(m_webFontManager);
+
     m_scene->clear();
     m_pageItems.clear();
     m_pdfPageItems.clear();
@@ -1707,18 +1709,24 @@ void DocumentView::updateCurrentPage()
     for (int i = m_headingPositions.size() - 1; i >= 0; --i) {
         const auto &hp = m_headingPositions[i];
         // Convert heading's page-local yOffset to scene coordinates
-        QPointF headingScene;
+        qreal headingSceneY = 0;
         bool found = false;
-        for (auto *item : m_pdfPageItems) {
-            if (item->pageNumber() == hp.page) {
-                headingScene = item->pos() + QPointF(0, hp.yOffset);
-                found = true;
-                break;
+        if (m_renderMode == WebMode && m_webViewItem) {
+            // Web mode: heading yOffset is absolute, add scene margin
+            headingSceneY = hp.yOffset + kSceneMargin;
+            found = true;
+        } else {
+            for (auto *item : m_pdfPageItems) {
+                if (item->pageNumber() == hp.page) {
+                    headingSceneY = item->pos().y() + hp.yOffset;
+                    found = true;
+                    break;
+                }
             }
         }
         if (!found)
             continue;
-        if (headingScene.y() <= viewTop.y()) {
+        if (headingSceneY <= viewTop.y()) {
             bestHeading = i;
             break;
         }

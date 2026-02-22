@@ -1156,12 +1156,11 @@ void MainWindow::rebuildCurrentDocument()
             m_tocWidget->buildFromContentModel(contentDoc, webResult.sourceMap);
 
             view->setWebFontManager(m_fontManager);
+            view->setHeadingPositions(headingPositions);
             view->setWebContent(std::move(webResult));
             view->setRenderMode(DocumentView::WebMode);
             view->restoreViewState(state);
             view->setDocumentInfo(fi.fileName(), fi.baseName());
-
-            view->setHeadingPositions(headingPositions);
             connect(view, &DocumentView::currentHeadingChanged,
                     m_tocWidget, &TocWidget::highlightHeading,
                     Qt::UniqueConnection);
