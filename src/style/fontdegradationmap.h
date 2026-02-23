@@ -12,6 +12,7 @@
 #ifndef PRETTYREADER_FONTDEGRADATIONMAP_H
 #define PRETTYREADER_FONTDEGRADATIONMAP_H
 
+#include <QFont>
 #include <QString>
 
 class FontDegradationMap
@@ -23,6 +24,12 @@ public:
     /// generic classification heuristics.  If nothing matches, returns
     /// "Hershey Sans" as the most neutral default.
     static QString hersheyFamilyFor(const QString &fontFamily);
+
+    /// Classify a font family and return the appropriate QFont::StyleHint.
+    ///
+    /// Checks name patterns first (fast), then falls back to
+    /// QFontDatabase::isFixedPitch() for monospace detection.
+    static QFont::StyleHint guessStyleHint(const QString &fontFamily);
 
 private:
     FontDegradationMap() = delete;

@@ -6,6 +6,7 @@
 
 #include "fontdegradationmap.h"
 
+#include <QFontDatabase>
 #include <QHash>
 
 // ---------------------------------------------------------------------------
@@ -132,4 +133,33 @@ QString FontDegradationMap::hersheyFamilyFor(const QString &fontFamily)
 
     // 3. Ultimate fallback — Hershey Sans is the most neutral
     return QStringLiteral("Hershey Sans");
+}
+
+QFont::StyleHint FontDegradationMap::guessStyleHint(const QString &fontFamily)
+{
+    if (fontFamily.isEmpty())
+        return QFont::SansSerif;
+
+    const QString lower = fontFamily.toLower();
+
+    // Monospace: name patterns first (fast), then QFontDatabase (slower but
+    // catches fonts with non-obvious names like "Iosevka")
+    static const char *monoPatterns[] = {
+        "mono", "code", "courier", "console", "consolas",
+        "hack", "inconsolata", "menlo", "monaco", "terminal",
+    };
+    for (const char *p : monoPatterns) {
+        if (lower.contains(QLatin1String(p)))
+            return QFont::Monospace;
+    }
+    if (QFontDatabase::isFixedPitch(fontFamily))
+        return QFont::Monospace;
+
+    // Serif (but not "sans-serif")
+    if (lower.contains(QLatin1String("serif"))
+        && !lower.contains(QLatin1String("sans"))) {
+        return QFont::Serif;
+    }
+
+    return QFont::SansSerif;
 }

@@ -1,24 +1,6 @@
 #include "paragraphstyle.h"
+#include "fontdegradationmap.h"
 #include "fontfeatures.h"
-
-#include <QFontDatabase>
-
-static QFont::StyleHint guessStyleHint(const QString &family)
-{
-    static const char *monoPatterns[] = {
-        "Mono", "Code", "Courier", "Console", "Consolas",
-        "Hack", "Inconsolata", "Menlo", "Monaco", "Terminal"
-    };
-    for (const char *p : monoPatterns) {
-        if (family.contains(QLatin1String(p), Qt::CaseInsensitive))
-            return QFont::Monospace;
-    }
-    if (QFontDatabase::isFixedPitch(family))
-        return QFont::Monospace;
-    if (family.contains(QLatin1String("Serif"), Qt::CaseInsensitive))
-        return QFont::Serif;
-    return QFont::SansSerif;
-}
 
 ParagraphStyle::ParagraphStyle(const QString &name)
     : m_name(name)
@@ -51,9 +33,7 @@ void ParagraphStyle::applyCharFormat(QTextCharFormat &cf) const
 {
     if (m_hasFontFamily) {
         QFont font(m_fontFamily);
-        font.setStyleHint(m_fontFamily.contains(QLatin1String("Mono"),
-                              Qt::CaseInsensitive)
-                          ? QFont::Monospace : QFont::Serif);
+        font.setStyleHint(FontDegradationMap::guessStyleHint(m_fontFamily));
         if (m_hasFontSize)
             font.setPointSizeF(m_fontSize);
         if (m_hasFontWeight)
