@@ -312,6 +312,20 @@ private:
     // Helpers
     qreal measureInlines(const QList<Content::InlineNode> &inlines,
                           const Content::TextStyle &baseStyle);
+    qreal measureMinInlines(const QList<Content::InlineNode> &inlines,
+                             const Content::TextStyle &baseStyle);
+
+    // Table column width distribution
+    struct ColumnMetrics {
+        qreal minWidth;  // widest unbreakable word in any cell (+ padding)
+        qreal maxWidth;  // widest single-line (no-wrap) content in any cell (+ padding)
+    };
+    QList<ColumnMetrics> measureColumnMetrics(const Content::Table &table);
+    QList<qreal> distributeColumnsAuto(const QList<ColumnMetrics> &metrics,
+                                       qreal availWidth);
+    QList<qreal> distributeColumnsOptimal(const Content::Table &table,
+                                          const QList<ColumnMetrics> &metrics,
+                                          qreal availWidth);
 
     FontManager *m_fontManager;
     TextShaper *m_textShaper;

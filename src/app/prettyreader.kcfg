@@ -92,6 +92,14 @@
       <label>Insert non-breaking spaces after short prepositions and articles.</label>
       <default>true</default>
     </entry>
+    <entry name="TableLayoutAlgorithm" type="Enum">
+      <label>Algorithm for distributing table column widths.</label>
+      <choices>
+        <choice name="Auto"/>
+        <choice name="Optimal"/>
+      </choices>
+      <default>Auto</default>
+    </entry>
   </group>
 
   <group name="CopyOptions">

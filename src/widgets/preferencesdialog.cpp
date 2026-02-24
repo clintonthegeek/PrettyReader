@@ -205,6 +205,19 @@ PrettyReaderConfigDialog::PrettyReaderConfigDialog(QWidget *parent)
     swGroupLayout->addWidget(swCheck);
     typoLayout->addWidget(swGroup);
 
+    auto *tableGroup = new QGroupBox(i18n("Tables"));
+    auto *tableGroupLayout = new QVBoxLayout(tableGroup);
+    auto *tableAlgoRow = new QHBoxLayout;
+    tableAlgoRow->addWidget(new QLabel(i18n("Column sizing:")));
+    auto *tableAlgoCombo = new QComboBox;
+    tableAlgoCombo->setObjectName(QStringLiteral("kcfg_TableLayoutAlgorithm"));
+    tableAlgoCombo->addItem(i18n("Auto (proportional)"));
+    tableAlgoCombo->addItem(i18n("Optimal (minimize height)"));
+    tableAlgoRow->addWidget(tableAlgoCombo);
+    tableAlgoRow->addStretch();
+    tableGroupLayout->addLayout(tableAlgoRow);
+    typoLayout->addWidget(tableGroup);
+
     typoLayout->addStretch();
 
     addPage(typoPage, i18n("Typography"), QStringLiteral("preferences-desktop-font"));

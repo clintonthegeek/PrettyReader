@@ -6,6 +6,7 @@
 #include "layoutengine.h"
 #include "fontmanager.h"
 #include "linebreaker.h"
+#include "prettyreadersettings.h"
 #include "textshaper.h"
 
 
@@ -1262,12 +1263,19 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
     for (const auto &row : table.rows)
         numCols = qMax(numCols, row.cells.size());
 
-    // Edge-to-edge column widths (no gap for borders)
-    qreal colWidth = (numCols > 0) ? availWidth / numCols : availWidth;
+    // Content-aware column width distribution
+    auto metrics = measureColumnMetrics(table);
+
+    QList<qreal> colWidths;
+    if (PrettyReaderSettings::self()->tableLayoutAlgorithm() == PrettyReaderSettings::EnumTableLayoutAlgorithm::Optimal)
+        colWidths = distributeColumnsOptimal(table, metrics, availWidth);
+    else
+        colWidths = distributeColumnsAuto(metrics, availWidth);
 
     // Store column positions for grid drawing
-    for (int i = 0; i <= numCols; ++i)
-        tbox.columnPositions.append(colWidth * i);
+    tbox.columnPositions.append(0);
+    for (int i = 0; i < numCols; ++i)
+        tbox.columnPositions.append(tbox.columnPositions.last() + colWidths[i]);
 
     qreal y = 0;
     int rowIdx = 0;
@@ -1283,7 +1291,7 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
             TableCellBox cbox;
             cbox.x = x;
             cbox.y = y;
-            cbox.width = colWidth;
+            cbox.width = colWidths[ci];
             cbox.alignment = cell.alignment;
             cbox.isHeader = cell.isHeader;
 
@@ -1306,7 +1314,7 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
                 cellStyle.fontFamily = QStringLiteral("Noto Serif");
                 cellStyle.fontSize = 11.0;
             }
-            qreal innerWidth = colWidth - table.cellPadding * 2;
+            qreal innerWidth = colWidths[ci] - table.cellPadding * 2;
             cbox.lines = breakIntoLines(cell.inlines, cellStyle, cellFmt, innerWidth);
 
             qreal h = table.cellPadding * 2;
@@ -1316,7 +1324,7 @@ TableBox Engine::layoutTable(const Content::Table &table, qreal availWidth)
             maxCellHeight = qMax(maxCellHeight, h);
 
             rbox.cells.append(cbox);
-            x += colWidth;
+            x += colWidths[ci];
         }
 
         // Equalize cell heights
@@ -2013,6 +2021,225 @@ qreal Engine::measureInlines(const QList<Content::InlineNode> &inlines,
         for (const auto &g : run.glyphs)
             width += g.xAdvance;
     return width;
+}
+
+qreal Engine::measureMinInlines(const QList<Content::InlineNode> &inlines,
+                                 const Content::TextStyle &baseStyle)
+{
+    auto collected = collectInlines(inlines, baseStyle);
+    if (collected.text.isEmpty())
+        return 0;
+
+    QList<ShapedRun> runs = m_textShaper->shape(collected.text, collected.styleRuns);
+
+    // Find ICU line break opportunities
+    UErrorCode err = U_ZERO_ERROR;
+    icu::UnicodeString ustr(reinterpret_cast<const UChar *>(collected.text.utf16()),
+                            collected.text.length());
+    std::unique_ptr<icu::BreakIterator> lineBreakIter(
+        icu::BreakIterator::createLineInstance(icu::Locale::getDefault(), err));
+
+    QSet<int> breakPositions;
+    if (lineBreakIter && U_SUCCESS(err)) {
+        lineBreakIter->setText(ustr);
+        for (int32_t pos = lineBreakIter->first();
+             pos != icu::BreakIterator::DONE;
+             pos = lineBreakIter->next()) {
+            breakPositions.insert(pos);
+        }
+    }
+
+    // Walk shaped glyphs, splitting at break positions to find widest word
+    qreal maxWordWidth = 0;
+    qreal currentWordWidth = 0;
+
+    for (const auto &run : runs) {
+        for (const auto &g : run.glyphs) {
+            if (breakPositions.contains(g.cluster) && currentWordWidth > 0) {
+                maxWordWidth = qMax(maxWordWidth, currentWordWidth);
+                currentWordWidth = 0;
+            }
+            currentWordWidth += g.xAdvance;
+        }
+    }
+    maxWordWidth = qMax(maxWordWidth, currentWordWidth);
+
+    return maxWordWidth;
+}
+
+// --- Table column width distribution ---
+
+QList<Engine::ColumnMetrics> Engine::measureColumnMetrics(const Content::Table &table)
+{
+    int numCols = 0;
+    for (const auto &row : table.rows)
+        numCols = qMax(numCols, row.cells.size());
+
+    QList<ColumnMetrics> metrics(numCols, {0, 0});
+    const qreal pad2 = table.cellPadding * 2;
+
+    for (const auto &row : table.rows) {
+        for (int ci = 0; ci < row.cells.size(); ++ci) {
+            const auto &cell = row.cells[ci];
+            Content::TextStyle cellStyle = cell.style;
+            if (cellStyle.fontFamily.isEmpty()) {
+                cellStyle.fontFamily = QStringLiteral("Noto Serif");
+                cellStyle.fontSize = 11.0;
+            }
+
+            qreal maxW = measureInlines(cell.inlines, cellStyle) + pad2;
+            qreal minW = measureMinInlines(cell.inlines, cellStyle) + pad2;
+
+            metrics[ci].maxWidth = qMax(metrics[ci].maxWidth, maxW);
+            metrics[ci].minWidth = qMax(metrics[ci].minWidth, minW);
+        }
+    }
+
+    return metrics;
+}
+
+QList<qreal> Engine::distributeColumnsAuto(const QList<ColumnMetrics> &metrics,
+                                            qreal availWidth)
+{
+    const int n = metrics.size();
+    QList<qreal> widths(n);
+
+    qreal totalMin = 0, totalMax = 0;
+    for (const auto &m : metrics) {
+        totalMin += m.minWidth;
+        totalMax += m.maxWidth;
+    }
+
+    if (totalMax <= availWidth) {
+        // All content fits without wrapping — use max widths, distribute surplus
+        qreal surplus = availWidth - totalMax;
+        for (int i = 0; i < n; ++i)
+            widths[i] = metrics[i].maxWidth + surplus / n;
+    } else if (totalMin >= availWidth) {
+        // Can't avoid wrapping — use min widths, distribute proportionally
+        for (int i = 0; i < n; ++i)
+            widths[i] = metrics[i].minWidth * (availWidth / totalMin);
+    } else {
+        // Proportional distribution between min and max
+        qreal W = availWidth - totalMin;
+        qreal D = totalMax - totalMin;
+        for (int i = 0; i < n; ++i)
+            widths[i] = metrics[i].minWidth + (metrics[i].maxWidth - metrics[i].minWidth) * W / D;
+    }
+
+    return widths;
+}
+
+QList<qreal> Engine::distributeColumnsOptimal(const Content::Table &table,
+                                               const QList<ColumnMetrics> &metrics,
+                                               qreal availWidth)
+{
+    const int n = metrics.size();
+
+    // Start with max widths
+    QList<qreal> widths(n);
+    qreal totalWidth = 0;
+    for (int i = 0; i < n; ++i) {
+        widths[i] = metrics[i].maxWidth;
+        totalWidth += widths[i];
+    }
+
+    // If everything fits, distribute surplus evenly
+    if (totalWidth <= availWidth) {
+        qreal surplus = availWidth - totalWidth;
+        for (int i = 0; i < n; ++i)
+            widths[i] += surplus / n;
+        return widths;
+    }
+
+    // Greedy narrowing: repeatedly narrow the column causing least height increase
+    qreal overshoot = totalWidth - availWidth;
+
+    // Helper: measure total height of a column at a given width
+    auto measureColumnHeight = [&](int col, qreal colWidth) -> qreal {
+        qreal totalH = 0;
+        qreal innerWidth = colWidth - table.cellPadding * 2;
+        if (innerWidth < 1)
+            innerWidth = 1;
+
+        for (const auto &row : table.rows) {
+            if (col >= row.cells.size())
+                continue;
+            const auto &cell = row.cells[col];
+            Content::TextStyle cellStyle = cell.style;
+            if (cellStyle.fontFamily.isEmpty()) {
+                cellStyle.fontFamily = QStringLiteral("Noto Serif");
+                cellStyle.fontSize = 11.0;
+            }
+            Content::ParagraphFormat cellFmt;
+            cellFmt.alignment = cell.alignment;
+            auto lines = breakIntoLines(cell.inlines, cellStyle, cellFmt, innerWidth);
+            qreal cellH = table.cellPadding * 2;
+            for (const auto &line : lines)
+                cellH += line.height;
+            totalH += cellH;
+        }
+        return totalH;
+    };
+
+    // Cache current column heights
+    QList<qreal> colHeights(n);
+    for (int i = 0; i < n; ++i)
+        colHeights[i] = measureColumnHeight(i, widths[i]);
+
+    while (overshoot > 0.5) {
+        // Step size: ~5% of overshoot, at least 1pt
+        qreal step = qMax(1.0, overshoot * 0.05);
+
+        int bestCol = -1;
+        qreal bestCost = std::numeric_limits<qreal>::max();
+        qreal bestNewHeight = 0;
+
+        for (int i = 0; i < n; ++i) {
+            // Don't narrow below minWidth
+            if (widths[i] - step < metrics[i].minWidth)
+                continue;
+
+            qreal trialWidth = widths[i] - step;
+            qreal newHeight = measureColumnHeight(i, trialWidth);
+            qreal cost = newHeight - colHeights[i]; // height increase
+
+            if (cost < bestCost) {
+                bestCost = cost;
+                bestCol = i;
+                bestNewHeight = newHeight;
+            }
+        }
+
+        if (bestCol < 0)
+            break; // all columns at minWidth
+
+        widths[bestCol] -= step;
+        colHeights[bestCol] = bestNewHeight;
+        overshoot -= step;
+    }
+
+    // If still over, distribute remaining overshoot proportionally above minWidth
+    totalWidth = 0;
+    for (int i = 0; i < n; ++i)
+        totalWidth += widths[i];
+
+    if (totalWidth > availWidth) {
+        qreal remaining = totalWidth - availWidth;
+        qreal shrinkable = 0;
+        for (int i = 0; i < n; ++i)
+            shrinkable += widths[i] - metrics[i].minWidth;
+
+        if (shrinkable > 0) {
+            for (int i = 0; i < n; ++i) {
+                qreal share = (widths[i] - metrics[i].minWidth) / shrinkable;
+                widths[i] -= remaining * share;
+                widths[i] = qMax(widths[i], metrics[i].minWidth);
+            }
+        }
+    }
+
+    return widths;
 }
 
 } // namespace Layout
