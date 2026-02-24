@@ -17,6 +17,7 @@ public:
 
     DocumentView *documentView() const { return m_documentView; }
     QPlainTextEdit *sourceEditor() const { return m_sourceEditor; }
+    MarkdownHighlighter *markdownHighlighter() const { return m_highlighter; }
 
     void setFilePath(const QString &path) { m_filePath = path; }
     QString filePath() const { return m_filePath; }

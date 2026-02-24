@@ -5,12 +5,20 @@
 MarkdownHighlighter::MarkdownHighlighter(QTextDocument *parent)
     : QSyntaxHighlighter(parent)
 {
+    buildRules();
+}
+
+void MarkdownHighlighter::buildRules()
+{
+    m_rules.clear();
+
     // Headings: # through ######
     {
         Rule rule;
         rule.pattern = QRegularExpression(QStringLiteral("^#{1,6}\\s.*$"));
         rule.format.setFontWeight(QFont::Bold);
-        rule.format.setForeground(QColor(0x00, 0x55, 0x9e));
+        rule.format.setForeground(m_headingColor);
+        m_headingRuleIdx = m_rules.size();
         m_rules.append(rule);
     }
 
@@ -36,20 +44,12 @@ MarkdownHighlighter::MarkdownHighlighter(QTextDocument *parent)
     {
         Rule rule;
         rule.pattern = QRegularExpression(QStringLiteral("`[^`]+`"));
-        rule.format.setForeground(QColor(0xc7, 0x25, 0x4e));
-        rule.format.setBackground(QColor(0xf0, 0xf0, 0xf0));
+        rule.format.setForeground(m_codeTextColor);
+        rule.format.setBackground(m_inlineCodeBgColor);
         QFont mono(QStringLiteral("JetBrains Mono"));
         mono.setStyleHint(QFont::Monospace);
         rule.format.setFont(mono);
-        m_rules.append(rule);
-    }
-
-    // Code fence: ``` or ~~~
-    {
-        Rule rule;
-        rule.pattern = QRegularExpression(QStringLiteral("^(```|~~~).*$"));
-        rule.format.setForeground(QColor(0x6a, 0x73, 0x7d));
-        rule.format.setBackground(QColor(0xf6, 0xf8, 0xfa));
+        m_inlineCodeRuleIdx = m_rules.size();
         m_rules.append(rule);
     }
 
@@ -108,10 +108,62 @@ MarkdownHighlighter::MarkdownHighlighter(QTextDocument *parent)
         rule.format.setForeground(QColor(0x99, 0x99, 0x99));
         m_rules.append(rule);
     }
+
+    // Code fence pattern (used for state tracking, not as a normal rule)
+    m_fencePattern = QRegularExpression(QStringLiteral("^(```|~~~).*$"));
+    m_fenceFormat.setForeground(m_codeTextColor);
+    m_fenceFormat.setBackground(m_codeBgColor);
+
+    // Code body format (lines between fences)
+    m_codeBodyFormat.setForeground(m_codeTextColor);
+    m_codeBodyFormat.setBackground(m_codeBgColor);
+
+    // Table line pattern: lines starting and ending with |
+    m_tablePattern = QRegularExpression(QStringLiteral(R"(^\|.*\|$)"));
+    m_tableFormat.setForeground(m_tableColor);
+}
+
+void MarkdownHighlighter::setPaletteColors(const QColor &headingColor,
+                                            const QColor &codeText,
+                                            const QColor &codeBg,
+                                            const QColor &inlineCodeBg,
+                                            const QColor &tableColor)
+{
+    m_headingColor = headingColor;
+    m_codeTextColor = codeText;
+    m_codeBgColor = codeBg;
+    m_inlineCodeBgColor = inlineCodeBg;
+    m_tableColor = tableColor;
+
+    buildRules();
+    rehighlight();
 }
 
 void MarkdownHighlighter::highlightBlock(const QString &text)
 {
+    // State: 0 = normal, 1 = inside fenced code block
+    int prevState = previousBlockState();
+    bool inCodeBlock = (prevState == 1);
+
+    // Check for fence delimiter
+    auto fenceMatch = m_fencePattern.match(text);
+    if (fenceMatch.hasMatch()) {
+        setFormat(0, text.length(), m_fenceFormat);
+        // Toggle state
+        setCurrentBlockState(inCodeBlock ? 0 : 1);
+        return;
+    }
+
+    if (inCodeBlock) {
+        // Inside code block: apply code body format to entire line
+        setFormat(0, text.length(), m_codeBodyFormat);
+        setCurrentBlockState(1);
+        return;
+    }
+
+    setCurrentBlockState(0);
+
+    // Apply normal rules
     for (const Rule &rule : m_rules) {
         auto it = rule.pattern.globalMatch(text);
         while (it.hasNext()) {
@@ -119,5 +171,11 @@ void MarkdownHighlighter::highlightBlock(const QString &text)
             setFormat(match.capturedStart(), match.capturedLength(),
                       rule.format);
         }
+    }
+
+    // Table lines
+    auto tableMatch = m_tablePattern.match(text);
+    if (tableMatch.hasMatch()) {
+        setFormat(0, text.length(), m_tableFormat);
     }
 }

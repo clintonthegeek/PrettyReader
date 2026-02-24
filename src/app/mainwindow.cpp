@@ -20,6 +20,7 @@
 #include "documentview.h"
 #include "filebrowserdock.h"
 #include "hyphenator.h"
+#include "markdownhighlighter.h"
 #include "metadatastore.h"
 #include "rtfexporter.h"
 #include "shortwords.h"
@@ -1326,6 +1327,13 @@ void MainWindow::rebuildCurrentDocument()
     pal.setColor(QPalette::Base, palette.pageBackground());
     pal.setColor(QPalette::Text, palette.text());
     editor->setPalette(pal);
+
+    tab->markdownHighlighter()->setPaletteColors(
+        palette.headingText(),
+        palette.codeText(),
+        palette.surfaceCode(),
+        palette.surfaceInlineCode(),
+        palette.borderInner());
 
     QString filePath = tab->filePath();
     if (filePath.isEmpty())
