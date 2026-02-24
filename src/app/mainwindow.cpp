@@ -73,6 +73,8 @@
 #include <QTextBlock>
 #include <QVBoxLayout>
 
+#include <functional>
+
 MainWindow::MainWindow(QWidget *parent)
     : KXmlGuiWindow(parent)
 {
@@ -942,6 +944,68 @@ void MainWindow::onFileExportPdf()
         Content::Document filteredDoc = contentDoc;
         if (opts.sectionsModified && !opts.excludedHeadingIndices.isEmpty())
             filteredDoc = ContentFilter::filterSections(contentDoc, opts.excludedHeadingIndices);
+
+        // Substitute TTF font families with Hershey equivalents before layout
+        if (opts.useHersheyFonts) {
+            const TypeSet &typeSet = m_themeComposer->currentTypeSet();
+
+            auto substituteStyle = [&typeSet](Content::TextStyle &style) {
+                QString hershey = typeSet.hersheyFamilyFor(style.fontFamily);
+                if (!hershey.isEmpty())
+                    style.fontFamily = hershey;
+            };
+
+            auto substituteInlines = [&substituteStyle](QList<Content::InlineNode> &inlines) {
+                for (auto &node : inlines) {
+                    std::visit([&](auto &n) {
+                        using T = std::decay_t<decltype(n)>;
+                        if constexpr (std::is_same_v<T, Content::TextRun>)
+                            substituteStyle(n.style);
+                        else if constexpr (std::is_same_v<T, Content::InlineCode>)
+                            substituteStyle(n.style);
+                        else if constexpr (std::is_same_v<T, Content::Link>)
+                            substituteStyle(n.style);
+                        else if constexpr (std::is_same_v<T, Content::FootnoteRef>)
+                            substituteStyle(n.style);
+                    }, node);
+                }
+            };
+
+            std::function<void(QList<Content::BlockNode> &)> substituteBlocks;
+            substituteBlocks = [&](QList<Content::BlockNode> &blocks) {
+                for (auto &block : blocks) {
+                    std::visit([&](auto &b) {
+                        using T = std::decay_t<decltype(b)>;
+                        if constexpr (std::is_same_v<T, Content::Paragraph>) {
+                            substituteInlines(b.inlines);
+                        } else if constexpr (std::is_same_v<T, Content::Heading>) {
+                            substituteInlines(b.inlines);
+                        } else if constexpr (std::is_same_v<T, Content::CodeBlock>) {
+                            substituteStyle(b.style);
+                        } else if constexpr (std::is_same_v<T, Content::BlockQuote>) {
+                            substituteBlocks(b.children);
+                        } else if constexpr (std::is_same_v<T, Content::List>) {
+                            for (auto &item : b.items)
+                                substituteBlocks(item.children);
+                        } else if constexpr (std::is_same_v<T, Content::Table>) {
+                            for (auto &row : b.rows)
+                                for (auto &cell : row.cells) {
+                                    substituteStyle(cell.style);
+                                    substituteInlines(cell.inlines);
+                                }
+                        } else if constexpr (std::is_same_v<T, Content::FootnoteSection>) {
+                            for (auto &fn : b.footnotes) {
+                                substituteStyle(fn.numberStyle);
+                                substituteStyle(fn.textStyle);
+                                substituteInlines(fn.content);
+                            }
+                        }
+                    }, block);
+                }
+            };
+
+            substituteBlocks(filteredDoc.blocks);
+        }
 
         // Layout with filtered content
         m_fontManager->resetUsage();

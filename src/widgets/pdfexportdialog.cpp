@@ -91,8 +91,18 @@ void PdfExportDialog::setupGeneralPage()
     m_xobjectGlyphsCheck->setToolTip(
         i18n("Draws all font glyphs as reusable vector shapes instead of text operators. "
              "Produces smaller files and prevents visible text from interfering with "
-             "markdown copy. Recommended when 'Embed markdown syntax' is enabled."));
+             "markdown copy. Required when 'Embed markdown syntax' is enabled."));
     copyForm->addRow(m_xobjectGlyphsCheck);
+
+    // Markdown copy requires xobject glyphs — force-check and disable
+    connect(m_markdownCopyCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked) {
+            m_xobjectGlyphsCheck->setChecked(true);
+            m_xobjectGlyphsCheck->setEnabled(false);
+        } else {
+            m_xobjectGlyphsCheck->setEnabled(true);
+        }
+    });
 
     layout->addWidget(copyGroup);
 
@@ -461,7 +471,8 @@ void PdfExportDialog::setOptions(const PdfExportOptions &opts)
     m_keywordsEdit->setText(opts.keywords);
     m_markdownCopyCheck->setChecked(opts.markdownCopy);
     m_unwrapParagraphsCheck->setChecked(opts.unwrapParagraphs);
-    m_xobjectGlyphsCheck->setChecked(opts.xobjectGlyphs);
+    m_xobjectGlyphsCheck->setChecked(opts.xobjectGlyphs || opts.markdownCopy);
+    m_xobjectGlyphsCheck->setEnabled(!opts.markdownCopy);
     m_hersheyFontsCheck->setChecked(opts.useHersheyFonts);
 
     // Content — page range
