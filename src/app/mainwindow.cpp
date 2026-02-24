@@ -316,7 +316,7 @@ void MainWindow::setupSidebars()
         m_pageTemplateManager, m_themeComposer, this);
     auto *themeView = new ToolView(i18n("Theme"), m_themePickerDock);
     m_themePickerTabId = m_rightSidebar->addPanel(
-        themeView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Theme"));
+        themeView, QIcon::fromTheme(QStringLiteral("preferences-desktop-theme-global")), i18n("Theme"));
 
     // 2. Type (type set selector + font combos + style tree)
     m_typeDockWidget = new TypeDockWidget(m_typeSetManager, m_themeComposer, this);
@@ -328,7 +328,7 @@ void MainWindow::setupSidebars()
     m_colorDockWidget = new ColorDockWidget(m_paletteManager, m_themeComposer, this);
     auto *colorView = new ToolView(i18n("Color"), m_colorDockWidget);
     m_colorTabId = m_rightSidebar->addPanel(
-        colorView, QIcon::fromTheme(QStringLiteral("color-picker")), i18n("Color"));
+        colorView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Color"));
 
     // 4. Page (template selector + page layout controls)
     m_pageDockWidget = new PageDockWidget(m_pageTemplateManager, this);
@@ -643,7 +643,7 @@ void MainWindow::setupActions()
 
     auto *toggleTheme = ac->addAction(QStringLiteral("view_toggle_theme"));
     toggleTheme->setText(i18n("&Theme Panel"));
-    toggleTheme->setIcon(QIcon::fromTheme(QStringLiteral("color-management")));
+    toggleTheme->setIcon(QIcon::fromTheme(QStringLiteral("preferences-desktop-theme-global")));
     toggleTheme->setCheckable(true);
     connect(toggleTheme, &QAction::triggered, this, [this](bool checked) {
         if (checked)
@@ -675,7 +675,7 @@ void MainWindow::setupActions()
 
     auto *toggleColor = ac->addAction(QStringLiteral("view_toggle_color"));
     toggleColor->setText(i18n("&Color Panel"));
-    toggleColor->setIcon(QIcon::fromTheme(QStringLiteral("color-picker")));
+    toggleColor->setIcon(QIcon::fromTheme(QStringLiteral("color-management")));
     toggleColor->setCheckable(true);
     connect(toggleColor, &QAction::triggered, this, [this](bool checked) {
         if (checked)
