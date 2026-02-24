@@ -60,6 +60,9 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QMenuBar>
+#include <QPalette>
+#include <QPlainTextEdit>
+#include <QScrollBar>
 #include <QAbstractTextDocumentLayout>
 #include <QSlider>
 #include <QSplitter>
@@ -305,6 +308,22 @@ void MainWindow::setupSidebars()
         auto *view = currentDocumentView();
         if (view)
             view->scrollToPosition(page, yOffset);
+    });
+
+    // Source view: ToC click scrolls to source line
+    connect(m_tocWidget, &TocWidget::headingSourceNavigate,
+            this, [this](int sourceLine) {
+        auto *tab = currentDocumentTab();
+        if (!tab || !tab->isSourceMode() || sourceLine < 1)
+            return;
+        auto *editor = tab->sourceEditor();
+        // sourceLine is 1-based, QTextBlock is 0-based
+        QTextBlock block = editor->document()->findBlockByNumber(sourceLine - 1);
+        if (block.isValid()) {
+            QTextCursor cursor(block);
+            editor->setTextCursor(cursor);
+            editor->centerCursor();
+        }
     });
 
     // Right sidebar: Theme + Type + Color + Page
@@ -1300,6 +1319,14 @@ void MainWindow::rebuildCurrentDocument()
     if (!tab)
         return;
 
+    // Apply palette colours to source editor
+    const auto &palette = m_themeComposer->currentPalette();
+    auto *editor = tab->sourceEditor();
+    QPalette pal = editor->palette();
+    pal.setColor(QPalette::Base, palette.pageBackground());
+    pal.setColor(QPalette::Text, palette.text());
+    editor->setPalette(pal);
+
     QString filePath = tab->filePath();
     if (filePath.isEmpty())
         return;
@@ -1677,6 +1704,31 @@ void MainWindow::openFile(const QUrl &url)
             langObj.insert(it.key(), it.value());
         m_metadataStore->setValue(filePath, QStringLiteral("codeBlockLanguages"), langObj);
         rebuildCurrentDocument();
+    });
+
+    // Source view reverse-sync: scrolling the editor highlights the current heading in ToC
+    connect(tab->sourceEditor()->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, [this]() {
+        auto *tab = currentDocumentTab();
+        if (!tab || !tab->isSourceMode())
+            return;
+        auto *editor = tab->sourceEditor();
+        // Find the first visible line (0-based block) → 1-based source line
+        QTextCursor cursor = editor->cursorForPosition(QPoint(0, 0));
+        int topLine = cursor.blockNumber() + 1; // 1-based
+        auto *view = tab->documentView();
+        const auto &hps = view->headingPositions();
+        int bestSourceLine = -1;
+        for (int i = hps.size() - 1; i >= 0; --i) {
+            if (hps[i].sourceLine <= topLine) {
+                bestSourceLine = hps[i].sourceLine;
+                break;
+            }
+        }
+        if (bestSourceLine < 0 && !hps.isEmpty())
+            bestSourceLine = hps.first().sourceLine;
+        if (bestSourceLine > 0)
+            m_tocWidget->highlightHeading(bestSourceLine);
     });
 
     int index = m_tabWidget->addTab(tab, fi.fileName());

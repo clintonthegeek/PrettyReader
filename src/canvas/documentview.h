@@ -75,6 +75,7 @@ public:
     void goToPage(int page);
     void scrollToPosition(int page, qreal yOffset);
     void setHeadingPositions(const QList<HeadingPosition> &positions);
+    const QList<HeadingPosition> &headingPositions() const { return m_headingPositions; }
     void previousPage();
     void nextPage();
     int currentPage() const { return m_currentPage; }

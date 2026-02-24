@@ -27,6 +27,7 @@ public:
 Q_SIGNALS:
     void headingClicked(int blockNumber);
     void headingNavigate(int page, qreal yOffset);
+    void headingSourceNavigate(int sourceLine);
 
 private Q_SLOTS:
     void onItemClicked(QTreeWidgetItem *item, int column);

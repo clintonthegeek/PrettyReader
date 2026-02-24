@@ -661,6 +661,12 @@ void DocumentView::goToPage(int page)
 
 void DocumentView::scrollToPosition(int page, qreal yOffset)
 {
+    if (m_renderMode == WebMode && m_webViewItem) {
+        // Web mode: yOffset is absolute within the single WebViewItem
+        centerOn(0, yOffset);
+        return;
+    }
+
     if (page < 0 || page >= m_pageCount)
         return;
     m_currentPage = page;

@@ -121,9 +121,10 @@ void TocWidget::buildFromContentModel(const Content::Document &doc,
 
         auto *item = new QTreeWidgetItem();
         item->setText(0, text);
-        // Store page in UserRole and y-offset in UserRole+1
+        // Store page in UserRole, y-offset in UserRole+1, source line in UserRole+2
         item->setData(0, Qt::UserRole, page);
         item->setData(0, Qt::UserRole + 1, yOffset);
+        item->setData(0, Qt::UserRole + 2, heading->source.startLine);
 
         // Find the appropriate parent
         QTreeWidgetItem *parent = nullptr;
@@ -166,6 +167,11 @@ void TocWidget::onItemClicked(QTreeWidgetItem *item, int column)
         int page = item->data(0, Qt::UserRole).toInt();
         qreal yOffset = yVar.toDouble();
         Q_EMIT headingNavigate(page, yOffset);
+
+        // Also emit source line for source view navigation
+        QVariant lineVar = item->data(0, Qt::UserRole + 2);
+        if (lineVar.isValid())
+            Q_EMIT headingSourceNavigate(lineVar.toInt());
         return;
     }
 
