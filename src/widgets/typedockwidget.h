@@ -8,8 +8,8 @@
 class QCheckBox;
 class QComboBox;
 class QFontComboBox;
-class QGroupBox;
 class QStackedWidget;
+class QToolBox;
 class QTreeView;
 class FootnoteConfigWidget;
 class ItemSelectorBar;
@@ -67,8 +67,8 @@ private:
     // Type set selector
     ItemSelectorBar *m_selectorBar = nullptr;
 
-    // Font combos
-    QGroupBox *m_fontsGroup = nullptr;
+    // Tool box (Quick Settings / Styles)
+    QToolBox *m_toolBox = nullptr;
     QFontComboBox *m_bodyFontCombo = nullptr;
     QComboBox *m_bodyHersheyCombo = nullptr;
     QFontComboBox *m_headingFontCombo = nullptr;

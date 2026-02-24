@@ -18,13 +18,13 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFontComboBox>
-#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMessageBox>
 #include <QScrollArea>
 #include <QStackedWidget>
+#include <QToolBox>
 #include <QTreeView>
 #include <QVBoxLayout>
 
@@ -64,11 +64,14 @@ void TypeDockWidget::buildUI()
     connect(m_selectorBar, &ItemSelectorBar::deleteRequested,
             this, &TypeDockWidget::onDeleteTypeSet);
 
-    // --- Collapsible Fonts group ---
-    m_fontsGroup = new QGroupBox(tr("Fonts"));
-    m_fontsGroup->setCheckable(true);
-    m_fontsGroup->setChecked(false);
-    auto *fontsLayout = new QVBoxLayout(m_fontsGroup);
+    // --- Tool Box ---
+    m_toolBox = new QToolBox;
+    layout->addWidget(m_toolBox, 1);
+
+    // --- Page 0: Quick Settings ---
+    auto *quickPage = new QWidget;
+    auto *quickLayout = new QVBoxLayout(quickPage);
+    quickLayout->setContentsMargins(0, 0, 0, 0);
 
     auto createFontRow = [&](const QString &label,
                              QFontComboBox *&fontCombo,
@@ -87,7 +90,7 @@ void TypeDockWidget::buildUI()
         hersheyCombo->addItems(hersheyFamilies);
         rowLayout->addWidget(hersheyCombo, 1);
 
-        fontsLayout->addLayout(rowLayout);
+        quickLayout->addLayout(rowLayout);
 
         connect(fontCombo, &QFontComboBox::currentFontChanged,
                 this, &TypeDockWidget::onFontRoleEdited);
@@ -100,28 +103,35 @@ void TypeDockWidget::buildUI()
     createFontRow(tr("Mono:"), m_monoFontCombo, m_monoHersheyCombo,
                   QFontComboBox::MonospacedFonts);
 
-    layout->addWidget(m_fontsGroup);
+    quickLayout->addStretch();
+    m_toolBox->addItem(quickPage, tr("Quick Settings"));
 
-    // --- Style Tree (stretches to fill available space) ---
+    // --- Page 1: Styles ---
+    auto *stylesPage = new QWidget;
+    auto *stylesLayout = new QVBoxLayout(stylesPage);
+    stylesLayout->setContentsMargins(0, 0, 0, 0);
+
     m_showPreviewsCheck = new QCheckBox(tr("Show previews"));
-    layout->addWidget(m_showPreviewsCheck);
+    m_showPreviewsCheck->setChecked(true);
+    stylesLayout->addWidget(m_showPreviewsCheck);
     connect(m_showPreviewsCheck, &QCheckBox::toggled, this, [this](bool checked) {
         m_treeModel->setShowPreviews(checked);
     });
 
     m_treeModel = new StyleTreeModel(this);
+    m_treeModel->setShowPreviews(true);
     m_styleTree = new QTreeView;
     m_styleTree->setModel(m_treeModel);
     m_styleTree->setHeaderHidden(true);
     m_styleTree->setRootIsDecorated(true);
     m_styleTree->setExpandsOnDoubleClick(true);
     m_styleTree->setMinimumHeight(120);
-    layout->addWidget(m_styleTree, 1);
+    stylesLayout->addWidget(m_styleTree, 1);
 
     connect(m_styleTree->selectionModel(), &QItemSelectionModel::currentChanged,
             this, [this]() { onTreeSelectionChanged(); });
 
-    // --- Properties Editor (stacked: paragraph/char, table, footnotes) ---
+    // Properties Editor (stacked: paragraph/char, table, footnotes)
     auto wrapInScroll = [](QWidget *w) -> QScrollArea * {
         auto *sa = new QScrollArea;
         sa->setWidgetResizable(true);
@@ -139,7 +149,9 @@ void TypeDockWidget::buildUI()
     m_editorStack->addWidget(wrapInScroll(m_tablePropsEditor));  // index 1
     m_editorStack->addWidget(wrapInScroll(m_footnoteConfig));    // index 2
     m_editorStack->hide();
-    layout->addWidget(m_editorStack, 1);
+    stylesLayout->addWidget(m_editorStack, 1);
+
+    m_toolBox->addItem(stylesPage, tr("Styles"));
 
     connect(m_propsEditor, &StylePropertiesEditor::propertyChanged,
             this, &TypeDockWidget::onStylePropertyChanged);
