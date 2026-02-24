@@ -56,6 +56,7 @@ struct GlyphBox {
     int textLength = 0;
     bool rtl = false;
     bool trailingSoftHyphen = false; // word ended at a soft hyphen break point
+    bool trailingNbsp = false;       // word ended at a non-breaking space (U+00A0)
     bool startsAfterSoftHyphen = false; // continues a soft-hyphenated word
     bool attachedToPrevious = false;    // no space between this box and previous (mid-word style change)
     bool isListMarker = false; // bullet/number prefix — excluded from justify expansion

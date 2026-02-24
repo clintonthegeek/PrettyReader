@@ -451,6 +451,12 @@ static QList<LineBreaking::Item> buildKPItems(
             if (words[i + 1].gbox.attachedToPrevious)
                 continue;
 
+            // Non-breaking space: infinite penalty prevents line break,
+            // but the following glue still stretches during justification.
+            if (word.gbox.trailingNbsp) {
+                items.append(LineBreaking::Item::makePenalty(0, 10000));
+            }
+
             // Soft hyphen break opportunity
             if (word.gbox.trailingSoftHyphen) {
                 // Hyphen width estimate: ~60% of space width
@@ -527,6 +533,18 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
     if (useSoftHyphens)
         breakPositions.unite(collected.softHyphenPositions);
 
+    // Add non-breaking space (U+00A0) positions as split points.
+    // ICU's line-break iterator doesn't break at nbsp (by design), but we
+    // need separate glyph boxes so that justification can stretch the gap.
+    // The actual no-break constraint is enforced by an infinite penalty in
+    // the Knuth-Plass item list (see buildKPItems).
+    QSet<int> nbspSplitPositions;
+    for (int ci = 0; ci < collected.text.size(); ++ci) {
+        if (collected.text[ci] == QChar(0x00A0) && ci + 1 < collected.text.size())
+            nbspSplitPositions.insert(ci + 1);
+    }
+    breakPositions.unite(nbspSplitPositions);
+
     // Build word-level glyph boxes by splitting shaped runs at break points.
     // Each shaped run may span multiple words. Using HarfBuzz cluster info
     // (character index per glyph), we split at ICU break positions and newlines.
@@ -576,8 +594,11 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             // Check if this glyph starts at a line break opportunity
             if (breakPositions.contains(charPos) && !currentWord.glyphs.isEmpty()) {
                 bool isSoftHyphenBreak = collected.softHyphenPositions.contains(charPos);
+                bool isNbspBreak = nbspSplitPositions.contains(charPos);
                 if (isSoftHyphenBreak)
                     currentWord.trailingSoftHyphen = true;
+                if (isNbspBreak)
+                    currentWord.trailingNbsp = true;
                 // Finalize current word and start a new one
                 words.append({currentWord, false});
                 currentWord = newGlyphBox();

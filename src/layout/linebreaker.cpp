@@ -210,11 +210,18 @@ BreakResult findBreaks(const QList<Item> &items,
             isBreakpoint = true;
 
         // Update prevWasBox for next iteration
-        if (item.type == Item::BoxType)
+        if (item.type == Item::BoxType) {
             prevWasBox = true;
-        else if (item.type != Item::PenaltyType) // glue resets it
-            prevWasBox = false;
-        // penalties don't change prevWasBox
+        } else if (item.type == Item::PenaltyType) {
+            // An infinite penalty (>= 10000) semantically means "never break
+            // here".  Reset prevWasBox so the *subsequent* glue is also not
+            // treated as a breakpoint.  Finite penalties preserve prevWasBox
+            // so the following glue remains a valid break candidate.
+            if (item.penalty.penalty >= 10000)
+                prevWasBox = false;
+        } else {
+            prevWasBox = false; // glue resets it
+        }
 
         if (!isBreakpoint)
             continue;
