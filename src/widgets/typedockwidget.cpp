@@ -152,6 +152,7 @@ void TypeDockWidget::buildUI()
     stylesLayout->addWidget(m_editorStack, 1);
 
     m_toolBox->addItem(stylesPage, tr("Styles"));
+    m_toolBox->setCurrentIndex(1); // Styles open by default
 
     connect(m_propsEditor, &StylePropertiesEditor::propertyChanged,
             this, &TypeDockWidget::onStylePropertyChanged);
