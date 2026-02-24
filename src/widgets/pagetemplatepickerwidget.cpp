@@ -7,7 +7,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include "pagetemplate.h"
@@ -222,14 +221,6 @@ void PageTemplatePickerWidget::rebuildGrid()
         }
     }
 
-    // Add [+] button at the end of the grid
-    auto *addButton = new QToolButton(this);
-    addButton->setText(QStringLiteral("+"));
-    addButton->setFixedSize(120, 50);
-    addButton->setCursor(Qt::PointingHandCursor);
-    addButton->setToolTip(QStringLiteral("Create new page template"));
-    connect(addButton, &QToolButton::clicked, this, &PageTemplatePickerWidget::createRequested);
-    m_gridLayout->addWidget(addButton, row, col);
 }
 
 #include "pagetemplatepickerwidget.moc"

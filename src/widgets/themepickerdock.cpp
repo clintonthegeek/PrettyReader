@@ -1,8 +1,6 @@
 #include "themepickerdock.h"
-#include "paletteeditordialog.h"
 #include "palettepickerwidget.h"
 #include "pagetemplatepickerwidget.h"
-#include "typeseteditordialog.h"
 #include "typesetpickerwidget.h"
 #include "colorpalette.h"
 #include "palettemanager.h"
@@ -43,8 +41,6 @@ void ThemePickerDock::buildUI()
 
     connect(m_typeSetPicker, &TypeSetPickerWidget::typeSetSelected,
             this, &ThemePickerDock::onTypeSetSelected);
-    connect(m_typeSetPicker, &TypeSetPickerWidget::createRequested,
-            this, &ThemePickerDock::onCreateTypeSet);
 
     // --- Color Palette Picker ---
     m_palettePicker = new PalettePickerWidget(m_paletteManager, this);
@@ -52,8 +48,6 @@ void ThemePickerDock::buildUI()
 
     connect(m_palettePicker, &PalettePickerWidget::paletteSelected,
             this, &ThemePickerDock::onPaletteSelected);
-    connect(m_palettePicker, &PalettePickerWidget::createRequested,
-            this, &ThemePickerDock::onCreatePalette);
 
     // --- Page Template Picker (initially hidden — visible in print mode) ---
     m_templateSection = new QWidget(this);
@@ -158,30 +152,3 @@ void ThemePickerDock::onTemplateSelected(const QString &id)
     Q_EMIT templateApplied(tmpl.pageLayout);
 }
 
-void ThemePickerDock::onCreatePalette()
-{
-    PaletteEditorDialog dlg(this);
-    if (dlg.exec() == QDialog::Accepted) {
-        ColorPalette pal = dlg.colorPalette();
-        QString id = m_paletteManager->savePalette(pal);
-        m_palettePicker->setCurrentPaletteId(id);
-        if (m_themeComposer) {
-            m_themeComposer->setColorPalette(m_paletteManager->palette(id));
-            composeAndNotify();
-        }
-    }
-}
-
-void ThemePickerDock::onCreateTypeSet()
-{
-    TypeSetEditorDialog dlg(this);
-    if (dlg.exec() == QDialog::Accepted) {
-        TypeSet ts = dlg.typeSet();
-        QString id = m_typeSetManager->saveTypeSet(ts);
-        m_typeSetPicker->setCurrentTypeSetId(id);
-        if (m_themeComposer) {
-            m_themeComposer->setTypeSet(m_typeSetManager->typeSet(id));
-            composeAndNotify();
-        }
-    }
-}

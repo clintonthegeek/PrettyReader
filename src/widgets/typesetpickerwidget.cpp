@@ -8,7 +8,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include "typeset.h"
@@ -200,14 +199,6 @@ void TypeSetPickerWidget::rebuildGrid()
         }
     }
 
-    // Add [+] button at the end of the grid
-    auto *addButton = new QToolButton(this);
-    addButton->setText(QStringLiteral("+"));
-    addButton->setFixedSize(120, 62);
-    addButton->setCursor(Qt::PointingHandCursor);
-    addButton->setToolTip(QStringLiteral("Create new type set"));
-    connect(addButton, &QToolButton::clicked, this, &TypeSetPickerWidget::createRequested);
-    m_gridLayout->addWidget(addButton, row, col);
 }
 
 #include "typesetpickerwidget.moc"

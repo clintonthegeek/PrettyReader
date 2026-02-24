@@ -19,7 +19,6 @@ public:
 
 Q_SIGNALS:
     void typeSetSelected(const QString &id);
-    void createRequested();
 
 private:
     void rebuildGrid();

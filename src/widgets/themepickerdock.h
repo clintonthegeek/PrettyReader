@@ -48,8 +48,6 @@ private Q_SLOTS:
     void onTypeSetSelected(const QString &id);
     void onPaletteSelected(const QString &id);
     void onTemplateSelected(const QString &id);
-    void onCreatePalette();
-    void onCreateTypeSet();
 
 private:
     void buildUI();

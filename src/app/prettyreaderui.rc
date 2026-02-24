@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE gui SYSTEM "kpartgui.dtd">
-<gui name="prettyreader" version="14">
+<gui name="prettyreader" version="20">
 
   <MenuBar>
     <Menu name="file">
@@ -28,17 +28,16 @@
 
     <Menu name="view">
       <text>&amp;View</text>
+      <Action name="view_web_mode"/>
+      <Action name="view_print_mode"/>
+      <Action name="view_source_mode"/>
+      <Separator/>
       <Action name="view_zoom_in"/>
       <Action name="view_zoom_out"/>
       <Action name="view_zoom_fit_width"/>
       <Action name="view_zoom_fit_page"/>
       <Separator/>
-      <Action name="view_web_mode"/>
-      <Action name="view_print_mode"/>
-      <Separator/>
       <Action name="view_page_arrangement"/>
-      <Separator/>
-      <Action name="view_source_mode"/>
       <Separator/>
       <Action name="tool_hand"/>
       <Action name="tool_selection"/>
@@ -46,7 +45,8 @@
       <Action name="view_toggle_files"/>
       <Action name="view_toggle_toc"/>
       <Action name="view_toggle_theme"/>
-      <Action name="view_toggle_style"/>
+      <Action name="view_toggle_type"/>
+      <Action name="view_toggle_color"/>
     </Menu>
 
     <Menu name="go">
@@ -73,24 +73,21 @@
   <ToolBar name="mainToolBar">
     <text>Main Toolbar</text>
     <Action name="file_open"/>
+    <Action name="file_print"/>
+    <Action name="file_export_pdf"/>
+    <Separator/>
+    <Action name="tool_hand"/>
+    <Action name="tool_selection"/>
+    <Action name="edit_copy"/>
+    <Separator/>
+    <Action name="view_web_mode"/>
+    <Action name="view_print_mode"/>
+    <Action name="view_source_mode"/>
     <Separator/>
     <Action name="view_zoom_out"/>
     <Action name="view_zoom_in"/>
     <Action name="view_zoom_fit_width"/>
-    <Separator/>
-    <Action name="view_web_mode"/>
-    <Action name="view_print_mode"/>
-    <Separator/>
     <Action name="view_page_arrangement"/>
-    <Separator/>
-    <Action name="go_previous_page"/>
-    <Action name="go_next_page"/>
-    <Separator/>
-    <Action name="tool_hand"/>
-    <Action name="tool_selection"/>
-    <Separator/>
-    <Action name="file_print"/>
-    <Action name="file_export_pdf"/>
   </ToolBar>
 
 </gui>

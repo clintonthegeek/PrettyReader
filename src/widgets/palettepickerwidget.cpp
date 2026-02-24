@@ -7,7 +7,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
-#include <QToolButton>
 #include <QVBoxLayout>
 
 #include "colorpalette.h"
@@ -196,14 +195,6 @@ void PalettePickerWidget::rebuildGrid()
         }
     }
 
-    // Add [+] button at the end of the grid
-    auto *addButton = new QToolButton(this);
-    addButton->setText(QStringLiteral("+"));
-    addButton->setFixedSize(75, 52);
-    addButton->setCursor(Qt::PointingHandCursor);
-    addButton->setToolTip(QStringLiteral("Create new palette"));
-    connect(addButton, &QToolButton::clicked, this, &PalettePickerWidget::createRequested);
-    m_gridLayout->addWidget(addButton, row, col);
 }
 
 #include "palettepickerwidget.moc"

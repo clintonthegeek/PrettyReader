@@ -17,14 +17,15 @@ class FontManager;
 class PageTemplateManager;
 class TypeSetManager;
 class MetadataStore;
-class PageLayoutWidget;
+class ColorDockWidget;
+class PageDockWidget;
 class PaletteManager;
 class Sidebar;
 class TextShaper;
 class ThemeComposer;
 class TocWidget;
 class ThemeManager;
-class StyleDockWidget;
+class TypeDockWidget;
 class ThemePickerDock;
 class DocumentTab;
 class DocumentView;
@@ -59,7 +60,6 @@ private slots:
     void onZoomOut();
     void onFitWidth();
     void onFitPage();
-    void onToggleSourceMode();
     void showPreferences();
     void onSettingsChanged();
     void onRenderModeChanged();
@@ -81,15 +81,17 @@ private:
     Sidebar *m_rightSidebar = nullptr;
     int m_filesBrowserTabId = -1;
     int m_tocTabId = -1;
-    int m_styleTabId = -1;
+    int m_typeTabId = -1;
+    int m_colorTabId = -1;
 
     ThemePickerDock *m_themePickerDock = nullptr;
     int m_themePickerTabId = -1;
-    StyleDockWidget *m_styleDockWidget = nullptr;
-    PageLayoutWidget *m_pageLayoutWidget = nullptr;
+    TypeDockWidget *m_typeDockWidget = nullptr;
+    ColorDockWidget *m_colorDockWidget = nullptr;
+    PageDockWidget *m_pageDockWidget = nullptr;
     FileBrowserDock *m_fileBrowserWidget = nullptr;
     TocWidget *m_tocWidget = nullptr;
-    int m_pageLayoutTabId = -1;
+    int m_pageTabId = -1;
     KRecentFilesAction *m_recentFilesAction = nullptr;
     ThemeManager *m_themeManager = nullptr;
     PaletteManager *m_paletteManager = nullptr;
@@ -107,9 +109,11 @@ private:
     FontManager *m_fontManager = nullptr;
     TextShaper *m_textShaper = nullptr;
 
-    // Render mode (Print vs Web)
+    // Render mode (Web / Print / Source)
     QAction *m_webViewAction = nullptr;
     QAction *m_printViewAction = nullptr;
+    QAction *m_sourceViewAction = nullptr;
+    QAction *m_fitWidthAction = nullptr;
     KActionMenu *m_pageArrangementMenu = nullptr;
 };
 

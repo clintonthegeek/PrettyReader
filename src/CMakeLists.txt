@@ -109,8 +109,16 @@ add_library(PrettyReaderCore STATIC
     widgets/pagelayoutwidget.h
     widgets/sidebar.cpp
     widgets/sidebar.h
-    widgets/styledockwidget.cpp
-    widgets/styledockwidget.h
+    widgets/itemselectorbar.cpp
+    widgets/itemselectorbar.h
+    widgets/typedockwidget.cpp
+    widgets/typedockwidget.h
+    widgets/colordockwidget.cpp
+    widgets/colordockwidget.h
+    widgets/colorselectorwidget.cpp
+    widgets/colorselectorwidget.h
+    widgets/pagedockwidget.cpp
+    widgets/pagedockwidget.h
     widgets/stylepropertieseditor.cpp
     widgets/stylepropertieseditor.h
     widgets/tablestylepropertieseditor.cpp
@@ -135,14 +143,10 @@ add_library(PrettyReaderCore STATIC
     widgets/documenttab.h
     widgets/palettepickerwidget.cpp
     widgets/palettepickerwidget.h
-    widgets/paletteeditordialog.cpp
-    widgets/paletteeditordialog.h
     widgets/pagetemplatepickerwidget.cpp
     widgets/pagetemplatepickerwidget.h
     widgets/typesetpickerwidget.cpp
     widgets/typesetpickerwidget.h
-    widgets/typeseteditordialog.cpp
-    widgets/typeseteditordialog.h
     widgets/themepickerdock.cpp
     widgets/themepickerdock.h
 )

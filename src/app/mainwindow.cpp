@@ -10,7 +10,8 @@
 #include <KSharedConfig>
 
 #include "pagelayout.h"
-#include "pagelayoutwidget.h"
+#include "colordockwidget.h"
+#include "pagedockwidget.h"
 #include "sidebar.h"
 #include "toolview.h"
 #include "codeblockhighlighter.h"
@@ -25,7 +26,7 @@
 #include "tocwidget.h"
 #include "printcontroller.h"
 #include "stylemanager.h"
-#include "styledockwidget.h"
+#include "typedockwidget.h"
 #include "themepickerdock.h"
 #include "typeset.h"
 #include "typesetmanager.h"
@@ -109,6 +110,18 @@ MainWindow::MainWindow(QWidget *parent)
         } else {
             if (m_filePathLabel)
                 m_filePathLabel->clear();
+        }
+
+        // Sync view mode actions with current tab state
+        if (tab && tab->isSourceMode()) {
+            if (m_sourceViewAction)
+                m_sourceViewAction->setChecked(true);
+        } else {
+            bool webMode = PrettyReaderSettings::self()->useWebView();
+            if (webMode && m_webViewAction)
+                m_webViewAction->setChecked(true);
+            else if (!webMode && m_printViewAction)
+                m_printViewAction->setChecked(true);
         }
     });
 
@@ -294,10 +307,10 @@ void MainWindow::setupSidebars()
             view->scrollToPosition(page, yOffset);
     });
 
-    // Right sidebar: Theme + Style + Page Layout
+    // Right sidebar: Theme + Type + Color + Page
     m_rightSidebar = new Sidebar(Sidebar::Right, this);
 
-    // 1. Theme Picker (first panel)
+    // 1. Theme Picker (preview-only quick-picker grids)
     m_themePickerDock = new ThemePickerDock(
         m_themeManager, m_paletteManager, m_typeSetManager,
         m_pageTemplateManager, m_themeComposer, this);
@@ -305,38 +318,75 @@ void MainWindow::setupSidebars()
     m_themePickerTabId = m_rightSidebar->addPanel(
         themeView, QIcon::fromTheme(QStringLiteral("color-management")), i18n("Theme"));
 
-    // 2. Style (simplified -- tree + property editors only)
-    m_styleDockWidget = new StyleDockWidget(this);
-    auto *styleView = new ToolView(i18n("Style"), m_styleDockWidget);
-    m_styleTabId = m_rightSidebar->addPanel(
-        styleView, QIcon::fromTheme(QStringLiteral("preferences-desktop-font")), i18n("Style"));
+    // 2. Type (type set selector + font combos + style tree)
+    m_typeDockWidget = new TypeDockWidget(m_typeSetManager, m_themeComposer, this);
+    auto *typeView = new ToolView(i18n("Type"), m_typeDockWidget);
+    m_typeTabId = m_rightSidebar->addPanel(
+        typeView, QIcon::fromTheme(QStringLiteral("preferences-desktop-font")), i18n("Type"));
 
-    // 3. Page Layout
-    m_pageLayoutWidget = new PageLayoutWidget(this);
-    auto *pageView = new ToolView(i18n("Page"), m_pageLayoutWidget);
-    m_pageLayoutTabId = m_rightSidebar->addPanel(
+    // 3. Color (palette selector + color editors)
+    m_colorDockWidget = new ColorDockWidget(m_paletteManager, m_themeComposer, this);
+    auto *colorView = new ToolView(i18n("Color"), m_colorDockWidget);
+    m_colorTabId = m_rightSidebar->addPanel(
+        colorView, QIcon::fromTheme(QStringLiteral("color-picker")), i18n("Color"));
+
+    // 4. Page (template selector + page layout controls)
+    m_pageDockWidget = new PageDockWidget(m_pageTemplateManager, this);
+    auto *pageView = new ToolView(i18n("Page"), m_pageDockWidget);
+    m_pageTabId = m_rightSidebar->addPanel(
         pageView, QIcon::fromTheme(QStringLiteral("document-properties")), i18n("Page"));
 
-    // Wire signals
+    // Wire Theme picker -> editing docks (grid click syncs dropdown)
     connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
             this, &MainWindow::onCompositionApplied);
     connect(m_themePickerDock, &ThemePickerDock::templateApplied,
             this, [this](const PageLayout &templateLayout) {
-        // Merge template's page layout with current palette's page background
         PageLayout pl = templateLayout;
         QColor pageBg = m_themeComposer->currentPalette().pageBackground();
         if (pageBg.isValid())
             pl.pageBackground = pageBg;
-        m_pageLayoutWidget->setPageLayout(pl);
+        m_pageDockWidget->setPageLayout(pl);
         auto *view = currentDocumentView();
         if (view)
             view->setPageLayout(pl);
         rebuildCurrentDocument();
     });
-    connect(m_styleDockWidget, &StyleDockWidget::styleOverrideChanged,
+
+    // Wire Type dock
+    connect(m_typeDockWidget, &TypeDockWidget::styleOverrideChanged,
             this, &MainWindow::onStyleOverrideChanged);
-    connect(m_pageLayoutWidget, &PageLayoutWidget::pageLayoutChanged,
+    connect(m_typeDockWidget, &TypeDockWidget::typeSetChanged,
+            this, [this](const QString &id) {
+        m_themePickerDock->setCurrentTypeSetId(id);
+        onCompositionApplied();
+    });
+
+    // Wire Color dock
+    connect(m_colorDockWidget, &ColorDockWidget::paletteChanged,
+            this, [this](const QString &id) {
+        m_themePickerDock->setCurrentColorSchemeId(id);
+        onCompositionApplied();
+    });
+
+    // Wire Page dock
+    connect(m_pageDockWidget, &PageDockWidget::pageLayoutChanged,
             this, &MainWindow::onPageLayoutChanged);
+    connect(m_pageDockWidget, &PageDockWidget::templateChanged,
+            this, [this](const QString &id) {
+        m_themePickerDock->setCurrentTemplateId(id);
+    });
+
+    // Cross-sync: Theme grid click -> editing dock dropdowns
+    // Type set grid -> Type dock dropdown
+    connect(m_themePickerDock, &ThemePickerDock::compositionApplied,
+            this, [this]() {
+        QString tsId = m_themePickerDock->currentTypeSetId();
+        if (!tsId.isEmpty())
+            m_typeDockWidget->setCurrentTypeSetId(tsId);
+        QString palId = m_themePickerDock->currentColorSchemeId();
+        if (!palId.isEmpty())
+            m_colorDockWidget->setCurrentPaletteId(palId);
+    });
 }
 
 void MainWindow::setupActions()
@@ -362,6 +412,7 @@ void MainWindow::setupActions()
     auto *exportPdf = ac->addAction(QStringLiteral("file_export_pdf"));
     exportPdf->setText(i18n("Export as &PDF..."));
     exportPdf->setIcon(QIcon::fromTheme(QStringLiteral("document-export")));
+    exportPdf->setPriority(QAction::LowPriority);
     connect(exportPdf, &QAction::triggered, this, &MainWindow::onFileExportPdf);
 
     // File > Export RTF
@@ -384,31 +435,20 @@ void MainWindow::setupActions()
     auto *zoomOutAction = KStandardAction::zoomOut(this, &MainWindow::onZoomOut, ac);
     zoomOutAction->setPriority(QAction::LowPriority);
 
-    auto *fitWidth = ac->addAction(QStringLiteral("view_zoom_fit_width"));
-    fitWidth->setText(i18n("Fit &Width"));
-    fitWidth->setIcon(QIcon::fromTheme(QStringLiteral("zoom-fit-width")));
-    connect(fitWidth, &QAction::triggered, this, &MainWindow::onFitWidth);
+    m_fitWidthAction = ac->addAction(QStringLiteral("view_zoom_fit_width"));
+    m_fitWidthAction->setText(i18n("Fit &Width"));
+    m_fitWidthAction->setIcon(QIcon::fromTheme(QStringLiteral("zoom-fit-width")));
+    m_fitWidthAction->setEnabled(!PrettyReaderSettings::self()->useWebView());
+    connect(m_fitWidthAction, &QAction::triggered, this, &MainWindow::onFitWidth);
 
     auto *fitPage = ac->addAction(QStringLiteral("view_zoom_fit_page"));
     fitPage->setText(i18n("Fit &Page"));
     fitPage->setIcon(QIcon::fromTheme(QStringLiteral("zoom-fit-page")));
     connect(fitPage, &QAction::triggered, this, &MainWindow::onFitPage);
 
-    // View > Render Mode (Print vs Web)
+    // View > Render Mode (Web / Print / Source — exclusive group)
     auto *renderModeGroup = new QActionGroup(this);
     renderModeGroup->setExclusive(true);
-
-    m_printViewAction = ac->addAction(QStringLiteral("view_print_mode"));
-    m_printViewAction->setText(i18n("&Print View"));
-    m_printViewAction->setIcon(QIcon::fromTheme(QStringLiteral("document-print-preview")));
-    m_printViewAction->setCheckable(true);
-    m_printViewAction->setChecked(!PrettyReaderSettings::self()->useWebView());
-    m_printViewAction->setActionGroup(renderModeGroup);
-    connect(m_printViewAction, &QAction::triggered, this, [this]() {
-        PrettyReaderSettings::self()->setUseWebView(false);
-        PrettyReaderSettings::self()->save();
-        onRenderModeChanged();
-    });
 
     m_webViewAction = ac->addAction(QStringLiteral("view_web_mode"));
     m_webViewAction->setText(i18n("&Web View"));
@@ -417,9 +457,47 @@ void MainWindow::setupActions()
     m_webViewAction->setChecked(PrettyReaderSettings::self()->useWebView());
     m_webViewAction->setActionGroup(renderModeGroup);
     connect(m_webViewAction, &QAction::triggered, this, [this]() {
+        // Exit source mode if active
+        auto *tab = currentDocumentTab();
+        if (tab && tab->isSourceMode())
+            tab->setSourceMode(false);
         PrettyReaderSettings::self()->setUseWebView(true);
         PrettyReaderSettings::self()->save();
         onRenderModeChanged();
+    });
+
+    m_printViewAction = ac->addAction(QStringLiteral("view_print_mode"));
+    m_printViewAction->setText(i18n("&Print View"));
+    m_printViewAction->setIcon(QIcon::fromTheme(QStringLiteral("document-print-preview")));
+    m_printViewAction->setCheckable(true);
+    m_printViewAction->setChecked(!PrettyReaderSettings::self()->useWebView());
+    m_printViewAction->setActionGroup(renderModeGroup);
+    connect(m_printViewAction, &QAction::triggered, this, [this]() {
+        auto *tab = currentDocumentTab();
+        if (tab && tab->isSourceMode())
+            tab->setSourceMode(false);
+        PrettyReaderSettings::self()->setUseWebView(false);
+        PrettyReaderSettings::self()->save();
+        onRenderModeChanged();
+    });
+
+    m_sourceViewAction = ac->addAction(QStringLiteral("view_source_mode"));
+    m_sourceViewAction->setText(i18n("&Source View"));
+    m_sourceViewAction->setIcon(QIcon::fromTheme(QStringLiteral("text-x-script")));
+    m_sourceViewAction->setCheckable(true);
+    m_sourceViewAction->setActionGroup(renderModeGroup);
+    ac->setDefaultShortcut(m_sourceViewAction, QKeySequence(Qt::CTRL | Qt::Key_U));
+    connect(m_sourceViewAction, &QAction::triggered, this, [this]() {
+        auto *tab = currentDocumentTab();
+        if (!tab)
+            return;
+        tab->setSourceMode(true);
+        // Fit Width and Page Arrangement only apply to Print view
+        if (m_fitWidthAction)
+            m_fitWidthAction->setEnabled(false);
+        if (m_pageArrangementMenu)
+            m_pageArrangementMenu->setEnabled(false);
+        statusBar()->showMessage(i18n("Source view"), 2000);
     });
 
     // View > Mode (exclusive action group)
@@ -498,6 +576,7 @@ void MainWindow::setupActions()
         QIcon::fromTheme(QStringLiteral("view-list-details")),
         i18n("Page &Arrangement"), this);
     ac->addAction(QStringLiteral("view_page_arrangement"), arrangementMenu);
+    arrangementMenu->setPriority(QAction::LowPriority);
     m_pageArrangementMenu = arrangementMenu;
     arrangementMenu->addAction(continuous);
     arrangementMenu->addAction(singlePage);
@@ -528,15 +607,6 @@ void MainWindow::setupActions()
         if (view)
             view->nextPage();
     });
-
-    // View > Source Mode
-    auto *sourceMode = ac->addAction(QStringLiteral("view_source_mode"));
-    sourceMode->setText(i18n("&Source Mode"));
-    sourceMode->setIcon(QIcon::fromTheme(QStringLiteral("text-x-script")));
-    sourceMode->setCheckable(true);
-    ac->setDefaultShortcut(sourceMode, QKeySequence(Qt::CTRL | Qt::Key_U));
-    connect(sourceMode, &QAction::triggered,
-            this, &MainWindow::onToggleSourceMode);
 
     // Sidebar toggle actions
     auto *toggleFiles = ac->addAction(QStringLiteral("view_toggle_files"));
@@ -587,20 +657,36 @@ void MainWindow::setupActions()
             toggleTheme->setChecked(visible);
     });
 
-    auto *toggleStyle = ac->addAction(QStringLiteral("view_toggle_style"));
-    toggleStyle->setText(i18n("&Style Panel"));
-    toggleStyle->setIcon(QIcon::fromTheme(QStringLiteral("preferences-desktop-font")));
-    toggleStyle->setCheckable(true);
-    connect(toggleStyle, &QAction::triggered, this, [this](bool checked) {
+    auto *toggleType = ac->addAction(QStringLiteral("view_toggle_type"));
+    toggleType->setText(i18n("T&ype Panel"));
+    toggleType->setIcon(QIcon::fromTheme(QStringLiteral("preferences-desktop-font")));
+    toggleType->setCheckable(true);
+    connect(toggleType, &QAction::triggered, this, [this](bool checked) {
         if (checked)
-            m_rightSidebar->showPanel(m_styleTabId);
+            m_rightSidebar->showPanel(m_typeTabId);
         else
-            m_rightSidebar->hidePanel(m_styleTabId);
+            m_rightSidebar->hidePanel(m_typeTabId);
     });
     connect(m_rightSidebar, &Sidebar::panelVisibilityChanged,
-            this, [this, toggleStyle](int tabId, bool visible) {
-        if (tabId == m_styleTabId)
-            toggleStyle->setChecked(visible);
+            this, [this, toggleType](int tabId, bool visible) {
+        if (tabId == m_typeTabId)
+            toggleType->setChecked(visible);
+    });
+
+    auto *toggleColor = ac->addAction(QStringLiteral("view_toggle_color"));
+    toggleColor->setText(i18n("&Color Panel"));
+    toggleColor->setIcon(QIcon::fromTheme(QStringLiteral("color-picker")));
+    toggleColor->setCheckable(true);
+    connect(toggleColor, &QAction::triggered, this, [this](bool checked) {
+        if (checked)
+            m_rightSidebar->showPanel(m_colorTabId);
+        else
+            m_rightSidebar->hidePanel(m_colorTabId);
+    });
+    connect(m_rightSidebar, &Sidebar::panelVisibilityChanged,
+            this, [this, toggleColor](int tabId, bool visible) {
+        if (tabId == m_colorTabId)
+            toggleColor->setChecked(visible);
     });
 
     // B1: Cursor mode toggle actions
@@ -609,12 +695,14 @@ void MainWindow::setupActions()
     handTool->setIcon(QIcon::fromTheme(QStringLiteral("transform-browse")));
     handTool->setCheckable(true);
     handTool->setChecked(true);
+    handTool->setPriority(QAction::LowPriority);
     ac->setDefaultShortcut(handTool, QKeySequence(Qt::CTRL | Qt::Key_1));
 
     auto *selectTool = ac->addAction(QStringLiteral("tool_selection"));
     selectTool->setText(i18n("&Text Selection"));
     selectTool->setIcon(QIcon::fromTheme(QStringLiteral("edit-select-text")));
     selectTool->setCheckable(true);
+    selectTool->setPriority(QAction::LowPriority);
     ac->setDefaultShortcut(selectTool, QKeySequence(Qt::CTRL | Qt::Key_2));
 
     auto *toolGroup = new QActionGroup(this);
@@ -631,11 +719,20 @@ void MainWindow::setupActions()
         if (view) view->setCursorMode(DocumentView::SelectionTool);
     });
 
-    // B2: Copy action (Ctrl+C)
-    KStandardAction::copy(this, [this]() {
+    // B2: Copy action (Ctrl+C) — disabled when hand tool is active
+    auto *copyAction = KStandardAction::copy(this, [this]() {
         auto *view = currentDocumentView();
         if (view) view->copySelection();
     }, ac);
+    copyAction->setPriority(QAction::LowPriority);
+    copyAction->setEnabled(false); // hand tool is default
+
+    connect(selectTool, &QAction::triggered, copyAction, [copyAction]() {
+        copyAction->setEnabled(true);
+    });
+    connect(handTool, &QAction::triggered, copyAction, [copyAction]() {
+        copyAction->setEnabled(false);
+    });
 
     // Copy as Styled Text (RTF)
     auto *copyRtf = ac->addAction(QStringLiteral("edit_copy_rtf"));
@@ -715,7 +812,7 @@ void MainWindow::onFileExportPdf()
             file.close();
         }
 
-        StyleManager *editingSm = m_styleDockWidget->currentStyleManager();
+        StyleManager *editingSm = m_typeDockWidget->currentStyleManager();
         StyleManager *styleManager;
         if (editingSm) {
             styleManager = editingSm->clone(this);
@@ -725,7 +822,7 @@ void MainWindow::onFileExportPdf()
         }
 
         QFileInfo fi(filePath);
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        PageLayout pl = m_pageDockWidget->currentPageLayout();
 
         // Build content (needed for heading tree + page count)
         ContentBuilder contentBuilder;
@@ -867,7 +964,7 @@ void MainWindow::onFileExportPdf()
             return;
         }
         auto *controller = new PrintController(view->document(), this);
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        PageLayout pl = m_pageDockWidget->currentPageLayout();
         controller->setPageLayout(pl);
         QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
         controller->setFileName(title);
@@ -910,7 +1007,7 @@ void MainWindow::onFilePrint()
         // New pipeline: use PrintController with Poppler-based printing
         auto *controller = new PrintController(nullptr, this);
         controller->setPdfData(view->pdfData());
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        PageLayout pl = m_pageDockWidget->currentPageLayout();
         controller->setPageLayout(pl);
         QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
         controller->setFileName(title);
@@ -923,7 +1020,7 @@ void MainWindow::onFilePrint()
             return;
         }
         auto *controller = new PrintController(view->document(), this);
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        PageLayout pl = m_pageDockWidget->currentPageLayout();
         controller->setPageLayout(pl);
         QString title = m_tabWidget->tabText(m_tabWidget->currentIndex());
         controller->setFileName(title);
@@ -945,16 +1042,16 @@ void MainWindow::onCompositionApplied()
     // Compose a fresh StyleManager and seed the style dock with it
     auto *sm = new StyleManager(this);
     m_themeComposer->compose(sm);
-    m_styleDockWidget->populateFromStyleManager(sm);
+    m_typeDockWidget->populateFromStyleManager(sm);
     delete sm;
 
     // Page layout is driven by template selection + manual PageLayoutWidget edits.
     // Here we only update the page background from the palette.
     QColor pageBg = m_themeComposer->currentPalette().pageBackground();
     if (pageBg.isValid()) {
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        PageLayout pl = m_pageDockWidget->currentPageLayout();
         pl.pageBackground = pageBg;
-        m_pageLayoutWidget->setPageLayout(pl);
+        m_pageDockWidget->setPageLayout(pl);
         auto *view = currentDocumentView();
         if (view)
             view->setPageLayout(pl);
@@ -968,9 +1065,9 @@ void MainWindow::onStyleOverrideChanged()
     // Update page background from the current palette
     QColor pageBg = m_themeComposer->currentPalette().pageBackground();
     if (pageBg.isValid()) {
-        PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+        PageLayout pl = m_pageDockWidget->currentPageLayout();
         pl.pageBackground = pageBg;
-        m_pageLayoutWidget->setPageLayout(pl);
+        m_pageDockWidget->setPageLayout(pl);
         auto *view = currentDocumentView();
         if (view)
             view->setPageLayout(pl);
@@ -981,7 +1078,7 @@ void MainWindow::onStyleOverrideChanged()
 
 void MainWindow::onPageLayoutChanged()
 {
-    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+    PageLayout pl = m_pageDockWidget->currentPageLayout();
     auto *view = currentDocumentView();
     if (view)
         view->setPageLayout(pl);
@@ -1016,23 +1113,6 @@ void MainWindow::onFitPage()
         view->fitPage();
 }
 
-void MainWindow::onToggleSourceMode()
-{
-    auto *tab = currentDocumentTab();
-    if (!tab)
-        return;
-
-    bool enteringSource = !tab->isSourceMode();
-    tab->setSourceMode(enteringSource);
-
-    if (!enteringSource) {
-        // Switching back to reader mode - rebuild from source text
-        rebuildCurrentDocument();
-    }
-
-    statusBar()->showMessage(
-        enteringSource ? i18n("Source mode") : i18n("Reader mode"), 2000);
-}
 
 DocumentView *MainWindow::currentDocumentView() const
 {
@@ -1079,14 +1159,17 @@ void MainWindow::onSettingsChanged()
 void MainWindow::onRenderModeChanged()
 {
     bool webMode = PrettyReaderSettings::self()->useWebView();
+    bool printMode = !webMode;
 
     // Show/hide template picker based on render mode
     if (m_themePickerDock)
-        m_themePickerDock->setRenderMode(!webMode);
+        m_themePickerDock->setRenderMode(printMode);
 
-    // Enable/disable page arrangement (not meaningful in web mode)
+    // Fit Width and Page Arrangement only make sense in Print view
+    if (m_fitWidthAction)
+        m_fitWidthAction->setEnabled(printMode);
     if (m_pageArrangementMenu)
-        m_pageArrangementMenu->setEnabled(!webMode);
+        m_pageArrangementMenu->setEnabled(printMode);
 
     auto *view = currentDocumentView();
     if (view)
@@ -1113,18 +1196,20 @@ void MainWindow::saveSession()
     if (!m_rightSidebar->isCollapsed()) {
         if (m_rightSidebar->isPanelVisible(m_themePickerTabId))
             group.writeEntry("RightActivePanel", QStringLiteral("theme"));
-        else if (m_rightSidebar->isPanelVisible(m_styleTabId))
-            group.writeEntry("RightActivePanel", QStringLiteral("style"));
+        else if (m_rightSidebar->isPanelVisible(m_typeTabId))
+            group.writeEntry("RightActivePanel", QStringLiteral("type"));
+        else if (m_rightSidebar->isPanelVisible(m_colorTabId))
+            group.writeEntry("RightActivePanel", QStringLiteral("color"));
         else
             group.writeEntry("RightActivePanel", QStringLiteral("page"));
     }
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
 
-    // Save current type set + color scheme + page template
-    group.writeEntry("TypeSet", m_themePickerDock->currentTypeSetId());
-    group.writeEntry("ColorScheme", m_themePickerDock->currentColorSchemeId());
-    group.writeEntry("PageTemplate", m_themePickerDock->currentTemplateId());
+    // Save current type set + color scheme + page template from editing docks
+    group.writeEntry("TypeSet", m_typeDockWidget->currentTypeSetId());
+    group.writeEntry("ColorScheme", m_colorDockWidget->currentPaletteId());
+    group.writeEntry("PageTemplate", m_pageDockWidget->currentTemplateId());
 
     group.sync();
 }
@@ -1149,13 +1234,15 @@ void MainWindow::restoreSession()
             m_leftSidebar->showPanel(m_tocTabId);
     }
     if (!rightCollapsed) {
-        QString rightPanel = group.readEntry("RightActivePanel", QStringLiteral("style"));
+        QString rightPanel = group.readEntry("RightActivePanel", QStringLiteral("type"));
         if (rightPanel == QLatin1String("theme"))
             m_rightSidebar->showPanel(m_themePickerTabId);
+        else if (rightPanel == QLatin1String("color"))
+            m_rightSidebar->showPanel(m_colorTabId);
         else if (rightPanel == QLatin1String("page"))
-            m_rightSidebar->showPanel(m_pageLayoutTabId);
-        else
-            m_rightSidebar->showPanel(m_styleTabId);
+            m_rightSidebar->showPanel(m_pageTabId);
+        else // "type" or legacy "style"
+            m_rightSidebar->showPanel(m_typeTabId);
     }
 
     // Restore splitter proportions from last session
@@ -1190,10 +1277,17 @@ void MainWindow::restoreSession()
 
     m_themePickerDock->syncPickersFromComposer();
 
+    // Sync editing dock dropdowns
+    if (!typeSetId.isEmpty())
+        m_typeDockWidget->setCurrentTypeSetId(typeSetId);
+    if (!colorId.isEmpty())
+        m_colorDockWidget->setCurrentPaletteId(colorId);
+
     // Restore page template selection
     QString templateId = group.readEntry("PageTemplate", QString());
     if (!templateId.isEmpty()) {
         m_themePickerDock->setCurrentTemplateId(templateId);
+        m_pageDockWidget->setCurrentTemplateId(templateId);
     }
 
     if (changed)
@@ -1223,7 +1317,7 @@ void MainWindow::rebuildCurrentDocument()
     }
 
     // Use the editing copy from the style dock, or load fresh if none
-    StyleManager *editingSm = m_styleDockWidget->currentStyleManager();
+    StyleManager *editingSm = m_typeDockWidget->currentStyleManager();
     StyleManager *styleManager;
     if (editingSm) {
         styleManager = editingSm->clone(this);
@@ -1237,7 +1331,7 @@ void MainWindow::rebuildCurrentDocument()
         return;
 
     ViewState state = view->saveViewState();
-    PageLayout pl = m_pageLayoutWidget->currentPageLayout();
+    PageLayout pl = m_pageDockWidget->currentPageLayout();
     QFileInfo fi(filePath);
 
     if (PrettyReaderSettings::self()->usePdfRenderer()) {
@@ -1420,7 +1514,7 @@ void MainWindow::openFile(const QUrl &url)
     file.close();
 
     // Build document with style manager (use editing copy if available)
-    StyleManager *editingSm = m_styleDockWidget->currentStyleManager();
+    StyleManager *editingSm = m_typeDockWidget->currentStyleManager();
     StyleManager *styleManager;
     if (editingSm) {
         styleManager = editingSm->clone(this);
@@ -1432,7 +1526,7 @@ void MainWindow::openFile(const QUrl &url)
     auto *tab = new DocumentTab(this);
     tab->setFilePath(filePath);
     tab->setSourceText(markdown);
-    PageLayout openPl = m_pageLayoutWidget->currentPageLayout();
+    PageLayout openPl = m_pageDockWidget->currentPageLayout();
     tab->documentView()->setPageLayout(openPl);
 
     const bool webMode = PrettyReaderSettings::self()->useWebView();
