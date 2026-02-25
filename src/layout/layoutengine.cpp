@@ -4,6 +4,7 @@
  */
 
 #include "layoutengine.h"
+#include "codespancollector.h"
 #include "fontmanager.h"
 #include "linebreaker.h"
 #include "prettyreadersettings.h"
@@ -12,13 +13,6 @@
 
 #include <QMarginsF>
 #include <QtMath>
-
-#include <KSyntaxHighlighting/AbstractHighlighter>
-#include <KSyntaxHighlighting/Definition>
-#include <KSyntaxHighlighting/Format>
-#include <KSyntaxHighlighting/Repository>
-#include <KSyntaxHighlighting/State>
-#include <KSyntaxHighlighting/Theme>
 
 #include <unicode/brkiter.h>
 #include <unicode/unistr.h>
@@ -734,15 +728,8 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             for (int wi = wordStart; wi < words.size() && wi <= lastBoxWordIdx; ++wi) {
                 if (words[wi].isNewline) continue;
                 if (!line.glyphs.isEmpty()) {
-                    // Count eligible justify gaps (same rules as before)
-                    bool skipGap = words[wi].gbox.startsAfterSoftHyphen;
-                    if (!skipGap && words[wi].gbox.style.background.isValid()
-                        && line.glyphs.last().style.background.isValid()
-                        && words[wi].gbox.style.background == line.glyphs.last().style.background)
-                        skipGap = true;
-                    if (!skipGap && line.glyphs.last().isListMarker)
-                        skipGap = true;
-                    if (!skipGap)
+                    // Count eligible justify gaps
+                    if (!shouldSkipJustifyGap(line.glyphs.last(), words[wi].gbox))
                         gapCount++;
                 }
                 line.glyphs.append(words[wi].gbox);
@@ -918,16 +905,7 @@ QList<LineBox> Engine::breakIntoLines(const QList<Content::InlineNode> &inlines,
             for (int i = 0; i < line.glyphs.size(); ++i) {
                 charCount += line.glyphs[i].glyphs.size();
                 if (i > 0) {
-                    bool skipGap = line.glyphs[i].startsAfterSoftHyphen;
-                    if (!skipGap && line.glyphs[i].attachedToPrevious)
-                        skipGap = true;
-                    if (!skipGap && line.glyphs[i].style.background.isValid()
-                        && line.glyphs[i - 1].style.background.isValid()
-                        && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
-                        skipGap = true;
-                    if (!skipGap && line.glyphs[i - 1].isListMarker)
-                        skipGap = true;
-                    if (!skipGap)
+                    if (!shouldSkipJustifyGap(line.glyphs[i - 1], line.glyphs[i]))
                         gapCount++;
                 }
             }
@@ -1068,81 +1046,6 @@ BlockBox Engine::layoutHeading(const Content::Heading &heading, qreal availWidth
 
     return box;
 }
-
-// --- Code syntax highlighting adapter ---
-
-namespace {
-
-// Lightweight AbstractHighlighter subclass that collects styled spans
-class CodeSpanCollector : public KSyntaxHighlighting::AbstractHighlighter
-{
-public:
-    struct Span {
-        int start;
-        int length;
-        QColor foreground;
-        QColor background;
-        bool bold = false;
-        bool italic = false;
-    };
-
-    CodeSpanCollector()
-    {
-        static KSyntaxHighlighting::Repository repo;
-        m_repo = &repo;
-        auto defaultTheme = repo.defaultTheme(KSyntaxHighlighting::Repository::LightTheme);
-        setTheme(defaultTheme);
-    }
-
-    QList<Span> highlight(const QString &code, const QString &language)
-    {
-        m_spans.clear();
-        m_lineOffset = 0;
-
-        auto def = m_repo->definitionForName(language);
-        if (!def.isValid())
-            def = m_repo->definitionForFileName(QStringLiteral("file.") + language);
-        if (!def.isValid())
-            return {};
-
-        setDefinition(def);
-
-        KSyntaxHighlighting::State state;
-        const auto lines = code.split(QLatin1Char('\n'));
-        for (const auto &line : lines) {
-            state = highlightLine(line, state);
-            m_lineOffset += line.size() + 1; // +1 for the \n
-        }
-
-        return m_spans;
-    }
-
-protected:
-    void applyFormat(int offset, int length,
-                     const KSyntaxHighlighting::Format &format) override
-    {
-        if (length == 0)
-            return;
-
-        Span span;
-        span.start = m_lineOffset + offset;
-        span.length = length;
-        if (format.hasTextColor(theme()))
-            span.foreground = format.textColor(theme());
-        if (format.hasBackgroundColor(theme()))
-            span.background = format.backgroundColor(theme());
-        span.bold = format.isBold(theme());
-        span.italic = format.isItalic(theme());
-        m_spans.append(span);
-    }
-
-private:
-    KSyntaxHighlighting::Repository *m_repo = nullptr;
-    QList<Span> m_spans;
-    int m_lineOffset = 0;
-};
-
-} // anonymous namespace
 
 BlockBox Engine::layoutCodeBlock(const Content::CodeBlock &cb, qreal availWidth)
 {

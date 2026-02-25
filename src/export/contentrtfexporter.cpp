@@ -5,91 +5,9 @@
  */
 
 #include "contentrtfexporter.h"
+#include "codespancollector.h"
 
 #include <QFont>
-
-#include <KSyntaxHighlighting/AbstractHighlighter>
-#include <KSyntaxHighlighting/Definition>
-#include <KSyntaxHighlighting/Format>
-#include <KSyntaxHighlighting/Repository>
-#include <KSyntaxHighlighting/State>
-#include <KSyntaxHighlighting/Theme>
-
-// --- Code syntax highlighting adapter ---
-
-namespace {
-
-// Lightweight AbstractHighlighter subclass that collects styled spans
-// (mirrors the one in layoutengine.cpp for PDF rendering)
-class CodeSpanCollector : public KSyntaxHighlighting::AbstractHighlighter
-{
-public:
-    struct Span {
-        int start;
-        int length;
-        QColor foreground;
-        QColor background;
-        bool bold = false;
-        bool italic = false;
-    };
-
-    CodeSpanCollector()
-    {
-        static KSyntaxHighlighting::Repository repo;
-        m_repo = &repo;
-        auto defaultTheme = repo.defaultTheme(KSyntaxHighlighting::Repository::LightTheme);
-        setTheme(defaultTheme);
-    }
-
-    QList<Span> highlight(const QString &code, const QString &language)
-    {
-        m_spans.clear();
-        m_lineOffset = 0;
-
-        auto def = m_repo->definitionForName(language);
-        if (!def.isValid())
-            def = m_repo->definitionForFileName(QStringLiteral("file.") + language);
-        if (!def.isValid())
-            return {};
-
-        setDefinition(def);
-
-        KSyntaxHighlighting::State state;
-        const auto lines = code.split(QLatin1Char('\n'));
-        for (const auto &line : lines) {
-            state = highlightLine(line, state);
-            m_lineOffset += line.size() + 1; // +1 for the \n
-        }
-
-        return m_spans;
-    }
-
-protected:
-    void applyFormat(int offset, int length,
-                     const KSyntaxHighlighting::Format &format) override
-    {
-        if (length == 0)
-            return;
-
-        Span span;
-        span.start = m_lineOffset + offset;
-        span.length = length;
-        if (format.hasTextColor(theme()))
-            span.foreground = format.textColor(theme());
-        if (format.hasBackgroundColor(theme()))
-            span.background = format.backgroundColor(theme());
-        span.bold = format.isBold(theme());
-        span.italic = format.isItalic(theme());
-        m_spans.append(span);
-    }
-
-private:
-    KSyntaxHighlighting::Repository *m_repo = nullptr;
-    QList<Span> m_spans;
-    int m_lineOffset = 0;
-};
-
-} // anonymous namespace
 
 // --- Public ---
 
@@ -349,7 +267,7 @@ void ContentRtfExporter::writeBlock(QByteArray &out, const Content::BlockNode &b
                 out.append("\\pard\\ql\\sb60\\sa40 ");
                 out.append("{");
                 writeCharFormat(out, fn.numberStyle);
-                out.append(escapeText(fn.label));
+                out.append(RtfUtils::escapeText(fn.label));
                 out.append("} ");
                 out.append("{");
                 writeCharFormat(out, fn.textStyle);
@@ -359,17 +277,17 @@ void ContentRtfExporter::writeBlock(QByteArray &out, const Content::BlockNode &b
                         if constexpr (std::is_same_v<U, Content::TextRun>) {
                             out.append("{");
                             writeCharFormat(out, n.style);
-                            out.append(escapeText(n.text));
+                            out.append(RtfUtils::escapeText(n.text));
                             out.append("}");
                         } else if constexpr (std::is_same_v<U, Content::InlineCode>) {
                             out.append("{");
                             writeCharFormat(out, n.style);
-                            out.append(escapeText(n.text));
+                            out.append(RtfUtils::escapeText(n.text));
                             out.append("}");
                         } else if constexpr (std::is_same_v<U, Content::Link>) {
                             out.append("{");
                             writeCharFormat(out, n.style);
-                            out.append(escapeText(n.text));
+                            out.append(RtfUtils::escapeText(n.text));
                             out.append("}");
                         } else if constexpr (std::is_same_v<U, Content::SoftBreak>) {
                             out.append(" ");
@@ -455,7 +373,7 @@ void ContentRtfExporter::writeCodeBlock(QByteArray &out, const Content::CodeBloc
             for (const auto &run : lineRuns) {
                 out.append("{");
                 writeCharFormat(out, run.style);
-                out.append(escapeText(run.text));
+                out.append(RtfUtils::escapeText(run.text));
                 out.append("}");
             }
         }
@@ -601,17 +519,17 @@ void ContentRtfExporter::writeTable(QByteArray &out, const Content::Table &table
                                 merged.foreground = cellStyle.foreground;
                             out.append("{");
                             writeCharFormat(out, merged);
-                            out.append(escapeText(n.text));
+                            out.append(RtfUtils::escapeText(n.text));
                             out.append("}");
                         } else if constexpr (std::is_same_v<U, Content::InlineCode>) {
                             out.append("{");
                             writeCharFormat(out, n.style);
-                            out.append(escapeText(n.text));
+                            out.append(RtfUtils::escapeText(n.text));
                             out.append("}");
                         } else if constexpr (std::is_same_v<U, Content::Link>) {
                             out.append("{");
                             writeCharFormat(out, n.style);
-                            out.append(escapeText(n.text));
+                            out.append(RtfUtils::escapeText(n.text));
                             out.append("}");
                         } else if constexpr (std::is_same_v<U, Content::SoftBreak>) {
                             out.append(" ");
@@ -676,27 +594,27 @@ void ContentRtfExporter::writeInlines(QByteArray &out, const QList<Content::Inli
             if constexpr (std::is_same_v<T, Content::TextRun>) {
                 out.append("{");
                 writeCharFormat(out, useBaseStyle ? baseStyle : n.style);
-                out.append(escapeText(n.text));
+                out.append(RtfUtils::escapeText(n.text));
                 out.append("}");
             } else if constexpr (std::is_same_v<T, Content::InlineCode>) {
                 out.append("{");
                 writeCharFormat(out, useBaseStyle ? baseStyle : n.style);
-                out.append(escapeText(n.text));
+                out.append(RtfUtils::escapeText(n.text));
                 out.append("}");
             } else if constexpr (std::is_same_v<T, Content::Link>) {
                 out.append("{");
                 writeCharFormat(out, useBaseStyle ? baseStyle : n.style);
-                out.append(escapeText(n.text));
+                out.append(RtfUtils::escapeText(n.text));
                 out.append("}");
             } else if constexpr (std::is_same_v<T, Content::FootnoteRef>) {
                 out.append("{");
                 writeCharFormat(out, useBaseStyle ? baseStyle : n.style);
-                out.append(escapeText(n.label));
+                out.append(RtfUtils::escapeText(n.label));
                 out.append("}");
             } else if constexpr (std::is_same_v<T, Content::InlineImage>) {
                 // Images cannot be inlined in clipboard RTF; emit alt text
                 if (!n.altText.isEmpty())
-                    out.append(escapeText(QStringLiteral("[%1]").arg(n.altText)));
+                    out.append(RtfUtils::escapeText(QStringLiteral("[%1]").arg(n.altText)));
             } else if constexpr (std::is_same_v<T, Content::SoftBreak>) {
                 out.append(" ");
             } else if constexpr (std::is_same_v<T, Content::HardBreak>) {
@@ -718,7 +636,7 @@ void ContentRtfExporter::writeCharFormat(QByteArray &out, const Content::TextSty
         // Font size in half-points
         if (style.fontSize > 0) {
             out.append("\\fs");
-            out.append(QByteArray::number(toHalfPts(style.fontSize)));
+            out.append(QByteArray::number(RtfUtils::toHalfPoints(style.fontSize)));
         }
     }
 
@@ -785,11 +703,11 @@ void ContentRtfExporter::writeParagraphFormat(QByteArray &out, const Content::Pa
     if (m_filter.includeSpacing) {
         if (fmt.spaceBefore > 0) {
             out.append("\\sb");
-            out.append(QByteArray::number(toTwips(fmt.spaceBefore)));
+            out.append(QByteArray::number(RtfUtils::toTwips(fmt.spaceBefore)));
         }
         if (fmt.spaceAfter > 0) {
             out.append("\\sa");
-            out.append(QByteArray::number(toTwips(fmt.spaceAfter)));
+            out.append(QByteArray::number(RtfUtils::toTwips(fmt.spaceAfter)));
         }
     }
 
@@ -797,15 +715,15 @@ void ContentRtfExporter::writeParagraphFormat(QByteArray &out, const Content::Pa
     if (m_filter.includeMargins) {
         if (fmt.leftMargin > 0) {
             out.append("\\li");
-            out.append(QByteArray::number(toTwips(fmt.leftMargin)));
+            out.append(QByteArray::number(RtfUtils::toTwips(fmt.leftMargin)));
         }
         if (fmt.rightMargin > 0) {
             out.append("\\ri");
-            out.append(QByteArray::number(toTwips(fmt.rightMargin)));
+            out.append(QByteArray::number(RtfUtils::toTwips(fmt.rightMargin)));
         }
         if (fmt.firstLineIndent > 0) {
             out.append("\\fi");
-            out.append(QByteArray::number(toTwips(fmt.firstLineIndent)));
+            out.append(QByteArray::number(RtfUtils::toTwips(fmt.firstLineIndent)));
         }
     }
 
@@ -853,52 +771,3 @@ int ContentRtfExporter::colorIndex(const QColor &color)
     return idx;
 }
 
-QByteArray ContentRtfExporter::escapeText(const QString &text)
-{
-    QByteArray result;
-    result.reserve(text.size() * 2);
-
-    for (QChar ch : text) {
-        ushort code = ch.unicode();
-        if (code == '\\')
-            result.append("\\\\");
-        else if (code == '{')
-            result.append("\\{");
-        else if (code == '}')
-            result.append("\\}");
-        else if (code == '\t')
-            result.append("\\tab ");
-        else if (code == 0x00A0) // non-breaking space
-            result.append("\\~");
-        else if (code == 0x00AD) // soft hyphen
-            result.append("\\-");
-        else if (code == 0x2014) // em dash
-            result.append("\\emdash ");
-        else if (code == 0x2013) // en dash
-            result.append("\\endash ");
-        else if (code == 0x2018 || code == 0x2019) // smart single quotes
-            result.append(code == 0x2018 ? "\\lquote " : "\\rquote ");
-        else if (code == 0x201C || code == 0x201D) // smart double quotes
-            result.append(code == 0x201C ? "\\ldblquote " : "\\rdblquote ");
-        else if (code > 127) {
-            // Unicode character
-            result.append("\\u");
-            result.append(QByteArray::number(static_cast<qint16>(code)));
-            result.append("?");
-        } else {
-            result.append(static_cast<char>(code));
-        }
-    }
-
-    return result;
-}
-
-int ContentRtfExporter::toTwips(qreal points)
-{
-    return qRound(points * 20.0);
-}
-
-int ContentRtfExporter::toHalfPts(qreal points)
-{
-    return qRound(points * 2.0);
-}

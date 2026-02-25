@@ -7,6 +7,8 @@
 #include <QMap>
 #include <QString>
 
+#include "rtfutils.h"
+
 class QTextDocument;
 class QTextBlock;
 class QTextCharFormat;
@@ -55,15 +57,6 @@ private:
 
     // Write a table
     void writeTable(QByteArray &out, const QTextTable *table);
-
-    // Escape RTF special characters
-    static QByteArray escapeText(const QString &text);
-
-    // Convert points to twips (1 point = 20 twips)
-    static int toTwips(qreal points) { return qRound(points * 20.0); }
-
-    // Convert points to half-points (1 point = 2 half-points)
-    static int toHalfPoints(qreal points) { return qRound(points * 2.0); }
 
     QList<QString> m_fontTable;
     QMap<QString, int> m_fontMap;

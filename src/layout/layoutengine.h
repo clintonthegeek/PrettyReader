@@ -68,6 +68,18 @@ struct GlyphBox {
     CheckboxState checkboxState = NoCheckbox;
 };
 
+// Returns true if the justify gap between two adjacent glyph boxes should be
+// suppressed (soft-hyphen continuation, mid-word style change, matching
+// background spans, or list marker prefix).
+static inline bool shouldSkipJustifyGap(const GlyphBox &prev, const GlyphBox &next) {
+    if (next.startsAfterSoftHyphen) return true;
+    if (next.attachedToPrevious) return true;
+    if (next.style.background.isValid() && prev.style.background.isValid()
+        && next.style.background == prev.style.background) return true;
+    if (prev.isListMarker) return true;
+    return false;
+}
+
 struct ImageBox {
     QImage image;
     qreal width = 0;

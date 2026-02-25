@@ -20,6 +20,7 @@
 
 #include "contentmodel.h"
 #include "rtffilteroptions.h"
+#include "rtfutils.h"
 
 class ContentRtfExporter
 {
@@ -54,9 +55,6 @@ private:
     // Helpers
     int fontIndex(const QString &family);
     int colorIndex(const QColor &color);
-    static QByteArray escapeText(const QString &text);
-    static int toTwips(qreal points);
-    static int toHalfPts(qreal points);
 
     QMap<QString, int> m_fonts;
     QMap<QRgb, int> m_colors;

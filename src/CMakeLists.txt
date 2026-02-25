@@ -11,6 +11,7 @@ add_library(PrettyReaderCore STATIC
     markdown/documentbuilder.h
     markdown/codeblockhighlighter.cpp
     markdown/codeblockhighlighter.h
+    markdown/codespancollector.h
     markdown/markdownhighlighter.cpp
     markdown/markdownhighlighter.h
     markdown/footnoteparser.cpp
@@ -74,6 +75,7 @@ add_library(PrettyReaderCore STATIC
     export/contentrtfexporter.cpp
     export/contentrtfexporter.h
     export/rtffilteroptions.h
+    export/rtfutils.h
     # PDF rendering pipeline (Phase 4)
     model/contentbuilder.cpp
     model/contentbuilder.h

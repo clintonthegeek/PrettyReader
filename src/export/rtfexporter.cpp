@@ -207,25 +207,25 @@ void RtfExporter::writeParaFormat(QByteArray &out, const QTextBlockFormat &fmt)
     // Spacing (in twips)
     if (fmt.topMargin() > 0) {
         out.append("\\sb");
-        out.append(QByteArray::number(toTwips(fmt.topMargin())));
+        out.append(QByteArray::number(RtfUtils::toTwips(fmt.topMargin())));
     }
     if (fmt.bottomMargin() > 0) {
         out.append("\\sa");
-        out.append(QByteArray::number(toTwips(fmt.bottomMargin())));
+        out.append(QByteArray::number(RtfUtils::toTwips(fmt.bottomMargin())));
     }
 
     // Indentation
     if (fmt.leftMargin() > 0) {
         out.append("\\li");
-        out.append(QByteArray::number(toTwips(fmt.leftMargin())));
+        out.append(QByteArray::number(RtfUtils::toTwips(fmt.leftMargin())));
     }
     if (fmt.rightMargin() > 0) {
         out.append("\\ri");
-        out.append(QByteArray::number(toTwips(fmt.rightMargin())));
+        out.append(QByteArray::number(RtfUtils::toTwips(fmt.rightMargin())));
     }
     if (fmt.textIndent() > 0) {
         out.append("\\fi");
-        out.append(QByteArray::number(toTwips(fmt.textIndent())));
+        out.append(QByteArray::number(RtfUtils::toTwips(fmt.textIndent())));
     }
 
     // Line spacing
@@ -252,7 +252,7 @@ void RtfExporter::writeCharFormat(QByteArray &out, const QTextCharFormat &fmt)
     // Font size in half-points
     if (fmt.fontPointSize() > 0) {
         out.append("\\fs");
-        out.append(QByteArray::number(toHalfPoints(fmt.fontPointSize())));
+        out.append(QByteArray::number(RtfUtils::toHalfPoints(fmt.fontPointSize())));
     }
 
     // Bold
@@ -353,7 +353,7 @@ void RtfExporter::writeBlock(QByteArray &out, const QTextBlock &block)
 
         out.append("{");
         writeCharFormat(out, fragment.charFormat());
-        out.append(escapeText(fragment.text()));
+        out.append(RtfUtils::escapeText(fragment.text()));
         out.append("}");
     }
 
@@ -398,7 +398,7 @@ void RtfExporter::writeTable(QByteArray &out, const QTextTable *table)
                         if (frag.isValid()) {
                             out.append("{");
                             writeCharFormat(out, frag.charFormat());
-                            out.append(escapeText(frag.text()));
+                            out.append(RtfUtils::escapeText(frag.text()));
                             out.append("}");
                         }
                     }
@@ -412,42 +412,3 @@ void RtfExporter::writeTable(QByteArray &out, const QTextTable *table)
     }
 }
 
-QByteArray RtfExporter::escapeText(const QString &text)
-{
-    QByteArray result;
-    result.reserve(text.size() * 2);
-
-    for (QChar ch : text) {
-        ushort code = ch.unicode();
-        if (code == '\\')
-            result.append("\\\\");
-        else if (code == '{')
-            result.append("\\{");
-        else if (code == '}')
-            result.append("\\}");
-        else if (code == '\t')
-            result.append("\\tab ");
-        else if (code == 0x00A0) // non-breaking space
-            result.append("\\~");
-        else if (code == 0x00AD) // soft hyphen
-            result.append("\\-");
-        else if (code == 0x2014) // em dash
-            result.append("\\emdash ");
-        else if (code == 0x2013) // en dash
-            result.append("\\endash ");
-        else if (code == 0x2018 || code == 0x2019) // smart quotes
-            result.append(code == 0x2018 ? "\\lquote " : "\\rquote ");
-        else if (code == 0x201C || code == 0x201D) // double smart quotes
-            result.append(code == 0x201C ? "\\ldblquote " : "\\rdblquote ");
-        else if (code > 127) {
-            // Unicode character
-            result.append("\\u");
-            result.append(QByteArray::number(static_cast<qint16>(code)));
-            result.append("?"); // fallback character
-        } else {
-            result.append(static_cast<char>(code));
-        }
-    }
-
-    return result;
-}

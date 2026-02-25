@@ -203,16 +203,7 @@ void BoxTreeRenderer::renderLineBox(const Layout::LineBox &line,
             if (i < line.glyphs.size() - 1)
                 x += jp.extraPerChar * line.glyphs[i].glyphs.size();
             if (i < line.glyphs.size() - 1) {
-                bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
-                if (!skipGap && line.glyphs[i + 1].attachedToPrevious)
-                    skipGap = true;
-                if (!skipGap && line.glyphs[i + 1].style.background.isValid()
-                    && line.glyphs[i].style.background.isValid()
-                    && line.glyphs[i + 1].style.background == line.glyphs[i].style.background)
-                    skipGap = true;
-                if (!skipGap && line.glyphs[i].isListMarker)
-                    skipGap = true;
-                if (!skipGap)
+                if (!Layout::shouldSkipJustifyGap(line.glyphs[i], line.glyphs[i + 1]))
                     x += jp.extraPerGap;
             }
         }
@@ -458,17 +449,8 @@ JustifyParams BoxTreeRenderer::computeJustification(const Layout::LineBox &line,
     // Legacy fallback: compute gaps inline
     int gapCount = 0;
     for (int i = 1; i < line.glyphs.size(); ++i) {
-        if (line.glyphs[i].startsAfterSoftHyphen)
-            continue;
-        if (line.glyphs[i].attachedToPrevious)
-            continue;
-        if (line.glyphs[i].style.background.isValid()
-            && line.glyphs[i - 1].style.background.isValid()
-            && line.glyphs[i].style.background == line.glyphs[i - 1].style.background)
-            continue;
-        if (line.glyphs[i - 1].isListMarker)
-            continue;
-        gapCount++;
+        if (!Layout::shouldSkipJustifyGap(line.glyphs[i - 1], line.glyphs[i]))
+            gapCount++;
     }
 
     if (gapCount > 0) {
@@ -499,16 +481,7 @@ QList<qreal> BoxTreeRenderer::computeGlyphXPositions(const Layout::LineBox &line
             if (i < line.glyphs.size() - 1)
                 cx += jp.extraPerChar * line.glyphs[i].glyphs.size();
             if (i < line.glyphs.size() - 1) {
-                bool skipGap = line.glyphs[i + 1].startsAfterSoftHyphen;
-                if (!skipGap && line.glyphs[i + 1].attachedToPrevious)
-                    skipGap = true;
-                if (!skipGap && line.glyphs[i + 1].style.background.isValid()
-                    && line.glyphs[i].style.background.isValid()
-                    && line.glyphs[i + 1].style.background == line.glyphs[i].style.background)
-                    skipGap = true;
-                if (!skipGap && line.glyphs[i].isListMarker)
-                    skipGap = true;
-                if (!skipGap)
+                if (!Layout::shouldSkipJustifyGap(line.glyphs[i], line.glyphs[i + 1]))
                     cx += jp.extraPerGap;
             }
         }
