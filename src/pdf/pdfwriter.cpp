@@ -15,24 +15,9 @@ namespace Pdf {
 
 // --- Character classification ---
 
-bool isWhiteSpace(char c)
-{
-    switch (c) {
-    case 0: case 9: case 10: case 12: case 13: case 32:
-        return true;
-    default:
-        return false;
-    }
-}
-
 bool isDelimiter(char c)
 {
     return QByteArray("()<>[]{}/%").contains(c);
-}
-
-bool isRegular(char c)
-{
-    return !isWhiteSpace(c) && !isDelimiter(c);
 }
 
 // --- PDF Doc Encoding (PDF32000-2008, 8.9.2 + Annex D) ---
@@ -113,24 +98,6 @@ QByteArray toUTF16(const QString &s)
     return result;
 }
 
-QByteArray toAscii(const QString &s)
-{
-    QByteArray result;
-    result.reserve(s.length());
-    for (int i = 0; i < s.length(); ++i) {
-        if (s[i].row() == 0 && s[i].cell() <= 127)
-            result.append(static_cast<char>(s[i].cell()));
-        else
-            result.append('?');
-    }
-    return result;
-}
-
-QByteArray toPdf(bool v)
-{
-    return v ? "true" : "false";
-}
-
 QByteArray toObjRef(ObjId id)
 {
     return toPdf(id) + " 0 R";
@@ -180,33 +147,9 @@ QByteArray toHexString(const QByteArray &s)
     return result;
 }
 
-QByteArray toHexString8(quint8 b)
-{
-    QByteArray result("<");
-    result.append("0123456789ABCDEF"[b / 16]);
-    result.append("0123456789ABCDEF"[b % 16]);
-    result.append('>');
-    return result;
-}
-
 QByteArray toHexString16(quint16 b)
 {
     QByteArray result("<");
-    result.append("0123456789ABCDEF"[(b >> 12) & 0xf]);
-    result.append("0123456789ABCDEF"[(b >> 8) & 0xf]);
-    result.append("0123456789ABCDEF"[(b >> 4) & 0xf]);
-    result.append("0123456789ABCDEF"[b & 0xf]);
-    result.append('>');
-    return result;
-}
-
-QByteArray toHexString32(quint32 b)
-{
-    QByteArray result("<");
-    result.append("0123456789ABCDEF"[(b >> 28) & 0xf]);
-    result.append("0123456789ABCDEF"[(b >> 24) & 0xf]);
-    result.append("0123456789ABCDEF"[(b >> 20) & 0xf]);
-    result.append("0123456789ABCDEF"[(b >> 16) & 0xf]);
     result.append("0123456789ABCDEF"[(b >> 12) & 0xf]);
     result.append("0123456789ABCDEF"[(b >> 8) & 0xf]);
     result.append("0123456789ABCDEF"[(b >> 4) & 0xf]);
@@ -239,18 +182,6 @@ QByteArray toName(const QString &s)
 QByteArray toDateString(const QDateTime &dt)
 {
     return "D:" + dt.toString(QStringLiteral("yyyyMMddHHmmss")).toLatin1() + "Z";
-}
-
-QByteArray toRectangleArray(const QRect &r)
-{
-    return "[" + toPdf(r.left()) + " " + toPdf(r.bottom()) + " "
-         + toPdf(r.right()) + " " + toPdf(r.top()) + "]";
-}
-
-QByteArray toRectangleArray(const QRectF &r)
-{
-    return "[" + toPdf(r.left()) + " " + toPdf(r.bottom()) + " "
-         + toPdf(r.right()) + " " + toPdf(r.top()) + "]";
 }
 
 // --- Writer implementation ---
@@ -309,11 +240,6 @@ bool Writer::close(bool aborted)
             m_file.remove();
     }
     return ok && !aborted;
-}
-
-qint64 Writer::bytesWritten() const
-{
-    return m_bytesWritten;
 }
 
 void Writer::writeRaw(const QByteArray &bytes)

@@ -12,15 +12,11 @@ public:
 
     // Load a language-specific word list. Falls back to English if not found.
     void setLanguage(const QString &language);
-    QString language() const { return m_language; }
 
     // Process text: replace spaces after short words with non-breaking spaces (U+00A0).
     // Prevents short prepositions, articles, and conjunctions from being stranded
     // at line ends.
     QString process(const QString &text) const;
-
-    // Access the word list
-    const QSet<QString> &wordList() const { return m_words; }
 
 private:
     void loadEnglish();

@@ -30,9 +30,6 @@ public:
     // Set source text (into editor)
     void setSourceText(const QString &text);
 
-Q_SIGNALS:
-    void sourceModeChanged(bool sourceMode);
-
 private:
     QStackedWidget *m_stack = nullptr;
     DocumentView *m_documentView = nullptr;

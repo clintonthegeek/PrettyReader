@@ -65,11 +65,6 @@ public:
     bool hasWordSpacing() const { return m_hasWordSpacing; }
     bool hasFontFeatures() const { return m_hasFontFeatures; }
 
-    // Backward compat aliases
-    bool hasExplicitAlignment() const { return m_hasAlignment; }
-    bool hasExplicitBackground() const { return m_hasBackground; }
-    bool hasExplicitForeground() const { return m_hasForeground; }
-
     // Character formatting (inherited by text in this paragraph) — setters
     void setFontFamily(const QString &family) { m_fontFamily = family; m_hasFontFamily = true; }
     void setFontSize(qreal pts) { m_fontSize = pts; m_hasFontSize = true; }

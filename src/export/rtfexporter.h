@@ -28,9 +28,6 @@ public:
     // Export document to a file. Returns true on success.
     bool exportToFile(const QTextDocument *document, const QString &filePath);
 
-    // Export to clipboard as RTF (for "Copy as Styled Text")
-    static void copyToClipboard(const QTextDocument *document);
-
 private:
     // Build font table from all fonts used in the document
     void buildFontTable(const QTextDocument *document);

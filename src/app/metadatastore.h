@@ -15,7 +15,6 @@ public:
     // Load/save metadata for a specific file path
     QJsonObject load(const QString &filePath) const;
     void save(const QString &filePath, const QJsonObject &metadata);
-    void remove(const QString &filePath);
 
     // Convenience: store a single key
     void setValue(const QString &filePath, const QString &key,

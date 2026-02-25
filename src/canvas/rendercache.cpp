@@ -157,53 +157,12 @@ QImage RenderCache::cachedPixmap(int page, int width, int height) const
     return {};
 }
 
-bool RenderCache::hasPixmap(int page, int width, int height) const
-{
-    QMutexLocker lock(&m_mutex);
-    return m_cache.contains({page, width, height});
-}
-
 void RenderCache::invalidateAll()
 {
     m_worker->clearQueue();
     QMutexLocker lock(&m_mutex);
     m_cache.clear();
     m_currentMemory = 0;
-}
-
-void RenderCache::invalidatePage(int page)
-{
-    QMutexLocker lock(&m_mutex);
-    auto it = m_cache.begin();
-    while (it != m_cache.end()) {
-        if (it.key().page == page) {
-            m_currentMemory -= it->sizeBytes;
-            it = m_cache.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-void RenderCache::setMemoryLimit(qint64 bytes)
-{
-    m_memoryLimit = bytes;
-    evictIfNeeded();
-}
-
-void RenderCache::preloadAround(int currentPage, int radius)
-{
-    if (!m_doc) return;
-    int total = m_doc->numPages();
-    for (int offset = -radius; offset <= radius; ++offset) {
-        int page = currentPage + offset;
-        if (page < 0 || page >= total) continue;
-        // Use a default size; actual size will come from the view
-        Request req;
-        req.pageNumber = page;
-        req.priority = qAbs(offset);
-        // Width/height set by caller
-    }
 }
 
 void RenderCache::onRenderFinished(int pageNumber, QImage image, int width, int height, int generation)

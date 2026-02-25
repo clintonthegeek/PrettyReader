@@ -21,7 +21,6 @@ public:
 
     int pageNumber() const { return m_pageNumber; }
     void setPageNumber(int page) { m_pageNumber = page; }
-    void setMargins(const QMarginsF &margins) { m_margins = margins; }
 
     void setPageLayout(const PageLayout &layout);
     void setDocumentInfo(int totalPages, const QString &fileName, const QString &title);

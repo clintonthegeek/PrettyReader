@@ -21,7 +21,6 @@ void ThemeComposer::setColorPalette(const ColorPalette &palette)
 {
     if (!(m_palette == palette)) {
         m_palette = palette;
-        Q_EMIT compositionChanged();
     }
 }
 
@@ -29,7 +28,6 @@ void ThemeComposer::setTypeSet(const TypeSet &typeSet)
 {
     if (!(m_typeSet == typeSet)) {
         m_typeSet = typeSet;
-        Q_EMIT compositionChanged();
     }
 }
 

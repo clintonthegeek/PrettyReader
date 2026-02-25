@@ -5,14 +5,12 @@
 #include "tablestyle.h"
 #include "footnotestyle.h"
 #include "fontfeatures.h"
-#include "masterpage.h"
 
 #include <QColor>
 #include <QFont>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMarginsF>
-#include <QPageSize>
 
 ThemeManager::ThemeManager(QObject *parent)
     : QObject(parent)
@@ -186,20 +184,6 @@ void ThemeManager::applyStyleOverrides(const QJsonObject &root, StyleManager *sm
                 ts.setBodyParagraphStyle(props.value(QLatin1String("bodyParagraphStyle")).toString());
 
             sm->addTableStyle(ts);
-        }
-    }
-
-    // Optional page layout + master pages — delegate to PageLayout::fromJson()
-    if (root.contains(QLatin1String("pageLayout")) || root.contains(QLatin1String("masterPages"))) {
-        QJsonObject plObj = root.value(QLatin1String("pageLayout")).toObject();
-        QJsonObject mpObj = root.value(QLatin1String("masterPages")).toObject();
-        m_themePageLayout = PageLayout::fromJson(plObj, mpObj);
-
-        // pageBackground is handled separately (palette owns it in the new system,
-        // but legacy themes may still include it)
-        if (plObj.contains(QLatin1String("pageBackground"))) {
-            m_themePageLayout.pageBackground = QColor(
-                plObj.value(QLatin1String("pageBackground")).toString());
         }
     }
 

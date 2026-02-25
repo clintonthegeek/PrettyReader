@@ -45,9 +45,6 @@ public:
     /// Dispatches to whichever typography source is active.
     QString hersheyFamilyFor(const QString &ttfFamily) const;
 
-Q_SIGNALS:
-    void compositionChanged();
-
 private:
     void applyTypeSet(StyleManager *target);
     void applyColorPalette(StyleManager *target);

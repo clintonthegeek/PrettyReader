@@ -55,11 +55,6 @@ void MetadataStore::save(const QString &filePath, const QJsonObject &metadata)
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
 }
 
-void MetadataStore::remove(const QString &filePath)
-{
-    QFile::remove(metadataFilePath(filePath));
-}
-
 void MetadataStore::setValue(const QString &filePath, const QString &key,
                               const QJsonValue &value)
 {

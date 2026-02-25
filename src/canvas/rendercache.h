@@ -36,13 +36,7 @@ public:
     void setDocument(Poppler::Document *doc);
     void requestPixmap(const Request &req);
     QImage cachedPixmap(int page, int width, int height) const;
-    bool hasPixmap(int page, int width, int height) const;
     void invalidateAll();
-    void invalidatePage(int page);
-    void setMemoryLimit(qint64 bytes);
-
-    // Preload adjacent pages
-    void preloadAround(int currentPage, int radius = 2);
 
 Q_SIGNALS:
     void pixmapReady(int pageNumber);

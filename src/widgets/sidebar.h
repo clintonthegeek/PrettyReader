@@ -29,9 +29,6 @@ public:
     bool isCollapsed() const { return m_collapsed; }
     void setCollapsed(bool collapsed);
 
-    // The stacked widget (for QSplitter sizing)
-    QStackedWidget *stackedWidget() const { return m_stack; }
-
 Q_SIGNALS:
     void panelVisibilityChanged(int tabId, bool visible);
 

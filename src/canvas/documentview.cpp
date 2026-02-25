@@ -212,7 +212,6 @@ void DocumentView::restoreViewState(const ViewState &state)
             vbar->setValue(qRound(state.scrollFraction * vbar->maximum()));
         }
         m_currentPage = qBound(0, state.currentPage, m_pageCount - 1);
-        Q_EMIT currentPageChanged(m_currentPage);
     });
 }
 
@@ -502,24 +501,6 @@ void DocumentView::layoutPagesContinuousFacingFirstAlone()
 
 // --- Page size/layout ---
 
-void DocumentView::setPageSize(const QSizeF &size)
-{
-    if (size == m_pageSize)
-        return;
-    m_pageSize = size;
-    m_marginsPoints = QMarginsF();
-    if (m_pdfMode) {
-        layoutPages();
-    } else if (m_document) {
-        qreal dpi = logicalDpiX();
-        qreal s = (dpi > 0) ? dpi / 72.0 : 1.0;
-        m_document->setPageSize(QSizeF(m_pageSize.width() * s,
-                                       m_pageSize.height() * s));
-        m_pageCount = m_document->pageCount();
-        layoutPages();
-    }
-}
-
 void DocumentView::setPageLayout(const PageLayout &layout)
 {
     m_pageLayout = layout;
@@ -656,7 +637,6 @@ void DocumentView::goToPage(int page)
                 ensureVisible(m_pageItems[page]);
         }
     }
-    Q_EMIT currentPageChanged(page);
 }
 
 void DocumentView::scrollToPosition(int page, qreal yOffset)
@@ -692,8 +672,6 @@ void DocumentView::scrollToPosition(int page, qreal yOffset)
         goToPage(page);
         return;
     }
-
-    Q_EMIT currentPageChanged(page);
 }
 
 void DocumentView::setHeadingPositions(const QList<HeadingPosition> &positions)
@@ -726,12 +704,6 @@ void DocumentView::setViewMode(ViewMode mode)
     setVerticalScrollBarPolicy(continuous ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
 
     layoutPages();
-    Q_EMIT viewModeChanged(mode);
-}
-
-void DocumentView::setContinuousMode(bool continuous)
-{
-    setViewMode(continuous ? Continuous : SinglePage);
 }
 
 // --- Render mode ---
@@ -747,7 +719,6 @@ void DocumentView::setRenderMode(RenderMode mode)
     else
         setBackgroundBrush(QBrush(QColor(0x3c, 0x3c, 0x3c)));
 
-    Q_EMIT renderModeChanged(mode);
 }
 
 void DocumentView::setWebContent(Layout::ContinuousLayoutResult &&result)
@@ -1731,7 +1702,6 @@ void DocumentView::updateCurrentPage()
             int page = m_pdfPageItems[i]->pageNumber();
             if (m_currentPage != page) {
                 m_currentPage = page;
-                Q_EMIT currentPageChanged(page);
             }
             break;
         }
@@ -1744,7 +1714,6 @@ void DocumentView::updateCurrentPage()
             if (r.contains(center)) {
                 if (m_currentPage != i) {
                     m_currentPage = i;
-                    Q_EMIT currentPageChanged(i);
                 }
                 break;
             }

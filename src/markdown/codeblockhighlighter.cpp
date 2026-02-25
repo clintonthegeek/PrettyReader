@@ -17,20 +17,6 @@ CodeBlockHighlighter::CodeBlockHighlighter()
     AbstractHighlighter::setTheme(defaultTheme);
 }
 
-void CodeBlockHighlighter::setTheme(const KSyntaxHighlighting::Theme &t)
-{
-    AbstractHighlighter::setTheme(t);
-}
-
-QStringList CodeBlockHighlighter::availableThemeNames() const
-{
-    QStringList names;
-    const auto themes = m_repository.themes();
-    for (const auto &t : themes)
-        names.append(t.name());
-    return names;
-}
-
 void CodeBlockHighlighter::highlight(QTextDocument *document)
 {
     QTextBlock block = document->begin();

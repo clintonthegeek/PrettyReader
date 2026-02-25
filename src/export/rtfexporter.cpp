@@ -90,20 +90,6 @@ bool RtfExporter::exportToFile(const QTextDocument *document, const QString &fil
     return true;
 }
 
-void RtfExporter::copyToClipboard(const QTextDocument *document)
-{
-    RtfExporter exporter;
-    QByteArray rtf = exporter.exportDocument(document);
-
-    auto *mimeData = new QMimeData;
-    mimeData->setData(QStringLiteral("text/rtf"), rtf);
-    mimeData->setData(QStringLiteral("application/rtf"), rtf);
-    // Also set plain text as fallback
-    mimeData->setText(document->toPlainText());
-
-    QApplication::clipboard()->setMimeData(mimeData);
-}
-
 void RtfExporter::buildFontTable(const QTextDocument *document)
 {
     QTextBlock block = document->begin();

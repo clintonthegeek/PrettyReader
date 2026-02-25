@@ -8,7 +8,6 @@
 #include "characterstyle.h"
 #include "colorpalette.h"
 #include "footnotestyle.h"
-#include "pagelayout.h"
 #include "paragraphstyle.h"
 #include "tablestyle.h"
 
@@ -27,16 +26,11 @@ public:
     // Ensure parent hierarchy is intact after external modifications
     void assignDefaultParents(StyleManager *sm);
 
-    // Get the page layout from the last loaded theme (if specified)
-    PageLayout themePageLayout() const { return m_themePageLayout; }
-
     // Apply style overrides from a JSON object to a StyleManager
     void applyStyleOverrides(const QJsonObject &root, StyleManager *sm);
 
 private:
     void resolveAllStyles(StyleManager *sm);
-
-    PageLayout m_themePageLayout;
 };
 
 #endif // PRETTYREADER_THEMEMANAGER_H

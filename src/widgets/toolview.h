@@ -14,9 +14,6 @@ public:
     explicit ToolView(const QString &title, QWidget *content,
                       QWidget *parent = nullptr);
 
-    QWidget *contentWidget() const { return m_content; }
-    QString title() const;
-
 Q_SIGNALS:
     void closeRequested();
 

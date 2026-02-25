@@ -15,7 +15,6 @@ public:
     void setName(const QString &name) { m_name = name; }
 
     // Border model
-    bool borderCollapse() const { return m_borderCollapse; }
     void setBorderCollapse(bool on) { m_borderCollapse = on; }
 
     // Cell padding (points)

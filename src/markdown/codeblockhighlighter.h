@@ -15,11 +15,6 @@ public:
 
     void highlight(QTextDocument *document);
 
-    void setTheme(const KSyntaxHighlighting::Theme &theme);
-    KSyntaxHighlighting::Repository &repository() { return m_repository; }
-
-    QStringList availableThemeNames() const;
-
 protected:
     void applyFormat(int offset, int length,
                      const KSyntaxHighlighting::Format &format) override;

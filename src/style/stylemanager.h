@@ -40,19 +40,12 @@ public:
     ParagraphStyle resolvedParagraphStyle(const QString &name);
     CharacterStyle resolvedCharacterStyle(const QString &name);
 
-    // Get ordered ancestor list for a style (for tree display)
-    QStringList paragraphStyleAncestors(const QString &name);
-    QStringList characterStyleAncestors(const QString &name);
-
     // Footnote style
     FootnoteStyle footnoteStyle() const { return m_footnoteStyle; }
     void setFootnoteStyle(const FootnoteStyle &style) { m_footnoteStyle = style; }
 
     // Deep-copy this style manager
     StyleManager *clone(QObject *parent = nullptr) const;
-
-signals:
-    void stylesChanged();
 
 private:
     QHash<QString, ParagraphStyle> m_paraStyles;

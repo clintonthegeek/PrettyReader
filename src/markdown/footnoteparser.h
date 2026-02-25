@@ -36,9 +36,6 @@ public:
     // Get parsed footnotes in order of first reference
     const QList<FootnoteDefinition> &footnotes() const { return m_footnotes; }
 
-    // Get footnote labels in order of first reference
-    QStringList labels() const;
-
 private:
     void extractDefinitions(const QString &text);
     void orderByReference(const QString &text);

@@ -78,12 +78,6 @@ void PdfPageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     }
 }
 
-void PdfPageItem::invalidateCache()
-{
-    m_cache->invalidatePage(m_pageNumber);
-    update();
-}
-
 void PdfPageItem::setPageNumber(int page)
 {
     m_pageNumber = page;

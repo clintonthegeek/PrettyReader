@@ -43,8 +43,3 @@ ToolView::ToolView(const QString &title, QWidget *content, QWidget *parent)
     m_content->setParent(this);
     layout->addWidget(m_content, 1);
 }
-
-QString ToolView::title() const
-{
-    return m_titleLabel->text();
-}

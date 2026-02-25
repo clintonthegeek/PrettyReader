@@ -28,26 +28,6 @@ inline Features defaultFeatures()
     return Ligatures | Kerning | ContextAlts | OldStyleNums;
 }
 
-// Apply font features to a QFont using QFont::setFeature() (Qt 6.6+).
-// NOTE: Features set this way do NOT survive QTextCharFormat::setFont()
-// round-trips, because QTextCharFormat has no property for OT feature tags.
-// Use applyToCharFormat() instead when working with QTextDocument styles.
-inline void applyToFont(QFont &font, Features features)
-{
-    font.setFeature("liga", features.testFlag(Ligatures) ? 1 : 0);
-    if (features.testFlag(SmallCaps))
-        font.setFeature("smcp", 1);
-    if (features.testFlag(OldStyleNums)) {
-        font.setFeature("onum", 1);
-        font.setFeature("lnum", 0);
-    } else if (features.testFlag(LiningNums)) {
-        font.setFeature("lnum", 1);
-        font.setFeature("onum", 0);
-    }
-    font.setFeature("kern", features.testFlag(Kerning) ? 1 : 0);
-    font.setFeature("calt", features.testFlag(ContextAlts) ? 1 : 0);
-}
-
 // Apply font features to a QTextCharFormat using native APIs.
 // This is the correct way to set features on styled text in QTextDocument,
 // because QTextCharFormat decomposes fonts into individual properties.

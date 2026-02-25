@@ -39,7 +39,6 @@ void DocumentTab::setSourceMode(bool source)
         return;
     m_sourceMode = source;
     m_stack->setCurrentIndex(source ? 1 : 0);
-    Q_EMIT sourceModeChanged(source);
 }
 
 QString DocumentTab::sourceText() const

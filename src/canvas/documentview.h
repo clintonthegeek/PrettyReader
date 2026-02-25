@@ -55,7 +55,6 @@ public:
     // New PDF path
     void setPdfData(const QByteArray &pdf);
 
-    void setPageSize(const QSizeF &size);
     void setPageLayout(const PageLayout &layout);
 
     void setDocumentInfo(const QString &fileName, const QString &title);
@@ -94,8 +93,6 @@ public:
     void copySelectionAsMarkdown();
     void copySelectionAsComplexRtf();
     void clearSelection();
-    bool hasSelection() const { return !m_pagesWithSelection.isEmpty(); }
-
     // Source breadcrumbs for markdown-faithful copy + styled RTF export
     void setSourceData(const QString &processedMarkdown,
                        const QList<Layout::SourceMapEntry> &sourceMap,
@@ -118,8 +115,6 @@ public:
     void setViewMode(ViewMode mode);
     ViewMode viewMode() const { return m_viewMode; }
 
-    // Legacy compatibility
-    void setContinuousMode(bool continuous);
     bool isContinuous() const { return m_viewMode == Continuous || m_viewMode == ContinuousFacing || m_viewMode == ContinuousFacingFirstAlone; }
 
     // Web view mode
@@ -133,12 +128,9 @@ public:
 
 Q_SIGNALS:
     void zoomChanged(int percent);
-    void currentPageChanged(int page);
-    void viewModeChanged(ViewMode mode);
     void statusHintChanged(const QString &hint);  // A7: hover hints
     void codeBlockLanguageChanged();
     void currentHeadingChanged(int index);
-    void renderModeChanged(RenderMode mode);
     void webRelayoutRequested();
 
 protected:

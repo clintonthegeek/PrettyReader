@@ -170,12 +170,3 @@ void FootnoteParser::orderByReference(const QString &text)
         }
     }
 }
-
-QStringList FootnoteParser::labels() const
-{
-    QStringList result;
-    result.reserve(m_footnotes.size());
-    for (const auto &fn : m_footnotes)
-        result.append(fn.label);
-    return result;
-}

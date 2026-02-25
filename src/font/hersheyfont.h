@@ -103,9 +103,6 @@ public:
     /// List of all known Hershey family names.
     QStringList familyNames() const;
 
-    /// Look up a font by its base file name (e.g. "futural").
-    HersheyFont *fontByName(const QString &name) const;
-
 private:
     HersheyFontRegistry() = default;
     HersheyFontRegistry(const HersheyFontRegistry &) = delete;

@@ -354,8 +354,3 @@ QStringList HersheyFontRegistry::familyNames() const
     names.sort();
     return names;
 }
-
-HersheyFont *HersheyFontRegistry::fontByName(const QString &name) const
-{
-    return m_fonts.value(name, nullptr);
-}

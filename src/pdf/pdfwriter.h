@@ -20,7 +20,6 @@
 #include <QFile>
 #include <QHash>
 #include <QList>
-#include <QRect>
 #include <QString>
 
 namespace Pdf {
@@ -29,18 +28,12 @@ using ObjId = uint32_t;
 
 // --- PDF serialization helpers (cf. PDF32000-2008) ---
 
-bool isWhiteSpace(char c);
 bool isDelimiter(char c);
-bool isRegular(char c);
 
 uchar toPdfDocEncoding(QChar c);
 QByteArray toPdfDocEncoding(const QString &s);
 
 QByteArray toUTF16(const QString &s);
-QByteArray toAscii(const QString &s);
-
-QByteArray toPdf(bool v);
-
 template <typename T, std::enable_if_t<std::is_integral_v<T> || std::is_enum_v<T>, bool> = true>
 inline QByteArray toPdf(T v) { return QByteArray::number(static_cast<qlonglong>(v)); }
 
@@ -53,17 +46,12 @@ QByteArray toLiteralString(const QByteArray &s);
 QByteArray toLiteralString(const QString &s);
 
 QByteArray toHexString(const QByteArray &s);
-QByteArray toHexString8(quint8 b);
 QByteArray toHexString16(quint16 b);
-QByteArray toHexString32(quint32 b);
 
 QByteArray toName(const QByteArray &s);
 QByteArray toName(const QString &s);
 
 QByteArray toDateString(const QDateTime &dt);
-
-QByteArray toRectangleArray(const QRect &r);
-QByteArray toRectangleArray(const QRectF &r);
 
 // --- Resource dictionary (simplified from Scribus) ---
 
@@ -83,8 +71,6 @@ public:
     bool openFile(const QString &filename);
     bool openBuffer(QByteArray *buffer);
     bool close(bool aborted = false);
-
-    qint64 bytesWritten() const;
 
     // PDF structure
     void writeHeader();

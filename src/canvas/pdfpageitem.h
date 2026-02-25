@@ -24,7 +24,6 @@ public:
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                QWidget *widget) override;
 
-    void invalidateCache();
     void setPageNumber(int page);
     int pageNumber() const { return m_pageNumber; }
     QSizeF pageSize() const { return m_pageSize; }

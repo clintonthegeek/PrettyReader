@@ -106,52 +106,6 @@ CharacterStyle StyleManager::resolvedCharacterStyle(const QString &name)
     return resolved;
 }
 
-QStringList StyleManager::paragraphStyleAncestors(const QString &name)
-{
-    QStringList ancestors;
-    QSet<QString> visited;
-    visited.insert(name);
-
-    auto it = m_paraStyles.find(name);
-    if (it == m_paraStyles.end())
-        return ancestors;
-
-    QString parentName = it.value().parentStyleName();
-    while (!parentName.isEmpty() && !visited.contains(parentName)) {
-        visited.insert(parentName);
-        ancestors.append(parentName);
-        auto pit = m_paraStyles.find(parentName);
-        if (pit == m_paraStyles.end())
-            break;
-        parentName = pit.value().parentStyleName();
-    }
-
-    return ancestors;
-}
-
-QStringList StyleManager::characterStyleAncestors(const QString &name)
-{
-    QStringList ancestors;
-    QSet<QString> visited;
-    visited.insert(name);
-
-    auto it = m_charStyles.find(name);
-    if (it == m_charStyles.end())
-        return ancestors;
-
-    QString parentName = it.value().parentStyleName();
-    while (!parentName.isEmpty() && !visited.contains(parentName)) {
-        visited.insert(parentName);
-        ancestors.append(parentName);
-        auto pit = m_charStyles.find(parentName);
-        if (pit == m_charStyles.end())
-            break;
-        parentName = pit.value().parentStyleName();
-    }
-
-    return ancestors;
-}
-
 void StyleManager::addTableStyle(const TableStyle &style)
 {
     m_tableStyles.insert(style.name(), style);
