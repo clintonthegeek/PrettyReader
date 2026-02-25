@@ -119,9 +119,9 @@ bool Hyphenator::loadDictionary(const QString &language)
     return false;
 }
 
-QString Hyphenator::hyphenate(const QString &word, int minLength) const
+QString Hyphenator::hyphenate(const QString &word) const
 {
-    if (!m_dict || word.length() < minLength)
+    if (!m_dict || word.length() < m_minWordLength)
         return word;
 
     QByteArray utf8 = word.toUtf8();
@@ -197,7 +197,7 @@ QString Hyphenator::hyphenate(const QString &word, int minLength) const
     return result;
 }
 
-QString Hyphenator::hyphenateText(const QString &text, int minLength) const
+QString Hyphenator::hyphenateText(const QString &text) const
 {
     if (!m_dict || text.isEmpty())
         return text;
@@ -218,7 +218,7 @@ QString Hyphenator::hyphenateText(const QString &text, int minLength) const
             result.append(text.mid(lastEnd, match.capturedStart() - lastEnd));
 
         // Hyphenate the word
-        result.append(hyphenate(match.captured(), minLength));
+        result.append(hyphenate(match.captured()));
         lastEnd = match.capturedEnd();
     }
 
