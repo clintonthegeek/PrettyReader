@@ -9,7 +9,7 @@
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
-class QLineEdit;
+class QPushButton;
 
 class PageLayoutWidget : public QWidget
 {
@@ -26,6 +26,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onPageTypeChanged(int index);
+    void onEditHeadersFooters();
 
 private:
     void saveCurrentPageTypeState();
@@ -44,13 +45,8 @@ private:
 
     // Header/footer controls
     QCheckBox *m_headerCheck = nullptr;
-    QLineEdit *m_headerLeftEdit = nullptr;
-    QLineEdit *m_headerCenterEdit = nullptr;
-    QLineEdit *m_headerRightEdit = nullptr;
     QCheckBox *m_footerCheck = nullptr;
-    QLineEdit *m_footerLeftEdit = nullptr;
-    QLineEdit *m_footerCenterEdit = nullptr;
-    QLineEdit *m_footerRightEdit = nullptr;
+    QPushButton *m_editHfButton = nullptr;
 
     // Master page state
     QHash<QString, MasterPage> m_masterPages;
