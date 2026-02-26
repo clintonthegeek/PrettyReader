@@ -682,7 +682,7 @@ void PdfGenerator::renderHeaderFooter(QByteArray &stream, const PageLayout &page
         qreal sepY = pageHeight - mTop;
         qreal mLeft = pageLayout.margins.left() * 72.0 / 25.4;
         qreal mRight = pageLayout.margins.right() * 72.0 / 25.4;
-        stream += "q\n0.53 0.53 0.53 RG\n0.5 w\n";
+        stream += "q\n0.80 0.80 0.80 RG\n0.5 w\n";
         stream += pdfCoord(mLeft) + " " + pdfCoord(sepY) + " m "
                 + pdfCoord(pageWidth - mRight) + " " + pdfCoord(sepY) + " l S\n";
         stream += "Q\n";
@@ -698,7 +698,7 @@ void PdfGenerator::renderHeaderFooter(QByteArray &stream, const PageLayout &page
         qreal sepY = mBottom + PageLayout::kFooterHeight;
         qreal mLeft = pageLayout.margins.left() * 72.0 / 25.4;
         qreal mRight = pageLayout.margins.right() * 72.0 / 25.4;
-        stream += "q\n0.53 0.53 0.53 RG\n0.5 w\n";
+        stream += "q\n0.80 0.80 0.80 RG\n0.5 w\n";
         stream += pdfCoord(mLeft) + " " + pdfCoord(sepY) + " m "
                 + pdfCoord(pageWidth - mRight) + " " + pdfCoord(sepY) + " l S\n";
         stream += "Q\n";

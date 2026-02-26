@@ -76,7 +76,7 @@ void PageItem::paint(QPainter *painter,
                       contentW, PageLayout::kHeaderHeight);
     QRectF bodyRect(contentX, contentY + headerH,
                     contentW, bodyH);
-    QRectF footerRect(contentX, contentY + contentH - PageLayout::kFooterHeight,
+    QRectF footerRect(contentX, contentY + contentH - footerH,
                       contentW, PageLayout::kFooterHeight);
 
     // Build metadata for this page
