@@ -1292,7 +1292,7 @@ void MainWindow::saveSession()
     KConfigGroup group(KSharedConfig::openConfig(),
                        QStringLiteral("Session"));
 
-    // Save sidebar state (A3: no longer saving open files or active tab)
+    // Save sidebar state
     group.writeEntry("LeftSidebarCollapsed", m_leftSidebar->isCollapsed());
     group.writeEntry("RightSidebarCollapsed", m_rightSidebar->isCollapsed());
     // Save which left panel was active (Files=0, TOC=1) so we restore the right one
@@ -1314,6 +1314,27 @@ void MainWindow::saveSession()
     }
     if (m_splitter)
         group.writeEntry("SplitterSizes", m_splitter->sizes());
+
+    // Save open files and per-tab view state
+    QStringList openFiles;
+    QList<int> zoomLevels;
+    QList<int> scrollPages;
+    QStringList scrollFractions;
+    for (int i = 0; i < m_tabWidget->count(); ++i) {
+        auto *tab = qobject_cast<DocumentTab *>(m_tabWidget->widget(i));
+        if (!tab || tab->filePath().isEmpty())
+            continue;
+        openFiles << tab->filePath();
+        ViewState vs = tab->documentView()->saveViewState();
+        zoomLevels << vs.zoomPercent;
+        scrollPages << vs.currentPage;
+        scrollFractions << QString::number(vs.scrollFraction, 'g', 10);
+    }
+    group.writeEntry("OpenFiles", openFiles);
+    group.writeEntry("ActiveTab", m_tabWidget->currentIndex());
+    group.writeEntry("ZoomLevels", zoomLevels);
+    group.writeEntry("ScrollPages", scrollPages);
+    group.writeEntry("ScrollFractions", scrollFractions);
 
     // Save current type set + color scheme + page template from editing docks
     group.writeEntry("TypeSet", m_typeDockWidget->currentTypeSetId());
