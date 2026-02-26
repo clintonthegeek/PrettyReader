@@ -50,3 +50,10 @@ void DocumentTab::setSourceText(const QString &text)
 {
     m_sourceEditor->setPlainText(text);
 }
+
+void DocumentTab::setTocData(const Content::Document &doc, const QList<Layout::SourceMapEntry> &sourceMap)
+{
+    m_contentDoc = doc;
+    m_sourceMap = sourceMap;
+    m_hasTocData = true;
+}

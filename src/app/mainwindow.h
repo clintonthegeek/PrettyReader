@@ -118,6 +118,9 @@ private:
     QAction *m_sourceViewAction = nullptr;
     QAction *m_fitWidthAction = nullptr;
     KActionMenu *m_pageArrangementMenu = nullptr;
+
+    // Composition generation counter — incremented on any theme/style/layout change
+    quint64 m_compositionGeneration = 1;
 };
 
 #endif // PRETTYREADER_MAINWINDOW_H

@@ -133,6 +133,17 @@ MainWindow::MainWindow(QWidget *parent)
             else if (!webMode && m_printViewAction)
                 m_printViewAction->setChecked(true);
         }
+
+        // Rebuild stale tabs (composition changed since last render)
+        if (tab && tab->compositionGeneration() < m_compositionGeneration) {
+            rebuildCurrentDocument();
+        } else if (tab && tab->hasTocData()) {
+            // Tab is current — just rebuild TOC from cached data
+            m_tocWidget->buildFromContentModel(tab->cachedContentDoc(), tab->cachedSourceMap());
+        } else if (tab && tab->documentView()->document()) {
+            // Legacy path — rebuild TOC from QTextDocument
+            m_tocWidget->buildFromDocument(tab->documentView()->document());
+        }
     });
 
     m_themeManager = new ThemeManager(this);
@@ -1150,6 +1161,8 @@ void MainWindow::onFileClose()
 
 void MainWindow::onCompositionApplied()
 {
+    ++m_compositionGeneration;
+
     // Compose a fresh StyleManager and seed the style dock with it
     auto *sm = new StyleManager(this);
     m_themeComposer->compose(sm);
@@ -1173,6 +1186,8 @@ void MainWindow::onCompositionApplied()
 
 void MainWindow::onStyleOverrideChanged()
 {
+    ++m_compositionGeneration;
+
     // Update page background from the current palette
     QColor pageBg = m_themeComposer->currentPalette().pageBackground();
     if (pageBg.isValid()) {
@@ -1189,6 +1204,8 @@ void MainWindow::onStyleOverrideChanged()
 
 void MainWindow::onPageLayoutChanged()
 {
+    ++m_compositionGeneration;
+
     PageLayout pl = m_pageDockWidget->currentPageLayout();
     auto *view = currentDocumentView();
     if (view)
@@ -1586,6 +1603,7 @@ void MainWindow::rebuildCurrentDocument()
 
             // TOC from content model
             m_tocWidget->buildFromContentModel(contentDoc, webResult.sourceMap);
+            tab->setTocData(contentDoc, webResult.sourceMap);
 
             view->setWebFontManager(m_fontManager);
             view->setHeadingPositions(headingPositions);
@@ -1627,6 +1645,7 @@ void MainWindow::rebuildCurrentDocument()
 
             // Build TOC directly from content model + source map
             m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+            tab->setTocData(contentDoc, layoutResult.sourceMap);
 
             // Pass heading positions to view for scroll-sync
             {
@@ -1681,6 +1700,7 @@ void MainWindow::rebuildCurrentDocument()
         m_tocWidget->buildFromDocument(doc);
     }
 
+    tab->setCompositionGeneration(m_compositionGeneration);
     statusBar()->showMessage(i18n("Theme applied"), 2000);
 }
 
@@ -1776,6 +1796,7 @@ void MainWindow::openFile(const QUrl &url)
 
         // Build TOC from content model (PDF mode)
         m_tocWidget->buildFromContentModel(contentDoc, layoutResult.sourceMap);
+        tab->setTocData(contentDoc, layoutResult.sourceMap);
 
         // Pass heading positions to view for scroll-sync
         {
@@ -1948,6 +1969,10 @@ void MainWindow::openFile(const QUrl &url)
     if (!tab->documentView()->isPdfMode()) {
         m_tocWidget->buildFromDocument(tab->documentView()->document());
     }
+
+    // Stamp composition generation so tab-switch knows it's up to date
+    tab->setCompositionGeneration(m_compositionGeneration);
+
     // A6: Update file path label in status bar
     if (m_filePathLabel)
         m_filePathLabel->setText(filePath);
