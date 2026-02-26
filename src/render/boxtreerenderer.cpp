@@ -279,12 +279,7 @@ void BoxTreeRenderer::renderGlyphBox(const Layout::GlyphBox &gbox,
     if (gbox.glyphs.isEmpty() || !gbox.font)
         return;
 
-    // Inline background
-    if (gbox.style.background.isValid()) {
-        drawRect(QRectF(x - 1, baselineY - gbox.ascent - 1,
-                         gbox.width + 2, gbox.ascent + gbox.descent + 2),
-                 gbox.style.background);
-    }
+    drawInlineBackground(gbox, x, baselineY);
 
     // Build glyph positions
     GlyphRenderInfo info;
@@ -319,12 +314,7 @@ void BoxTreeRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
     qreal fontSize = gbox.fontSize;
     qreal scale = fontSize / hFont->unitsPerEm();
 
-    // Inline background
-    if (gbox.style.background.isValid()) {
-        drawRect(QRectF(x - 1, baselineY - gbox.ascent - 1,
-                         gbox.width + 2, gbox.ascent + gbox.descent + 2),
-                 gbox.style.background);
-    }
+    drawInlineBackground(gbox, x, baselineY);
 
     qreal strokeWidth = HersheyConstants::kStrokeWidthFactor * fontSize;
     if (gbox.font->hersheyBold)
@@ -424,6 +414,18 @@ void BoxTreeRenderer::renderImageBlock(const Layout::BlockBox &box)
 
     QRectF imgRect(box.x, box.y, box.imageWidth, box.imageHeight);
     drawImage(imgRect, box.image);
+}
+
+// --- Inline background helper ---
+
+void BoxTreeRenderer::drawInlineBackground(const Layout::GlyphBox &gbox,
+                                            qreal x, qreal baselineY)
+{
+    if (gbox.style.background.isValid()) {
+        drawRect(QRectF(x - 1, baselineY - gbox.ascent - 1,
+                         gbox.width + 2, gbox.ascent + gbox.descent + 2),
+                 gbox.style.background);
+    }
 }
 
 // --- Shared justification helpers ---

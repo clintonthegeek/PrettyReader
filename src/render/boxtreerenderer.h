@@ -124,6 +124,10 @@ public:
 protected:
     explicit BoxTreeRenderer(FontManager *fontManager);
 
+    /// Draw the inline background rectangle behind a glyph box (if any).
+    void drawInlineBackground(const Layout::GlyphBox &gbox,
+                              qreal x, qreal baselineY);
+
     FontManager *m_fontManager;
 
     // --- Shared justification helpers ---

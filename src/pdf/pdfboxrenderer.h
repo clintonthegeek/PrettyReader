@@ -174,7 +174,10 @@ private:
                              const QColor &foreground,
                              qreal x, qreal baselineY);
 
-    // --- Trailing hyphen helper ---
+    // --- Helpers ---
+
+    /// Write an invisible text anchor at (x, pdfY) for ActualText spans.
+    void writeInvisibleAnchor(qreal x, qreal pdfBaseY);
 
     void renderTrailingHyphen(const Layout::GlyphBox &lastGbox, qreal x,
                               qreal baselineY);

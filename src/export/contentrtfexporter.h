@@ -45,7 +45,8 @@ private:
     void writeTable(QByteArray &out, const Content::Table &table);
     void writeHorizontalRule(QByteArray &out);
     void writeBlockQuote(QByteArray &out, const Content::BlockQuote &bq);
-    void writeInlines(QByteArray &out, const QList<Content::InlineNode> &inlines);
+    void writeInlines(QByteArray &out, const QList<Content::InlineNode> &inlines,
+                      const QColor &foregroundOverride = QColor());
     void writeCharFormat(QByteArray &out, const Content::TextStyle &style);
     void writeParagraphFormat(QByteArray &out, const Content::ParagraphFormat &fmt);
 

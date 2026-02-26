@@ -443,30 +443,14 @@ void PdfBoxRenderer::renderBlockBox(const Layout::BlockBox &box)
         fence += QLatin1Char('\n');
         *m_stream += "/Span <</ActualText <" + toUtf16BeHex(fence) + ">>> BDC\n";
         // Invisible text anchor at block top
-        if (m_embeddedFonts && !m_embeddedFonts->isEmpty()) {
-            qreal blockPdfY = pdfY(box.y);
-            *m_stream += "BT\n3 Tr\n";
-            *m_stream += "/" + m_embeddedFonts->first().pdfName + " 1 Tf\n";
-            *m_stream += "1 0 0 1 " + pdfCoord(box.x) + " "
-                    + pdfCoord(blockPdfY) + " Tm\n";
-            *m_stream += "<0000> Tj\n";
-            *m_stream += "0 Tr\nET\n";
-        }
+        writeInvisibleAnchor(box.x, pdfY(box.y));
         *m_stream += "EMC\n";
     }
 
     // Markdown copy: HRule gets "---\n\n" ActualText before visual rendering
     if (m_exportOptions.markdownCopy && box.type == Layout::BlockBox::HRuleBlock) {
         *m_stream += "/Span <</ActualText <" + toUtf16BeHex(QStringLiteral("---\n\n")) + ">>> BDC\n";
-        if (m_embeddedFonts && !m_embeddedFonts->isEmpty()) {
-            qreal ruleY = pdfY(box.y + box.height / 2);
-            *m_stream += "BT\n3 Tr\n";
-            *m_stream += "/" + m_embeddedFonts->first().pdfName + " 1 Tf\n";
-            *m_stream += "1 0 0 1 " + pdfCoord(box.x) + " "
-                    + pdfCoord(ruleY) + " Tm\n";
-            *m_stream += "<0000> Tj\n";
-            *m_stream += "0 Tr\nET\n";
-        }
+        writeInvisibleAnchor(box.x, pdfY(box.y + box.height / 2));
         *m_stream += "EMC\n";
     }
 
@@ -486,15 +470,8 @@ void PdfBoxRenderer::renderBlockBox(const Layout::BlockBox &box)
         else
             sep = QStringLiteral("\n\n");
         *m_stream += "/Span <</ActualText <" + toUtf16BeHex(sep) + ">>> BDC\n";
-        if (isCodeBlock && m_embeddedFonts && !m_embeddedFonts->isEmpty()) {
-            qreal bottomY = pdfY(box.y + box.height);
-            *m_stream += "BT\n3 Tr\n";
-            *m_stream += "/" + m_embeddedFonts->first().pdfName + " 1 Tf\n";
-            *m_stream += "1 0 0 1 " + pdfCoord(box.x) + " "
-                    + pdfCoord(bottomY) + " Tm\n";
-            *m_stream += "<0000> Tj\n";
-            *m_stream += "0 Tr\nET\n";
-        }
+        if (isCodeBlock)
+            writeInvisibleAnchor(box.x, pdfY(box.y + box.height));
         *m_stream += "EMC\n";
     }
 }
@@ -636,12 +613,7 @@ void PdfBoxRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
     qreal fontSize = gbox.fontSize;
     qreal scale = fontSize / hFont->unitsPerEm();
 
-    // Inline background
-    if (gbox.style.background.isValid()) {
-        drawRect(QRectF(x - 1, baselineY - gbox.ascent - 1,
-                         gbox.width + 2, gbox.ascent + gbox.descent + 2),
-                 gbox.style.background);
-    }
+    drawInlineBackground(gbox, x, baselineY);
 
     qreal pdfBaseY = pdfY(baselineY);
 
@@ -683,6 +655,19 @@ void PdfBoxRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
     }
 
     renderGlyphDecorations(gbox, x, baselineY, curX);
+}
+
+// --- Helpers ---
+
+void PdfBoxRenderer::writeInvisibleAnchor(qreal x, qreal pdfBaseY)
+{
+    if (!m_stream || !m_embeddedFonts || m_embeddedFonts->isEmpty())
+        return;
+    *m_stream += "BT\n3 Tr\n";
+    *m_stream += "/" + m_embeddedFonts->first().pdfName + " 1 Tf\n";
+    *m_stream += "1 0 0 1 " + pdfCoord(x) + " " + pdfCoord(pdfBaseY) + " Tm\n";
+    *m_stream += "<0000> Tj\n";
+    *m_stream += "0 Tr\nET\n";
 }
 
 // --- Trailing hyphen helper ---

@@ -269,34 +269,7 @@ void ContentRtfExporter::writeBlock(QByteArray &out, const Content::BlockNode &b
                 writeCharFormat(out, fn.numberStyle);
                 out.append(RtfUtils::escapeText(fn.label));
                 out.append("} ");
-                out.append("{");
-                writeCharFormat(out, fn.textStyle);
-                for (const auto &inl : fn.content) {
-                    std::visit([this, &out](const auto &n) {
-                        using U = std::decay_t<decltype(n)>;
-                        if constexpr (std::is_same_v<U, Content::TextRun>) {
-                            out.append("{");
-                            writeCharFormat(out, n.style);
-                            out.append(RtfUtils::escapeText(n.text));
-                            out.append("}");
-                        } else if constexpr (std::is_same_v<U, Content::InlineCode>) {
-                            out.append("{");
-                            writeCharFormat(out, n.style);
-                            out.append(RtfUtils::escapeText(n.text));
-                            out.append("}");
-                        } else if constexpr (std::is_same_v<U, Content::Link>) {
-                            out.append("{");
-                            writeCharFormat(out, n.style);
-                            out.append(RtfUtils::escapeText(n.text));
-                            out.append("}");
-                        } else if constexpr (std::is_same_v<U, Content::SoftBreak>) {
-                            out.append(" ");
-                        } else if constexpr (std::is_same_v<U, Content::HardBreak>) {
-                            out.append("\\line ");
-                        }
-                    }, inl);
-                }
-                out.append("}");
+                writeInlines(out, fn.content);
                 out.append("\\par\n");
             }
         }
@@ -503,41 +476,12 @@ void ContentRtfExporter::writeTable(QByteArray &out, const Content::Table &table
 
                 out.append(" ");
 
-                // Override foreground for header rows
-                Content::TextStyle cellStyle = cell.style;
+                // Determine foreground override for header rows
+                QColor fgOverride;
                 if (m_filter.includeTextColor && isHeaderRow && table.headerForeground.isValid())
-                    cellStyle.foreground = table.headerForeground;
+                    fgOverride = table.headerForeground;
 
-                // Write cell inlines with style
-                for (const auto &inl : cell.inlines) {
-                    std::visit([this, &out, &cellStyle](const auto &n) {
-                        using U = std::decay_t<decltype(n)>;
-                        if constexpr (std::is_same_v<U, Content::TextRun>) {
-                            Content::TextStyle merged = n.style;
-                            // Inherit cell foreground if the run uses default color
-                            if (cellStyle.foreground.isValid() && !n.style.foreground.isValid())
-                                merged.foreground = cellStyle.foreground;
-                            out.append("{");
-                            writeCharFormat(out, merged);
-                            out.append(RtfUtils::escapeText(n.text));
-                            out.append("}");
-                        } else if constexpr (std::is_same_v<U, Content::InlineCode>) {
-                            out.append("{");
-                            writeCharFormat(out, n.style);
-                            out.append(RtfUtils::escapeText(n.text));
-                            out.append("}");
-                        } else if constexpr (std::is_same_v<U, Content::Link>) {
-                            out.append("{");
-                            writeCharFormat(out, n.style);
-                            out.append(RtfUtils::escapeText(n.text));
-                            out.append("}");
-                        } else if constexpr (std::is_same_v<U, Content::SoftBreak>) {
-                            out.append(" ");
-                        } else if constexpr (std::is_same_v<U, Content::HardBreak>) {
-                            out.append("\\line ");
-                        }
-                    }, inl);
-                }
+                writeInlines(out, cell.inlines, fgOverride);
             } else {
                 out.append("\\ql ");
             }
@@ -573,7 +517,8 @@ void ContentRtfExporter::writeBlockQuote(QByteArray &out, const Content::BlockQu
     }
 }
 
-void ContentRtfExporter::writeInlines(QByteArray &out, const QList<Content::InlineNode> &inlines)
+void ContentRtfExporter::writeInlines(QByteArray &out, const QList<Content::InlineNode> &inlines,
+                                       const QColor &foregroundOverride)
 {
     // When source formatting is off, use the first TextRun's style uniformly
     // for all inline nodes, stripping per-word bold/italic/code/link differences.
@@ -589,11 +534,15 @@ void ContentRtfExporter::writeInlines(QByteArray &out, const QList<Content::Inli
     }
 
     for (const auto &node : inlines) {
-        std::visit([this, &out, &baseStyle, useBaseStyle](const auto &n) {
+        std::visit([this, &out, &baseStyle, useBaseStyle, &foregroundOverride](const auto &n) {
             using T = std::decay_t<decltype(n)>;
             if constexpr (std::is_same_v<T, Content::TextRun>) {
+                Content::TextStyle style = useBaseStyle ? baseStyle : n.style;
+                // Apply foreground override if the run uses default color
+                if (foregroundOverride.isValid() && !n.style.foreground.isValid())
+                    style.foreground = foregroundOverride;
                 out.append("{");
-                writeCharFormat(out, useBaseStyle ? baseStyle : n.style);
+                writeCharFormat(out, style);
                 out.append(RtfUtils::escapeText(n.text));
                 out.append("}");
             } else if constexpr (std::is_same_v<T, Content::InlineCode>) {
