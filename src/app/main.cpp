@@ -7,6 +7,8 @@
 
 #ifdef HAVE_KDBUSSERVICE
 #include <KDBusService>
+#else
+#include "singleinstanceguard.h"
 #endif
 
 #include "mainwindow.h"
@@ -64,6 +66,21 @@ int main(int argc, char *argv[])
             window.activateWindow();
         }
     });
+#else
+    // Fallback: QLocalServer-based single instance
+    SingleInstanceGuard guard(&window);
+    {
+        QStringList filePaths;
+        for (const QString &arg : parser.positionalArguments()) {
+            QFileInfo fi(arg);
+            if (fi.exists() && fi.isFile())
+                filePaths << fi.absoluteFilePath();
+        }
+        if (!guard.tryAcquire(filePaths)) {
+            // Another instance is running, files were sent to it
+            return 0;
+        }
+    }
 #endif
 
     const QStringList args = parser.positionalArguments();

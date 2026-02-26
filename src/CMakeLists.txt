@@ -363,6 +363,14 @@ qt_add_executable(PrettyReader
     app/main.cpp
 )
 
+if(NOT KF6DBusAddons_FOUND)
+    target_sources(PrettyReader PRIVATE
+        app/singleinstanceguard.h
+        app/singleinstanceguard.cpp
+    )
+    target_link_libraries(PrettyReader PRIVATE Qt6::Network)
+endif()
+
 # Embed XMLGUI resource file
 qt_add_resources(PrettyReader "xmlgui"
     PREFIX "/kxmlgui5/prettyreader"

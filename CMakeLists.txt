@@ -13,7 +13,7 @@ include(KDEInstallDirs)
 include(KDECMakeSettings)
 
 # Qt
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Widgets PrintSupport)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Widgets PrintSupport Network)
 qt_standard_project_setup()
 
 # KDE Frameworks
