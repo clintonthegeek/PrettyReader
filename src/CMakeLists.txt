@@ -112,6 +112,8 @@ add_library(PrettyReaderCore STATIC
     widgets/pagelayoutwidget.h
     widgets/droptargetlineedit.cpp
     widgets/droptargetlineedit.h
+    widgets/headerfooterdialog.cpp
+    widgets/headerfooterdialog.h
     widgets/sidebar.cpp
     widgets/sidebar.h
     widgets/itemselectorbar.cpp
