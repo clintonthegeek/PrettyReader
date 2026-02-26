@@ -16,6 +16,7 @@ public:
 
 protected:
     void populateGrid() override;
+    QSize cellSize() const override { return {75, 52}; }
 
 private:
     PaletteManager *m_manager = nullptr;

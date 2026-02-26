@@ -17,6 +17,7 @@ public:
 protected:
     int gridColumns() const override { return 2; }
     void populateGrid() override;
+    QSize cellSize() const override { return {120, 62}; }
 
 private:
     TypeSetManager *m_manager = nullptr;

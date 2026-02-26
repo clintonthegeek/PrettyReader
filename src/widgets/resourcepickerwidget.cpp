@@ -19,11 +19,11 @@ ResourcePickerWidget::ResourcePickerWidget(const QString &headerText, QWidget *p
     header->setFont(headerFont);
     outerLayout->addWidget(header);
 
-    auto *gridContainer = new QWidget(this);
-    m_gridLayout = new QGridLayout(gridContainer);
+    m_gridContainer = new QWidget(this);
+    m_gridLayout = new QGridLayout(m_gridContainer);
     m_gridLayout->setContentsMargins(0, 0, 0, 0);
     m_gridLayout->setSpacing(4);
-    outerLayout->addWidget(gridContainer);
+    outerLayout->addWidget(m_gridContainer);
 
     outerLayout->addStretch();
 }
@@ -54,6 +54,12 @@ void ResourcePickerWidget::rebuildGrid()
     m_row = 0;
     m_col = 0;
     populateGrid();
+
+    // Enforce minimum width: columns * cell width + (columns-1) * spacing
+    const int cols = gridColumns();
+    const int spacing = m_gridLayout->spacing();
+    const int minW = cols * cellSize().width() + (cols - 1) * spacing;
+    m_gridContainer->setMinimumWidth(minW);
 }
 
 void ResourcePickerWidget::addCell(ResourcePickerCellBase *cell)

@@ -101,6 +101,9 @@ protected:
     /// Override to populate the grid with cells. Called after the grid is cleared.
     virtual void populateGrid() = 0;
 
+    /// Override to return the fixed cell size for minimum-width calculation.
+    virtual QSize cellSize() const = 0;
+
     /// Helper: create a cell, connect its clicked signal, and add it to the grid.
     void addCell(ResourcePickerCellBase *cell);
 
@@ -110,6 +113,7 @@ protected:
 private:
     int m_row = 0;
     int m_col = 0;
+    QWidget *m_gridContainer = nullptr;
 };
 
 #endif // PRETTYREADER_RESOURCEPICKERWIDGET_H
