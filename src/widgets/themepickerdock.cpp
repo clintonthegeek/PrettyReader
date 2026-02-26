@@ -39,14 +39,14 @@ void ThemePickerDock::buildUI()
     m_typeSetPicker = new TypeSetPickerWidget(m_typeSetManager, this);
     layout->addWidget(m_typeSetPicker);
 
-    connect(m_typeSetPicker, &TypeSetPickerWidget::typeSetSelected,
+    connect(m_typeSetPicker, &TypeSetPickerWidget::resourceSelected,
             this, &ThemePickerDock::onTypeSetSelected);
 
     // --- Color Palette Picker ---
     m_palettePicker = new PalettePickerWidget(m_paletteManager, this);
     layout->addWidget(m_palettePicker);
 
-    connect(m_palettePicker, &PalettePickerWidget::paletteSelected,
+    connect(m_palettePicker, &PalettePickerWidget::resourceSelected,
             this, &ThemePickerDock::onPaletteSelected);
 
     // --- Page Template Picker (initially hidden — visible in print mode) ---
@@ -57,7 +57,7 @@ void ThemePickerDock::buildUI()
     m_templatePicker = new PageTemplatePickerWidget(m_pageTemplateManager, m_templateSection);
     templateLayout->addWidget(m_templatePicker);
 
-    connect(m_templatePicker, &PageTemplatePickerWidget::templateSelected,
+    connect(m_templatePicker, &PageTemplatePickerWidget::resourceSelected,
             this, &ThemePickerDock::onTemplateSelected);
 
     m_templateSection->setVisible(false);
@@ -69,9 +69,9 @@ void ThemePickerDock::buildUI()
 void ThemePickerDock::syncPickersFromComposer()
 {
     if (m_palettePicker && !m_themeComposer->currentPalette().id.isEmpty())
-        m_palettePicker->setCurrentPaletteId(m_themeComposer->currentPalette().id);
+        m_palettePicker->setCurrentId(m_themeComposer->currentPalette().id);
     if (m_typeSetPicker && !m_themeComposer->currentTypeSet().id.isEmpty())
-        m_typeSetPicker->setCurrentTypeSetId(m_themeComposer->currentTypeSet().id);
+        m_typeSetPicker->setCurrentId(m_themeComposer->currentTypeSet().id);
 }
 
 QString ThemePickerDock::currentTypeSetId() const
@@ -96,20 +96,20 @@ QString ThemePickerDock::currentTemplateId() const
 void ThemePickerDock::setCurrentTypeSetId(const QString &id)
 {
     if (m_typeSetPicker)
-        m_typeSetPicker->setCurrentTypeSetId(id);
+        m_typeSetPicker->setCurrentId(id);
 }
 
 void ThemePickerDock::setCurrentColorSchemeId(const QString &id)
 {
     if (m_palettePicker)
-        m_palettePicker->setCurrentPaletteId(id);
+        m_palettePicker->setCurrentId(id);
 }
 
 void ThemePickerDock::setCurrentTemplateId(const QString &id)
 {
     m_currentTemplateId = id;
     if (m_templatePicker)
-        m_templatePicker->setCurrentTemplateId(id);
+        m_templatePicker->setCurrentId(id);
 }
 
 void ThemePickerDock::setRenderMode(bool printMode)

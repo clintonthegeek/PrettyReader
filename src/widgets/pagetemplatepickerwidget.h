@@ -3,29 +3,23 @@
 #ifndef PRETTYREADER_PAGETEMPLATEPICKERWIDGET_H
 #define PRETTYREADER_PAGETEMPLATEPICKERWIDGET_H
 
-#include <QWidget>
+#include "resourcepickerwidget.h"
 
 class PageTemplateManager;
 
-class PageTemplatePickerWidget : public QWidget
+class PageTemplatePickerWidget : public ResourcePickerWidget
 {
     Q_OBJECT
 
 public:
     explicit PageTemplatePickerWidget(PageTemplateManager *manager, QWidget *parent = nullptr);
 
-    void setCurrentTemplateId(const QString &id);
-    void refresh();
-
-Q_SIGNALS:
-    void templateSelected(const QString &id);
+protected:
+    int gridColumns() const override { return 2; }
+    void populateGrid() override;
 
 private:
-    void rebuildGrid();
-
     PageTemplateManager *m_manager = nullptr;
-    QString m_currentId;
-    class QGridLayout *m_gridLayout = nullptr;
 };
 
 #endif // PRETTYREADER_PAGETEMPLATEPICKERWIDGET_H

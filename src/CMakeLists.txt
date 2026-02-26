@@ -144,6 +144,8 @@ add_library(PrettyReaderCore STATIC
     widgets/pdfexportdialog.h
     widgets/documenttab.cpp
     widgets/documenttab.h
+    widgets/resourcepickerwidget.cpp
+    widgets/resourcepickerwidget.h
     widgets/palettepickerwidget.cpp
     widgets/palettepickerwidget.h
     widgets/pagetemplatepickerwidget.cpp

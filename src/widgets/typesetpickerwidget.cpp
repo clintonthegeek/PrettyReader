@@ -3,49 +3,26 @@
 #include "typesetpickerwidget.h"
 
 #include <QFont>
-#include <QGridLayout>
-#include <QLabel>
-#include <QMouseEvent>
 #include <QPainter>
-#include <QPalette>
-#include <QVBoxLayout>
 
 #include "typeset.h"
 #include "typesetmanager.h"
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// TypeSetCell — renders three text samples in the respective fonts
-// ---------------------------------------------------------------------------
-class TypeSetCell : public QWidget
+class TypeSetCell : public ResourcePickerCellBase
 {
     Q_OBJECT
 
 public:
     explicit TypeSetCell(const TypeSet &typeSet, bool selected,
                          QWidget *parent = nullptr)
-        : QWidget(parent)
+        : ResourcePickerCellBase(typeSet.id, selected, parent)
         , m_typeSet(typeSet)
-        , m_selected(selected)
     {
         setFixedSize(120, 62);
-        setCursor(Qt::PointingHandCursor);
         setToolTip(typeSet.name);
     }
-
-    void setSelected(bool selected)
-    {
-        if (m_selected != selected) {
-            m_selected = selected;
-            update();
-        }
-    }
-
-    QString typeSetId() const { return m_typeSet.id; }
-
-Q_SIGNALS:
-    void clicked(const QString &id);
 
 protected:
     void paintEvent(QPaintEvent *) override
@@ -93,112 +70,34 @@ protected:
                    Qt::AlignLeft | Qt::AlignVCenter,
                    QStringLiteral("mono"));
 
-        // Draw border
-        if (m_selected) {
-            QPen pen(palette().color(QPalette::Highlight), 2);
-            p.setPen(pen);
-            p.drawRect(r.adjusted(1, 1, -1, -1));
-        } else {
-            QPen pen(palette().color(QPalette::Mid), 1);
-            p.setPen(pen);
-            p.drawRect(r.adjusted(0, 0, -1, -1));
-        }
-    }
-
-    void mousePressEvent(QMouseEvent *event) override
-    {
-        if (event->button() == Qt::LeftButton)
-            Q_EMIT clicked(m_typeSet.id);
-        QWidget::mousePressEvent(event);
+        drawSelectionBorder(p);
     }
 
 private:
     TypeSet m_typeSet;
-    bool m_selected = false;
 };
 
 } // anonymous namespace
 
-// ---------------------------------------------------------------------------
-// TypeSetPickerWidget
-// ---------------------------------------------------------------------------
-
 TypeSetPickerWidget::TypeSetPickerWidget(TypeSetManager *manager, QWidget *parent)
-    : QWidget(parent)
+    : ResourcePickerWidget(QStringLiteral("Type Sets"), parent)
     , m_manager(manager)
 {
-    auto *outerLayout = new QVBoxLayout(this);
-    outerLayout->setContentsMargins(0, 0, 0, 0);
-    outerLayout->setSpacing(4);
-
-    auto *header = new QLabel(QStringLiteral("Type Sets"), this);
-    QFont headerFont = header->font();
-    headerFont.setBold(true);
-    header->setFont(headerFont);
-    outerLayout->addWidget(header);
-
-    // Container widget for the grid
-    auto *gridContainer = new QWidget(this);
-    m_gridLayout = new QGridLayout(gridContainer);
-    m_gridLayout->setContentsMargins(0, 0, 0, 0);
-    m_gridLayout->setSpacing(4);
-    outerLayout->addWidget(gridContainer);
-
-    outerLayout->addStretch();
-
     rebuildGrid();
-
     connect(m_manager, &TypeSetManager::typeSetsChanged,
             this, &TypeSetPickerWidget::refresh);
 }
 
-void TypeSetPickerWidget::setCurrentTypeSetId(const QString &id)
+void TypeSetPickerWidget::populateGrid()
 {
-    if (m_currentId == id)
-        return;
-    m_currentId = id;
-
-    auto cells = findChildren<TypeSetCell *>();
-    for (auto *cell : cells)
-        cell->setSelected(cell->typeSetId() == m_currentId);
-}
-
-void TypeSetPickerWidget::refresh()
-{
-    rebuildGrid();
-}
-
-void TypeSetPickerWidget::rebuildGrid()
-{
-    while (QLayoutItem *item = m_gridLayout->takeAt(0)) {
-        delete item->widget();
-        delete item;
-    }
-
     if (!m_manager)
         return;
 
     const QStringList ids = m_manager->availableTypeSets();
-    const int columns = 2;
-
-    int row = 0;
-    int col = 0;
     for (const QString &id : ids) {
         TypeSet ts = m_manager->typeSet(id);
-        bool selected = (id == m_currentId);
-        auto *cell = new TypeSetCell(ts, selected, this);
-        connect(cell, &TypeSetCell::clicked, this, [this](const QString &clickedId) {
-            setCurrentTypeSetId(clickedId);
-            Q_EMIT typeSetSelected(clickedId);
-        });
-        m_gridLayout->addWidget(cell, row, col);
-        ++col;
-        if (col >= columns) {
-            col = 0;
-            ++row;
-        }
+        addCell(new TypeSetCell(ts, id == m_currentId, this));
     }
-
 }
 
 #include "typesetpickerwidget.moc"

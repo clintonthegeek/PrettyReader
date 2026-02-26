@@ -3,29 +3,23 @@
 #ifndef PRETTYREADER_TYPESETPICKERWIDGET_H
 #define PRETTYREADER_TYPESETPICKERWIDGET_H
 
-#include <QWidget>
+#include "resourcepickerwidget.h"
 
 class TypeSetManager;
 
-class TypeSetPickerWidget : public QWidget
+class TypeSetPickerWidget : public ResourcePickerWidget
 {
     Q_OBJECT
 
 public:
     explicit TypeSetPickerWidget(TypeSetManager *manager, QWidget *parent = nullptr);
 
-    void setCurrentTypeSetId(const QString &id);
-    void refresh();
-
-Q_SIGNALS:
-    void typeSetSelected(const QString &id);
+protected:
+    int gridColumns() const override { return 2; }
+    void populateGrid() override;
 
 private:
-    void rebuildGrid();
-
     TypeSetManager *m_manager = nullptr;
-    QString m_currentId;
-    class QGridLayout *m_gridLayout = nullptr;
 };
 
 #endif // PRETTYREADER_TYPESETPICKERWIDGET_H
