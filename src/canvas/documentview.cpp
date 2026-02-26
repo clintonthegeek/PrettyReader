@@ -209,7 +209,8 @@ void DocumentView::restoreViewState(const ViewState &state)
         if (vbar && vbar->maximum() > 0) {
             vbar->setValue(qRound(state.scrollFraction * vbar->maximum()));
         }
-        m_currentPage = qBound(0, state.currentPage, m_pageCount - 1);
+        if (m_pageCount > 0)
+            m_currentPage = qBound(0, state.currentPage, m_pageCount - 1);
     });
 }
 
