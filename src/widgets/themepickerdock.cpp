@@ -11,6 +11,7 @@
 #include "typeset.h"
 #include "typesetmanager.h"
 
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 ThemePickerDock::ThemePickerDock(ThemeManager *themeManager,
@@ -31,12 +32,24 @@ ThemePickerDock::ThemePickerDock(ThemeManager *themeManager,
 
 void ThemePickerDock::buildUI()
 {
-    auto *layout = new QVBoxLayout(this);
+    // Outer layout holds just the scroll area
+    auto *outerLayout = new QVBoxLayout(this);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *scrollArea = new QScrollArea(this);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    outerLayout->addWidget(scrollArea);
+
+    // Inner content widget
+    auto *content = new QWidget;
+    auto *layout = new QVBoxLayout(content);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
     // --- Type Set Picker ---
-    m_typeSetPicker = new TypeSetPickerWidget(m_typeSetManager, this);
+    m_typeSetPicker = new TypeSetPickerWidget(m_typeSetManager, content);
     layout->addWidget(m_typeSetPicker);
 
     connect(m_typeSetPicker, &TypeSetPickerWidget::resourceSelected,
@@ -45,7 +58,7 @@ void ThemePickerDock::buildUI()
             this, &ThemePickerDock::typeSetEditRequested);
 
     // --- Color Palette Picker ---
-    m_palettePicker = new PalettePickerWidget(m_paletteManager, this);
+    m_palettePicker = new PalettePickerWidget(m_paletteManager, content);
     layout->addWidget(m_palettePicker);
 
     connect(m_palettePicker, &PalettePickerWidget::resourceSelected,
@@ -54,7 +67,7 @@ void ThemePickerDock::buildUI()
             this, &ThemePickerDock::paletteEditRequested);
 
     // --- Page Template Picker (initially hidden — visible in print mode) ---
-    m_templateSection = new QWidget(this);
+    m_templateSection = new QWidget(content);
     auto *templateLayout = new QVBoxLayout(m_templateSection);
     templateLayout->setContentsMargins(0, 0, 0, 0);
 
@@ -68,6 +81,8 @@ void ThemePickerDock::buildUI()
     layout->addWidget(m_templateSection);
 
     layout->addStretch();
+
+    scrollArea->setWidget(content);
 }
 
 void ThemePickerDock::syncPickersFromComposer()
