@@ -88,6 +88,7 @@ public:
 
 Q_SIGNALS:
     void resourceSelected(const QString &id);
+    void resourceDoubleClicked(const QString &id);
 
 protected:
     explicit ResourcePickerWidget(const QString &headerText, QWidget *parent = nullptr);

@@ -62,6 +62,11 @@ void ResourcePickerWidget::addCell(ResourcePickerCellBase *cell)
         setCurrentId(id);
         Q_EMIT resourceSelected(id);
     });
+    connect(cell, &ResourcePickerCellBase::doubleClicked, this, [this](const QString &id) {
+        setCurrentId(id);
+        Q_EMIT resourceSelected(id);
+        Q_EMIT resourceDoubleClicked(id);
+    });
     m_gridLayout->addWidget(cell, m_row, m_col);
     if (++m_col >= gridColumns()) {
         m_col = 0;
