@@ -21,10 +21,10 @@ public:
     PageLayout currentPageLayout() const;
     void setPageLayout(const PageLayout &layout);
 
-signals:
+Q_SIGNALS:
     void pageLayoutChanged();
 
-private slots:
+private Q_SLOTS:
     void onPageTypeChanged(int index);
 
 private:

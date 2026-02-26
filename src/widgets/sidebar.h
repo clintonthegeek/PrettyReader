@@ -32,7 +32,7 @@ public:
 Q_SIGNALS:
     void panelVisibilityChanged(int tabId, bool visible);
 
-private slots:
+private Q_SLOTS:
     void onTabClicked(int tabId);
 
 private:

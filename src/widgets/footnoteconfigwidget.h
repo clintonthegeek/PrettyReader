@@ -21,7 +21,7 @@ public:
     void loadFootnoteStyle(const FootnoteStyle &style);
     FootnoteStyle currentFootnoteStyle() const;
 
-signals:
+Q_SIGNALS:
     void footnoteStyleChanged();
 
 private:

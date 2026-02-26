@@ -21,7 +21,7 @@ public:
     void applyToTableStyle(TableStyle &style) const;
     void clear();
 
-signals:
+Q_SIGNALS:
     void propertyChanged();
 
 private:

@@ -39,7 +39,7 @@ public:
 
     void clear();
 
-signals:
+Q_SIGNALS:
     void propertyChanged();
 
 private:

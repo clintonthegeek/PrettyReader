@@ -45,7 +45,7 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
 
-private slots:
+private Q_SLOTS:
     void onFileOpen();
     void onFileOpenRecent(const QUrl &url);
     void onFileExportPdf();
