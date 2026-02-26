@@ -27,6 +27,12 @@ find_package(KF6ConfigWidgets REQUIRED)
 find_package(KF6KIO REQUIRED)
 find_package(KF6SyntaxHighlighting REQUIRED)
 
+# Optional: single-instance via DBus (Linux/KDE)
+find_package(KF6DBusAddons QUIET)
+if(KF6DBusAddons_FOUND)
+    add_compile_definitions(HAVE_KDBUSSERVICE)
+endif()
+
 # PDF rendering pipeline dependencies (Phase 4)
 find_package(Poppler REQUIRED COMPONENTS Qt6)
 find_package(Freetype REQUIRED)

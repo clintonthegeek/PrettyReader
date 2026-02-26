@@ -5,6 +5,10 @@
 #include <KAboutData>
 #include <KLocalizedString>
 
+#ifdef HAVE_KDBUSSERVICE
+#include <KDBusService>
+#endif
+
 #include "mainwindow.h"
 
 int main(int argc, char *argv[])
@@ -41,6 +45,26 @@ int main(int argc, char *argv[])
     aboutData.processCommandLine(&parser);
 
     MainWindow window;
+
+#ifdef HAVE_KDBUSSERVICE
+    KDBusService service(KDBusService::Unique);
+    QObject::connect(&service, &KDBusService::activateRequested,
+                     &window, [&window](const QStringList &activateArgs, const QString &workingDir) {
+        QStringList files;
+        for (int i = 1; i < activateArgs.size(); ++i) {
+            QString path = activateArgs[i];
+            if (QFileInfo(path).isRelative())
+                path = workingDir + QLatin1Char('/') + path;
+            files << path;
+        }
+        if (!files.isEmpty())
+            window.activateWithFiles(files);
+        else {
+            window.raise();
+            window.activateWindow();
+        }
+    });
+#endif
 
     const QStringList args = parser.positionalArguments();
     if (args.isEmpty()) {

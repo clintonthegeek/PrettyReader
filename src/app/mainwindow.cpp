@@ -1346,6 +1346,17 @@ void MainWindow::saveSession()
     group.sync();
 }
 
+void MainWindow::activateWithFiles(const QStringList &paths)
+{
+    for (const QString &path : paths) {
+        QFileInfo fi(path);
+        if (fi.exists() && fi.isFile())
+            openFile(QUrl::fromLocalFile(fi.absoluteFilePath()));
+    }
+    raise();
+    activateWindow();
+}
+
 void MainWindow::restoreOpenFiles()
 {
     KConfigGroup group(KSharedConfig::openConfig(),

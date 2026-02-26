@@ -375,6 +375,10 @@ target_link_libraries(PrettyReader
         PrettyReaderCore
 )
 
+if(KF6DBusAddons_FOUND)
+    target_link_libraries(PrettyReader PRIVATE KF6::DBusAddons)
+endif()
+
 include(GNUInstallDirs)
 
 install(TARGETS PrettyReader

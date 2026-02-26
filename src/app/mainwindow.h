@@ -42,6 +42,7 @@ public:
 
     void openFile(const QUrl &url);
     void restoreOpenFiles();
+    void activateWithFiles(const QStringList &paths);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
