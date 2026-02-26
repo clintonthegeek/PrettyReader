@@ -39,6 +39,7 @@ public:
 
 Q_SIGNALS:
     void clicked(const QString &id);
+    void doubleClicked(const QString &id);
 
 protected:
     void drawSelectionBorder(QPainter &p)
@@ -60,6 +61,13 @@ protected:
         if (event->button() == Qt::LeftButton)
             Q_EMIT clicked(m_cellId);
         QWidget::mousePressEvent(event);
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton)
+            Q_EMIT doubleClicked(m_cellId);
+        QWidget::mouseDoubleClickEvent(event);
     }
 
     QString m_cellId;
