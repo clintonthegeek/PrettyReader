@@ -5,12 +5,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "characterstyle.h"
-#include "colorpalette.h"
-#include "footnotestyle.h"
-#include "paragraphstyle.h"
-#include "tablestyle.h"
-
+class QJsonObject;
 class StyleManager;
 
 class ThemeManager : public QObject

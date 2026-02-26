@@ -20,6 +20,11 @@
 
 #include <fontconfig/fontconfig.h>
 
+size_t qHash(const FontManager::FontKey &k, size_t seed = 0)
+{
+    return qHash(k.family, seed) ^ qHash(k.weight, seed) ^ qHash(k.italic, seed);
+}
+
 FontFace::~FontFace()
 {
     if (hbFont) {

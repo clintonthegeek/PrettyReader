@@ -20,22 +20,6 @@
 
 #include <hb.h>
 
-struct FontKey {
-    QString family;
-    int weight;   // QFont::Weight enum values (400=Normal, 700=Bold, etc.)
-    bool italic;
-
-    bool operator==(const FontKey &o) const
-    {
-        return family == o.family && weight == o.weight && italic == o.italic;
-    }
-};
-
-inline size_t qHash(const FontKey &k, size_t seed = 0)
-{
-    return qHash(k.family, seed) ^ qHash(k.weight, seed) ^ qHash(k.italic, seed);
-}
-
 class HersheyFont;
 
 struct FontFace {
@@ -89,6 +73,18 @@ public:
     QList<int> fontBBox(FontFace *face) const;
 
 private:
+    struct FontKey {
+        QString family;
+        int weight;   // QFont::Weight enum values (400=Normal, 700=Bold, etc.)
+        bool italic;
+
+        bool operator==(const FontKey &o) const
+        {
+            return family == o.family && weight == o.weight && italic == o.italic;
+        }
+    };
+    friend size_t qHash(const FontManager::FontKey &k, size_t seed);
+
     FT_Library m_ftLibrary = nullptr;
     QHash<FontKey, FontFace *> m_faces;
     QHash<QString, FontFace *> m_facesByPath;

@@ -5,8 +5,6 @@
 #include "webviewitem.h"
 #include "pagelayout.h"
 #include "contentrtfexporter.h"
-#include "languagepickerdialog.h"
-#include "rtfcopyoptionsdialog.h"
 
 #include <climits>
 
@@ -1453,14 +1451,16 @@ void DocumentView::copySelectionAsComplexRtf()
     if (!hasSourceData || m_pagesWithSelection.isEmpty())
         return;
 
-    auto *dialog = new RtfCopyOptionsDialog(this);
-    if (dialog->exec() != QDialog::Accepted) {
-        delete dialog;
-        return;
-    }
+    Q_EMIT rtfCopyOptionsRequested();
+}
 
-    RtfFilterOptions filter = dialog->filterOptions();
-    delete dialog;
+void DocumentView::copySelectionWithFilter(const RtfFilterOptions &filter)
+{
+    bool hasSourceData = !m_wordSelection && !m_sourceMap.isEmpty()
+                         && !m_processedMarkdown.isEmpty()
+                         && !m_contentDoc.blocks.isEmpty();
+    if (!hasSourceData || m_pagesWithSelection.isEmpty())
+        return;
 
     QRectF selRect = QRectF(m_selectPressPos, m_selectCurrentPos).normalized();
     int minLine = INT_MAX;
@@ -1567,16 +1567,7 @@ void DocumentView::contextMenuEvent(QContextMenuEvent *event)
             QString currentLang = cb->language;
 
             connect(langAction, &QAction::triggered, this, [this, codeKey, currentLang]() {
-                auto *dialog = new LanguagePickerDialog(currentLang, this);
-                if (dialog->exec() == QDialog::Accepted) {
-                    QString lang = dialog->selectedLanguage();
-                    if (lang.isEmpty())
-                        m_codeBlockLanguageOverrides.remove(codeKey);
-                    else
-                        m_codeBlockLanguageOverrides.insert(codeKey, lang);
-                    Q_EMIT codeBlockLanguageChanged();
-                }
-                delete dialog;
+                Q_EMIT languageOverrideRequested(codeKey, currentLang);
             });
         }
     }

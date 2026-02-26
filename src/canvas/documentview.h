@@ -11,6 +11,7 @@
 
 #include "layoutengine.h"
 #include "pagelayout.h"
+#include "rtffilteroptions.h"
 
 class FontManager;
 class PageItem;
@@ -92,6 +93,7 @@ public:
     void copySelectionAsRtf();
     void copySelectionAsMarkdown();
     void copySelectionAsComplexRtf();
+    void copySelectionWithFilter(const RtfFilterOptions &filter);
     void clearSelection();
     // Source breadcrumbs for markdown-faithful copy + styled RTF export
     void setSourceData(const QString &processedMarkdown,
@@ -132,6 +134,8 @@ Q_SIGNALS:
     void codeBlockLanguageChanged();
     void currentHeadingChanged(int index);
     void webRelayoutRequested();
+    void languageOverrideRequested(const QString &codeKey, const QString &currentLang);
+    void rtfCopyOptionsRequested();
 
 protected:
     void wheelEvent(QWheelEvent *event) override;

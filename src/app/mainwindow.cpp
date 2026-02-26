@@ -39,6 +39,8 @@
 #include "footnotestyle.h"
 #include "preferencesdialog.h"
 #include "prettyreadersettings.h"
+#include "languagepickerdialog.h"
+#include "rtfcopyoptionsdialog.h"
 
 // PDF rendering pipeline (Phase 4)
 #include "contentbuilder.h"
@@ -1776,6 +1778,40 @@ void MainWindow::openFile(const QUrl &url)
             langObj.insert(it.key(), it.value());
         m_metadataStore->setValue(filePath, QStringLiteral("codeBlockLanguages"), langObj);
         rebuildCurrentDocument();
+    });
+
+    // Language picker dialog (decoupled from DocumentView → widgets)
+    connect(tab->documentView(), &DocumentView::languageOverrideRequested,
+            this, [this](const QString &codeKey, const QString &currentLang) {
+        auto *view = currentDocumentView();
+        if (!view)
+            return;
+        auto *dialog = new LanguagePickerDialog(currentLang, this);
+        if (dialog->exec() == QDialog::Accepted) {
+            QString lang = dialog->selectedLanguage();
+            QHash<QString, QString> overrides = view->codeBlockLanguageOverrides();
+            if (lang.isEmpty())
+                overrides.remove(codeKey);
+            else
+                overrides.insert(codeKey, lang);
+            view->setCodeBlockLanguageOverrides(overrides);
+            Q_EMIT view->codeBlockLanguageChanged();
+        }
+        delete dialog;
+    });
+
+    // RTF copy options dialog (decoupled from DocumentView → widgets)
+    connect(tab->documentView(), &DocumentView::rtfCopyOptionsRequested,
+            this, [this]() {
+        auto *view = currentDocumentView();
+        if (!view)
+            return;
+        auto *dialog = new RtfCopyOptionsDialog(this);
+        if (dialog->exec() == QDialog::Accepted) {
+            RtfFilterOptions filter = dialog->filterOptions();
+            view->copySelectionWithFilter(filter);
+        }
+        delete dialog;
     });
 
     // Source view reverse-sync: scrolling the editor highlights the current heading in ToC
