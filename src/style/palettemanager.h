@@ -1,9 +1,6 @@
 /*
  * palettemanager.h — Discovery/loading/saving for color palettes
  *
- * Scans built-in Qt resources (:/palettes/) and the user data
- * directory for JSON palette files and presents them by ID.
- *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -15,6 +12,7 @@
 #include <QStringList>
 
 #include "colorpalette.h"
+#include "resourcestore.h"
 
 class PaletteManager : public QObject
 {
@@ -23,37 +21,18 @@ class PaletteManager : public QObject
 public:
     explicit PaletteManager(QObject *parent = nullptr);
 
-    /// List of all available palette IDs (built-in + user).
-    QStringList availablePalettes() const;
-
-    /// Display name for a palette ID.
-    QString paletteName(const QString &id) const;
-
-    /// Load a palette by ID.
+    QStringList availablePalettes() const { return m_store.availableIds(); }
+    QString paletteName(const QString &id) const { return m_store.name(id); }
     ColorPalette palette(const QString &id) const;
-
-    /// Save a user palette. Returns the assigned ID.
     QString savePalette(const ColorPalette &palette);
-
-    /// Delete a user palette.
     bool deletePalette(const QString &id);
+    bool isBuiltin(const QString &id) const { return m_store.isBuiltin(id); }
 
-    /// Whether a palette is built-in (read-only).
-    bool isBuiltin(const QString &id) const;
-
-signals:
+Q_SIGNALS:
     void palettesChanged();
 
 private:
-    void discoverPalettes();
-
-    struct PaletteInfo {
-        QString id;
-        QString name;
-        QString path;
-        bool builtin = false;
-    };
-    QList<PaletteInfo> m_palettes;
+    ResourceStore m_store;
 };
 
 #endif // PRETTYREADER_PALETTEMANAGER_H

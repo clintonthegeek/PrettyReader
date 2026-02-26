@@ -1,9 +1,6 @@
 /*
  * pagetemplatemanager.h — Discovery/loading/saving for page templates
  *
- * Scans built-in Qt resources (:/templates/) and the user data
- * directory for JSON page template files and presents them by ID.
- *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
@@ -15,6 +12,7 @@
 #include <QStringList>
 
 #include "pagetemplate.h"
+#include "resourcestore.h"
 
 class PageTemplateManager : public QObject
 {
@@ -23,37 +21,18 @@ class PageTemplateManager : public QObject
 public:
     explicit PageTemplateManager(QObject *parent = nullptr);
 
-    /// List of all available template IDs (built-in + user).
-    QStringList availableTemplates() const;
-
-    /// Display name for a template ID.
-    QString templateName(const QString &id) const;
-
-    /// Load a page template by ID.
+    QStringList availableTemplates() const { return m_store.availableIds(); }
+    QString templateName(const QString &id) const { return m_store.name(id); }
     PageTemplate pageTemplate(const QString &id) const;
-
-    /// Save a user page template. Returns the assigned ID.
     QString saveTemplate(const PageTemplate &tmpl);
-
-    /// Delete a user page template.
     bool deleteTemplate(const QString &id);
-
-    /// Whether a template is built-in (read-only).
-    bool isBuiltin(const QString &id) const;
+    bool isBuiltin(const QString &id) const { return m_store.isBuiltin(id); }
 
 Q_SIGNALS:
     void templatesChanged();
 
 private:
-    void discoverTemplates();
-
-    struct TemplateInfo {
-        QString id;
-        QString name;
-        QString path;
-        bool builtin = false;
-    };
-    QList<TemplateInfo> m_templates;
+    ResourceStore m_store;
 };
 
 #endif // PRETTYREADER_PAGETEMPLATEMANAGER_H

@@ -60,6 +60,7 @@ add_library(PrettyReaderCore STATIC
     style/thememanager.h
     style/themecomposer.cpp
     style/themecomposer.h
+    style/resourcestore.h
     style/palettemanager.cpp
     style/palettemanager.h
     style/typeset.cpp
