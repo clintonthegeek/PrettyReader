@@ -121,4 +121,14 @@ private:
     QHash<QString, FamilyEntry> m_families;           // family → entry
 };
 
+// ---------------------------------------------------------------------------
+// HersheyConstants — named constants for Hershey font rendering
+// ---------------------------------------------------------------------------
+
+namespace HersheyConstants {
+    constexpr qreal kItalicSkew = 0.2126;
+    constexpr qreal kStrokeWidthFactor = 0.02;
+    constexpr qreal kBoldStrokeMultiplier = 1.8;
+}
+
 #endif // PRETTYREADER_HERSHEYFONT_H

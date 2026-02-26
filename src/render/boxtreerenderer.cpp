@@ -240,11 +240,11 @@ void BoxTreeRenderer::renderLineBox(const Layout::LineBox &line,
             const HersheyGlyph *hGlyph = hFont->glyph(U'-');
             if (hGlyph) {
                 qreal scale = lastGbox.fontSize / hFont->unitsPerEm();
-                qreal strokeWidth = 0.02 * lastGbox.fontSize
-                                    * (lastGbox.font->hersheyBold ? 1.8 : 1.0);
+                qreal strokeWidth = HersheyConstants::kStrokeWidthFactor * lastGbox.fontSize
+                                    * (lastGbox.font->hersheyBold ? HersheyConstants::kBoldStrokeMultiplier : 1.0);
                 QTransform t;
                 if (lastGbox.font->hersheyItalic)
-                    t = QTransform(scale, 0, -scale * 0.2126, scale, x, baselineY);
+                    t = QTransform(scale, 0, -scale * HersheyConstants::kItalicSkew, scale, x, baselineY);
                 else
                     t = QTransform(scale, 0, 0, scale, x, baselineY);
 
@@ -297,9 +297,9 @@ void BoxTreeRenderer::renderGlyphBox(const Layout::GlyphBox &gbox,
         qreal gx = curX + g.xOffset;
         qreal gy = -g.yOffset; // layout Y is top-down
         if (gbox.style.superscript)
-            gy -= gbox.fontSize * 0.35;
+            gy -= gbox.fontSize * RenderConstants::kSuperscriptRise;
         else if (gbox.style.subscript)
-            gy += gbox.fontSize * 0.15;
+            gy += gbox.fontSize * RenderConstants::kSubscriptDrop;
         info.positions.append(QPointF(gx, gy));
         curX += g.xAdvance;
     }
@@ -326,9 +326,9 @@ void BoxTreeRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
                  gbox.style.background);
     }
 
-    qreal strokeWidth = 0.02 * fontSize;
+    qreal strokeWidth = HersheyConstants::kStrokeWidthFactor * fontSize;
     if (gbox.font->hersheyBold)
-        strokeWidth *= 1.8;
+        strokeWidth *= HersheyConstants::kBoldStrokeMultiplier;
 
     qreal curX = x;
     for (const auto &g : gbox.glyphs) {
@@ -341,13 +341,13 @@ void BoxTreeRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
         qreal gx = curX + g.xOffset;
         qreal gy = baselineY - g.yOffset;
         if (gbox.style.superscript)
-            gy -= fontSize * 0.35;
+            gy -= fontSize * RenderConstants::kSuperscriptRise;
         else if (gbox.style.subscript)
-            gy += fontSize * 0.15;
+            gy += fontSize * RenderConstants::kSubscriptDrop;
 
         QTransform t;
         if (gbox.font->hersheyItalic)
-            t = QTransform(scale, 0, -scale * 0.2126, scale, gx, gy);
+            t = QTransform(scale, 0, -scale * HersheyConstants::kItalicSkew, scale, gx, gy);
         else
             t = QTransform(scale, 0, 0, scale, gx, gy);
 

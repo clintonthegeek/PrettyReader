@@ -522,9 +522,9 @@ PdfGenerator::GlyphFormEntry PdfGenerator::ensureGlyphForm(
         // Stroke width in glyph units. Call site scales by fontSize/unitsPerEm,
         // so: strokeWidth_glyphUnits * (fontSize/upm) = 0.02 * fontSize
         // Therefore: strokeWidth_glyphUnits = 0.02 * upm
-        qreal strokeWidth = 0.02 * hersheyFont->unitsPerEm();
+        qreal strokeWidth = HersheyConstants::kStrokeWidthFactor * hersheyFont->unitsPerEm();
         if (bold)
-            strokeWidth *= 1.8;
+            strokeWidth *= HersheyConstants::kBoldStrokeMultiplier;
         formStream += pdfCoord(strokeWidth) + " w\n";
 
         for (const auto &stroke : hGlyph->strokes) {

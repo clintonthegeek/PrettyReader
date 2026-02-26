@@ -28,6 +28,12 @@
 class FontManager;
 struct FontFace;
 
+/// Named constants for superscript/subscript positioning.
+namespace RenderConstants {
+    constexpr qreal kSuperscriptRise = 0.35;
+    constexpr qreal kSubscriptDrop = 0.15;
+}
+
 /// Glyph IDs and positions relative to the drawing origin (x, baselineY).
 struct GlyphRenderInfo {
     QVector<quint32> glyphIds;

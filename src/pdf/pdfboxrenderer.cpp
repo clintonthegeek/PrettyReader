@@ -578,9 +578,9 @@ void PdfBoxRenderer::renderLineBox(const Layout::LineBox &line,
             qreal px = curX + g.xOffset;
             qreal py = pdfBaseY + g.yOffset; // PDF: yOffset goes up
             if (gbox.style.superscript)
-                py += gbox.fontSize * 0.35;
+                py += gbox.fontSize * RenderConstants::kSuperscriptRise;
             else if (gbox.style.subscript)
-                py -= gbox.fontSize * 0.15;
+                py -= gbox.fontSize * RenderConstants::kSubscriptDrop;
             *m_stream += "1 0 0 1 " + pdfCoord(px) + " " + pdfCoord(py) + " Tm\n";
             *m_stream += Pdf::toHexString16(static_cast<quint16>(g.glyphId)) + " Tj\n";
             curX += g.xAdvance;
@@ -658,9 +658,9 @@ void PdfBoxRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
 
         // Superscript/subscript adjustment (in PDF, up = positive)
         if (gbox.style.superscript)
-            gy += fontSize * 0.35;
+            gy += fontSize * RenderConstants::kSuperscriptRise;
         else if (gbox.style.subscript)
-            gy -= fontSize * 0.15;
+            gy -= fontSize * RenderConstants::kSubscriptDrop;
 
         *m_stream += "q\n";
         *m_stream += colorOperator(gbox.style.foreground, false); // stroke color
@@ -668,7 +668,7 @@ void PdfBoxRenderer::renderHersheyGlyphBox(const Layout::GlyphBox &gbox,
         if (gbox.font->hersheyItalic) {
             // Scale + italic skew + translate
             *m_stream += pdfCoord(scale) + " 0 "
-                    + pdfCoord(scale * 0.2126) + " " + pdfCoord(scale)
+                    + pdfCoord(scale * HersheyConstants::kItalicSkew) + " " + pdfCoord(scale)
                     + " " + pdfCoord(gx) + " " + pdfCoord(gy) + " cm\n";
         } else {
             // Scale + translate only
@@ -705,7 +705,7 @@ void PdfBoxRenderer::renderTrailingHyphen(const Layout::GlyphBox &lastGbox, qrea
             *m_stream += colorOperator(lastGbox.style.foreground, false);
             if (lastGbox.font->hersheyItalic) {
                 *m_stream += pdfCoord(scale) + " 0 "
-                        + pdfCoord(scale * 0.2126) + " " + pdfCoord(scale)
+                        + pdfCoord(scale * HersheyConstants::kItalicSkew) + " " + pdfCoord(scale)
                         + " " + pdfCoord(x) + " " + pdfCoord(pdfBaseY) + " cm\n";
             } else {
                 *m_stream += pdfCoord(scale) + " 0 0 " + pdfCoord(scale)
