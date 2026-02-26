@@ -42,12 +42,16 @@ int main(int argc, char *argv[])
 
     MainWindow window;
 
-    // Open files from command line
     const QStringList args = parser.positionalArguments();
-    for (const QString &arg : args) {
-        QFileInfo fi(arg);
-        if (fi.exists() && fi.isFile()) {
-            window.openFile(QUrl::fromLocalFile(fi.absoluteFilePath()));
+    if (args.isEmpty()) {
+        // No files on command line — restore previous session
+        window.restoreOpenFiles();
+    } else {
+        // Files provided — open them fresh, skip session restore
+        for (const QString &arg : args) {
+            QFileInfo fi(arg);
+            if (fi.exists() && fi.isFile())
+                window.openFile(QUrl::fromLocalFile(fi.absoluteFilePath()));
         }
     }
 

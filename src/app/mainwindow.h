@@ -41,6 +41,7 @@ public:
     ~MainWindow() override;
 
     void openFile(const QUrl &url);
+    void restoreOpenFiles();
 
 protected:
     void closeEvent(QCloseEvent *event) override;

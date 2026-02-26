@@ -59,6 +59,7 @@
 #include <QCloseEvent>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QLabel>
@@ -73,6 +74,7 @@
 #include <QStatusBar>
 #include <QTabWidget>
 #include <QTextBlock>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <functional>
@@ -1344,12 +1346,50 @@ void MainWindow::saveSession()
     group.sync();
 }
 
-void MainWindow::restoreSession()
+void MainWindow::restoreOpenFiles()
 {
     KConfigGroup group(KSharedConfig::openConfig(),
                        QStringLiteral("Session"));
 
-    // A3: No longer restoring open files or active tab
+    QStringList openFiles = group.readEntry("OpenFiles", QStringList());
+    if (openFiles.isEmpty())
+        return;
+
+    for (const QString &path : openFiles) {
+        QFileInfo fi(path);
+        if (fi.exists() && fi.isFile())
+            openFile(QUrl::fromLocalFile(fi.absoluteFilePath()));
+    }
+
+    // Restore active tab
+    int activeTab = group.readEntry("ActiveTab", 0);
+    if (activeTab >= 0 && activeTab < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(activeTab);
+
+    // Defer view state restoration until layouts are computed
+    QList<int> zoomLevels = group.readEntry("ZoomLevels", QList<int>());
+    QList<int> scrollPages = group.readEntry("ScrollPages", QList<int>());
+    QStringList fracStrings = group.readEntry("ScrollFractions", QStringList());
+
+    QTimer::singleShot(0, this, [this, zoomLevels, scrollPages, fracStrings]() {
+        for (int i = 0; i < m_tabWidget->count() && i < zoomLevels.size(); ++i) {
+            auto *tab = qobject_cast<DocumentTab *>(m_tabWidget->widget(i));
+            if (!tab)
+                continue;
+            ViewState vs;
+            vs.zoomPercent = zoomLevels.value(i, 100);
+            vs.currentPage = scrollPages.value(i, 0);
+            vs.scrollFraction = (i < fracStrings.size()) ? fracStrings[i].toDouble() : 0.0;
+            vs.valid = true;
+            tab->documentView()->restoreViewState(vs);
+        }
+    });
+}
+
+void MainWindow::restoreSession()
+{
+    KConfigGroup group(KSharedConfig::openConfig(),
+                       QStringLiteral("Session"));
 
     // Restore sidebar state
     bool leftCollapsed = group.readEntry("LeftSidebarCollapsed", true);
