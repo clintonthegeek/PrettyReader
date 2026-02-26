@@ -43,6 +43,8 @@ public:
 Q_SIGNALS:
     void compositionApplied(); // type set or palette changed, compose() done
     void templateApplied(const PageLayout &layout);
+    void typeSetEditRequested(const QString &id);
+    void paletteEditRequested(const QString &id);
 
 private Q_SLOTS:
     void onTypeSetSelected(const QString &id);

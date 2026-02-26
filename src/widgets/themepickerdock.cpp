@@ -41,6 +41,8 @@ void ThemePickerDock::buildUI()
 
     connect(m_typeSetPicker, &TypeSetPickerWidget::resourceSelected,
             this, &ThemePickerDock::onTypeSetSelected);
+    connect(m_typeSetPicker, &TypeSetPickerWidget::resourceDoubleClicked,
+            this, &ThemePickerDock::typeSetEditRequested);
 
     // --- Color Palette Picker ---
     m_palettePicker = new PalettePickerWidget(m_paletteManager, this);
@@ -48,6 +50,8 @@ void ThemePickerDock::buildUI()
 
     connect(m_palettePicker, &PalettePickerWidget::resourceSelected,
             this, &ThemePickerDock::onPaletteSelected);
+    connect(m_palettePicker, &PalettePickerWidget::resourceDoubleClicked,
+            this, &ThemePickerDock::paletteEditRequested);
 
     // --- Page Template Picker (initially hidden — visible in print mode) ---
     m_templateSection = new QWidget(this);
