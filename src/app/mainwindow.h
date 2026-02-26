@@ -52,6 +52,7 @@ private Q_SLOTS:
     void onFileExportRtf();
     void onFilePrint();
     void onFileClose();
+    void onTabCloseRequested(int index);
     // onThemeChanged removed — composition is handled by onCompositionApplied()
     void onCompositionApplied();
     void onStyleOverrideChanged();

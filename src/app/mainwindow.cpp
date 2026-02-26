@@ -91,7 +91,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_tabWidget->setDocumentMode(true);
 
     connect(m_tabWidget, &QTabWidget::tabCloseRequested,
-            m_tabWidget, &QTabWidget::removeTab);
+            this, &MainWindow::onTabCloseRequested);
     connect(m_tabWidget, &QTabWidget::currentChanged,
             this, [this]() {
         auto *view = currentDocumentView();
@@ -271,6 +271,17 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     KXmlGuiWindow::closeEvent(event);
     qApp->quit();
+}
+
+void MainWindow::onTabCloseRequested(int index)
+{
+    m_tabWidget->removeTab(index);
+
+    if (m_tabWidget->count() == 0) {
+        // Last tab closed — quit (closeEvent will save session)
+        close();
+    }
+    // Remaining tabs: currentChanged signal already fires and updates sidebars
 }
 
 void MainWindow::setupSidebars()
