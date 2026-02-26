@@ -376,6 +376,18 @@ void MainWindow::setupSidebars()
         rebuildCurrentDocument();
     });
 
+    // Double-click in Theme grid -> raise editing dock
+    connect(m_themePickerDock, &ThemePickerDock::typeSetEditRequested,
+            this, [this](const QString &id) {
+        m_typeDockWidget->setCurrentTypeSetId(id);
+        m_rightSidebar->showPanel(m_typeTabId);
+    });
+    connect(m_themePickerDock, &ThemePickerDock::paletteEditRequested,
+            this, [this](const QString &id) {
+        m_colorDockWidget->setCurrentPaletteId(id);
+        m_rightSidebar->showPanel(m_colorTabId);
+    });
+
     // Wire Type dock
     connect(m_typeDockWidget, &TypeDockWidget::styleOverrideChanged,
             this, &MainWindow::onStyleOverrideChanged);
