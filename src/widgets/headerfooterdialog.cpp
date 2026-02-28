@@ -185,17 +185,14 @@ QWidget *HeaderFooterDialog::createFieldRow(DropTargetLineEdit *&leftEdit,
 
     row->addWidget(new QLabel(tr("Left:")));
     leftEdit = new DropTargetLineEdit;
-    leftEdit->setPlaceholderText(tr("Left"));
     row->addWidget(leftEdit, 1);
 
     row->addWidget(new QLabel(tr("Center:")));
     centerEdit = new DropTargetLineEdit;
-    centerEdit->setPlaceholderText(tr("Center"));
     row->addWidget(centerEdit, 1);
 
     row->addWidget(new QLabel(tr("Right:")));
     rightEdit = new DropTargetLineEdit;
-    rightEdit->setPlaceholderText(tr("Right"));
     row->addWidget(rightEdit, 1);
 
     return widget;

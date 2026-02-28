@@ -35,15 +35,32 @@ void PrintController::configurePrinter(QPrinter *printer)
 void PrintController::print(QWidget *parentWidget)
 {
     QPrinter printer(QPrinter::HighResolution);
-    configurePrinter(&printer);
 
-    QPrintDialog dialog(&printer, parentWidget);
-    dialog.setWindowTitle(tr("Print Document"));
+    if (!m_pdfData.isEmpty()) {
+        // PDF pipeline: set page size and orientation but NOT document margins
+        // — margins are already baked into the PDF content.
+        printer.setPageSize(QPageSize(m_pageLayout.pageSizeId));
+        printer.setPageOrientation(m_pageLayout.orientation);
 
-    if (dialog.exec() == QDialog::Accepted) {
-        if (!m_pdfData.isEmpty())
+        // Load document to get page count for dialog range controls
+        std::unique_ptr<Poppler::Document> doc(
+            Poppler::Document::loadFromData(m_pdfData));
+        if (!doc)
+            return;
+
+        QPrintDialog dialog(&printer, parentWidget);
+        dialog.setWindowTitle(tr("Print Document"));
+        dialog.setMinMax(1, doc->numPages());
+
+        if (dialog.exec() == QDialog::Accepted)
             renderDocumentFromPdf(&printer);
-        else
+    } else {
+        configurePrinter(&printer);
+
+        QPrintDialog dialog(&printer, parentWidget);
+        dialog.setWindowTitle(tr("Print Document"));
+
+        if (dialog.exec() == QDialog::Accepted)
             renderDocument(&printer);
     }
 }
@@ -122,35 +139,35 @@ void PrintController::renderDocumentFromPdf(QPrinter *printer)
     if (!doc)
         return;
 
-    doc->setRenderHint(Poppler::Document::Antialiasing, true);
-    doc->setRenderHint(Poppler::Document::TextAntialiasing, true);
+    int totalPages = doc->numPages();
+
+    // Respect page range from print dialog (1-based; 0 means all pages)
+    int fromPage = printer->fromPage();
+    int toPage = printer->toPage();
+    if (fromPage < 1) fromPage = 1;
+    if (toPage < 1) toPage = totalPages;
+    fromPage = qBound(1, fromPage, totalPages);
+    toPage = qBound(fromPage, toPage, totalPages);
 
     QPainter painter(printer);
     if (!painter.isActive())
         return;
 
-    int totalPages = doc->numPages();
+    // renderToPainter draws vectors directly — no rasterization.
+    // Pass printer resolution so PDF coordinates map 1:1 to device pixels.
     qreal dpi = printer->resolution();
 
-    for (int i = 0; i < totalPages; ++i) {
+    bool firstPage = true;
+    for (int i = fromPage - 1; i < toPage; ++i) {
+        if (!firstPage)
+            printer->newPage();
+        firstPage = false;
+
         std::unique_ptr<Poppler::Page> page(doc->page(i));
         if (!page)
             continue;
 
-        QSizeF pageSize = page->pageSizeF(); // in points
-        qreal xres = dpi;
-        qreal yres = dpi;
-
-        QImage image = page->renderToImage(xres, yres);
-        if (image.isNull())
-            continue;
-
-        // Scale image to fit printer page
-        QRectF targetRect = printer->pageRect(QPrinter::DevicePixel);
-        painter.drawImage(targetRect, image);
-
-        if (i < totalPages - 1)
-            printer->newPage();
+        page->renderToPainter(&painter, dpi, dpi);
     }
 
     painter.end();

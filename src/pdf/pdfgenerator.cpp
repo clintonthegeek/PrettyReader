@@ -164,10 +164,36 @@ QByteArray PdfGenerator::generate(const Layout::LayoutResult &layout,
         }
     }
 
-    // Also register header/footer font
+    // Also register header/footer font and pre-mark glyphs for subsetting
     FontFace *hfFont = m_fontManager->loadFont(QStringLiteral("Noto Sans"), 400, false);
-    if (hfFont)
+    if (hfFont) {
         ensureFontRegistered(hfFont);
+
+        // Pre-scan all pages' header/footer text so glyphs are included
+        // in the font subset (embedding happens before page rendering).
+        auto markGlyphs = [&](const QString &text, int pageNum) {
+            QString resolved = HeaderFooterRenderer::resolveField(
+                text, {pageNum, totalPages, m_filename, m_title});
+            for (QChar ch : resolved) {
+                FT_UInt gid = FT_Get_Char_Index(hfFont->ftFace, ch.unicode());
+                m_fontManager->markGlyphUsed(hfFont, gid);
+            }
+        };
+
+        for (int pi = 0; pi < layout.pages.size(); ++pi) {
+            PageLayout resolved = pageLayout.resolvedForPage(pi);
+            if (resolved.headerEnabled) {
+                markGlyphs(resolved.headerLeft, pi);
+                markGlyphs(resolved.headerCenter, pi);
+                markGlyphs(resolved.headerRight, pi);
+            }
+            if (resolved.footerEnabled) {
+                markGlyphs(resolved.footerLeft, pi);
+                markGlyphs(resolved.footerCenter, pi);
+                markGlyphs(resolved.footerRight, pi);
+            }
+        }
+    }
 
     // Embed fonts
     if (!m_exportOptions.xobjectGlyphs)
